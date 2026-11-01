@@ -1188,7 +1188,7 @@
             <div class="grow"><b>Быстрая прокрутка</b><p>Кейсы и апгрейдер крутятся в несколько раз быстрее.</p></div>
             ${sw('fast', prefs.fast, 'Быстрая прокрутка')}
           </div>
-          <div class="set-row">
+          <div class="set-row admin-visibility-option">
             <div class="grow"><b>Показывать админку</b><p>Если выключить, кнопка появляется при наведении на её место. Настройка сохраняется на этом устройстве.</p></div>
             ${sw('showAdmin', prefs.showAdmin, 'Показывать админку')}
           </div>

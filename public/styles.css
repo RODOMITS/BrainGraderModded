@@ -1716,6 +1716,15 @@ html.admin-concealed a[href="/admin"] {
   opacity: 0;
   transition: opacity .15s ease;
 }
+html.admin-concealed .admin-visibility-option {
+  opacity: 0;
+  transition: opacity .15s ease;
+}
+html.admin-concealed .admin-visibility-option:hover,
+html.admin-concealed .admin-visibility-option:focus-within,
+html.admin-concealed .admin-visibility-option:active {
+  opacity: 1;
+}
 html.admin-concealed a[href="/admin"]:hover,
 html.admin-concealed a[href="/admin"]:focus-visible,
 html.admin-concealed a[href="/admin"]:active {
