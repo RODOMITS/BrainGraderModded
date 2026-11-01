@@ -456,5 +456,7 @@ if __name__=='__main__':
         raise SystemExit('Missing frontend files in /app/public: ' + ', '.join(missing)
                          + '. Add the public directory to the repository and redeploy.')
     print('BrainGrader: frontend found; starting HTTP server.', flush=True)
+    from telegram_bot import start_bot
+    start_bot(DB_PATH)
     from waitress import serve
     serve(app,host='0.0.0.0',port=int(os.getenv('PORT','8000')),threads=8)
