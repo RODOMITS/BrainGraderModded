@@ -8,6 +8,7 @@ import json
 import logging
 import os
 from pathlib import Path
+import secrets
 import sqlite3
 import threading
 import time
@@ -26,11 +27,27 @@ class TelegramError(Exception):
         self.retry_after = retry_after
 
 
-def call(token, method, payload):
+def call(token, method, payload, photo=None):
+    if photo is None:
+        data = json.dumps(payload).encode('utf-8')
+        content_type = 'application/json'
+    else:
+        boundary = 'Brainrot' + secrets.token_hex(16)
+        chunks = []
+        for key, value in payload.items():
+            if isinstance(value, (dict, list)):
+                value = json.dumps(value, ensure_ascii=False)
+            chunks.append((f'--{boundary}\r\nContent-Disposition: form-data; name="{key}"\r\n\r\n'
+                           f'{value}\r\n').encode('utf-8'))
+        chunks.append((f'--{boundary}\r\nContent-Disposition: form-data; name="photo"; '
+                       'filename="welcome.jpg"\r\nContent-Type: image/jpeg\r\n\r\n').encode('utf-8'))
+        chunks.extend([photo, f'\r\n--{boundary}--\r\n'.encode('utf-8')])
+        data = b''.join(chunks)
+        content_type = f'multipart/form-data; boundary={boundary}'
     req = Request(
         f'https://api.telegram.org/bot{token}/{method}',
-        data=json.dumps(payload).encode('utf-8'),
-        headers={'Content-Type': 'application/json'},
+        data=data,
+        headers={'Content-Type': content_type},
     )
     try:
         with urlopen(req, timeout=40) as response:
@@ -58,7 +75,7 @@ def welcome(token, app_url, message):
         return
     sender = message.get('from', {})
     name = escape(str(sender.get('username') or sender.get('first_name') or 'друг'))
-    call(token, 'sendMessage', {
+    payload = {
         'chat_id': message['chat']['id'],
         'parse_mode': 'HTML',
         'text': (
@@ -72,7 +89,13 @@ def welcome(token, app_url, message):
                 [{'text': '📢 Наш Telegram-канал', 'url': CHANNEL_URL}],
             ],
         },
-    })
+    }
+    photo_path = Path(__file__).resolve().parent / 'assets' / 'welcome.jpg'
+    if photo_path.is_file():
+        payload['caption'] = payload.pop('text')
+        call(token, 'sendPhoto', payload, photo=photo_path.read_bytes())
+    else:
+        call(token, 'sendMessage', payload)
 
 
 def polling(token, app_url, database_path):
