@@ -4,3 +4,7 @@ window.sandboxReady = fetch('/api/me', {credentials:'same-origin'}).then(r => {
   if(!r.ok) throw new Error('Не удалось создать сессию');
   return r.json();
 });
+try {
+  const saved = JSON.parse(localStorage.getItem('bg_prefs') || '{}');
+  document.documentElement.classList.toggle('admin-concealed', saved.showAdmin === false);
+} catch {}

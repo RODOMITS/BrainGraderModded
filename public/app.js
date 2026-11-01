@@ -93,6 +93,7 @@
     return {
       count: [1, 3, 5].includes(p.count) ? p.count : 1,
       fast: !!p.fast,
+      showAdmin: p.showAdmin !== false,
       sound: p.sound !== false,
       volume: Number.isFinite(v) ? Math.min(100, Math.max(0, Math.round(v))) : 60,
       sm: {
@@ -104,6 +105,8 @@
     };
   })();
   const savePrefs = () => { try { localStorage.setItem('bg_prefs', JSON.stringify(prefs)); } catch {} };
+  const applyAdminVisibility = () => document.documentElement.classList.toggle('admin-concealed', !prefs.showAdmin);
+  applyAdminVisibility();
 
   // ---------- Звуки: синтезируем на лету, без файлов. Мягкие щелчки ленты и короткие аккорды ----------
   const sfx = (() => {
@@ -1185,6 +1188,10 @@
             <div class="grow"><b>Быстрая прокрутка</b><p>Кейсы и апгрейдер крутятся в несколько раз быстрее.</p></div>
             ${sw('fast', prefs.fast, 'Быстрая прокрутка')}
           </div>
+          <div class="set-row">
+            <div class="grow"><b>Показывать админку</b><p>Если выключить, кнопка появляется при наведении на её место. Настройка сохраняется на этом устройстве.</p></div>
+            ${sw('showAdmin', prefs.showAdmin, 'Показывать админку')}
+          </div>
         </section>
 
         <section class="set-group">
@@ -1213,12 +1220,13 @@
         </section>
       </div>`);
     openSheet('Настройки', body);
-    const save = () => { savePrefs(); applyStreamer(); syncSpeedSound(); };
+    const save = () => { savePrefs(); applyStreamer(); syncSpeedSound(); applyAdminVisibility(); };
     $$('.sw', body).forEach((b) => (b.onclick = () => {
       const k = b.dataset.k;
       let on;
       if (k === 'sound') { on = prefs.sound = !prefs.sound; $('.set-vol', body).classList.toggle('off', !on); }
       else if (k === 'fast') on = prefs.fast = !prefs.fast;
+      else if (k === 'showAdmin') on = prefs.showAdmin = !prefs.showAdmin;
       else if (k === 'sm') { on = sm.on = !sm.on; $('#smSub', body).classList.toggle('off', !on); }
       else if (k === 'hover') on = sm.hover = !sm.hover;
       else if (k.startsWith('hide:')) { const id = k.slice(5); on = sm.hide[id] = !sm.hide[id]; }
@@ -1994,7 +2002,6 @@
         ${cs.freeKind ? '<span></span>' : `<div class="count-seg" id="countSeg" role="group" aria-label="Сколько кейсов открыть">${[1, 3, 5].map((n) => `<button data-n="${n}" class="${prefs.count === n ? 'on' : ''}">×${n}</button>`).join('')}</div>`}
         ${speedSoundHtml()}
       </div>
-      ${state.me?.isAdmin ? `<div class="test-row" id="testRow"><button class="tgl ${state.testMode ? 'on' : ''}" id="tTest" aria-pressed="${!!state.testMode}">Тест-деньги</button><span class="muted">Баланс: <b id="testBal">${fmt(state.me.testBalance || 0)}</b> BG · не в статистике</span><button class="link-btn" id="testSell">Продать тестовое</button></div>` : ''}
       ${cs.freeKind ? '<div class="free-box hidden" id="freeBox"></div>' : ''}
       <button class="btn open-btn" id="open"></button>
       ${cs.freeKind ? '' : '<button class="link-btn promo-open" id="promoOpen">Открыть по промокоду</button>'}
@@ -2067,7 +2074,7 @@
       if (test) {
         $('#freeBox')?.classList.add('hidden');
         btn.disabled = state.busy || !enough;
-        btn.innerHTML = enough ? `Открыть${n > 1 ? ` ${n} шт.` : ''} на тест за ${price(cs.price * n)}` : 'Не хватает тест-денег';
+        btn.innerHTML = enough ? `Открыть${n > 1 ? ` ${n} шт.` : ''} за ${price(cs.price * n)}` : 'Недостаточно BG';
         btn.onclick = () => openFlow(cs, update, null, true);
         return;
       }
@@ -2130,7 +2137,7 @@
     try {
       const r = await api('/api/test/sell', { method: 'POST', body: {} });
       state.me.testBalance = r.testBalance;
-      toast(`Тестовое продано за ${fmt(r.total)} BG`);
+      toast(`Продано за ${fmt(r.total)} BG`);
       update?.();
     } catch (e) { fail(e); }
   }
@@ -2247,10 +2254,10 @@
           <button class="btn ghost" data-a="sell">Продать за ${price(sellSum)}</button>
           <button class="btn ghost" data-a="upgrade">Апгрейд</button>
         </div>` : ''}
-        <button class="btn" data-a="again" style="margin-top:${items.length ? 8 : 18}px">${test ? (enough ? `Ещё на тест${again > 1 ? ` ${again} шт.` : ''} за ${price(cs.price * again)}` : 'Готово') : cs.freeKind ? 'Готово' : enough ? `Открыть ещё${again > 1 ? ` ${again} шт.` : ''} за ${price(cs.price * again)}` : 'Пополнить баланс'}</button>
-        ${test ? '<p class="muted" style="text-align:center;margin:10px 0 0">Тестовое: лежит в инвентаре с плашкой «тест», не в статистике, вывести нельзя</p>' : ''}
+        <button class="btn" data-a="again" style="margin-top:${items.length ? 8 : 18}px">${test ? (enough ? `Ещё${again > 1 ? ` ${again} шт.` : ''} за ${price(cs.price * again)}` : 'Готово') : cs.freeKind ? 'Готово' : enough ? `Открыть ещё${again > 1 ? ` ${again} шт.` : ''} за ${price(cs.price * again)}` : 'Пополнить баланс'}</button>
+        
       </div>`);
-    const s = openSheet((test ? 'Тест: ' : '') + (n > 1 ? `Тебе выпало ${n} ${plural(n, 'брейнрот', 'брейнрота', 'брейнротов')}` : 'Тебе выпало'), body);
+    const s = openSheet((n > 1 ? `Тебе выпало ${n} ${plural(n, 'брейнрот', 'брейнрота', 'брейнротов')}` : 'Тебе выпало'), body);
     const sellBtn = $('[data-a=sell]', body);
     if (sellBtn) sellBtn.onclick = async (ev) => {
       ev = { currentTarget: ev.currentTarget }; // после await у события пропадает currentTarget
@@ -2259,7 +2266,7 @@
         if (test) {
           const res = await api('/api/test/sell', { method: 'POST', body: { ids: items.map((d) => d.inventoryId) } });
           state.me.testBalance = res.testBalance;
-          toast(`Тестовое продано за ${fmt(res.total)} BG`);
+          toast(`Продано за ${fmt(res.total)} BG`);
           s.close();
           return update();
         }
@@ -3893,7 +3900,7 @@
   //                         ВОПРОСЫ (FAQ)
   // =====================================================================
   // Цифры — из текущих настроек сайта, поэтому ответы не устаревают. #/faq?q=withdraw — открыть нужный вопрос
-  function faqData() { return [{group:'Песочница',items:[{id:'sandbox',q:'Как получить BG и предметы?',a:'<p>Открой общую админку. В ней доступны изменение баланса, выдача предметов и редактирование кейсов. Пополнение и вывод отключены. Все BG виртуальные.</p>'}]}];
+  function faqData() { return [{group:'Кейсы',items:[{id:'cases',q:'Как открыть кейс?',a:'<p>Выбери кейс и количество открытий. Полученные предметы появятся в инвентаре — их можно продать или использовать в играх.</p>'}]}];
     const c = state.cfg || {};
     const f = c.faq || {};
     const list = [
@@ -4088,7 +4095,7 @@
   }
 
   // Тестовые брейнроты (только у админов): открыты на тест-деньги, вне статистики, вывести нельзя
-  const testTag = '<span class="test-tag" title="Тестовый — только у админов, вне статистики, вывести нельзя">тест</span>';
+  const testTag = '';
   function drawInventory(inv) {
     state.inv = inv;
     const box = $('#invBox');
@@ -4155,7 +4162,7 @@
           <img src="${itemImgBig(it.item.image)}" alt=""><b>${esc(it.item.name)}</b>${price(it.item.price)}
         </div>
         <button class="btn" data-a="withdraw" ${canWithdraw ? '' : 'disabled'}>${it.withIds.length > 1 ? `Вывести ${it.withIds.length} шт. в Roblox` : 'Вывести в Roblox'}</button>
-        ${canWithdraw ? '' : it.test ? '<p class="hint center">Тестовый брейнрот (только у админов): вывести нельзя, в статистику не идёт. Продаётся в тест-баланс, можно поставить в апгрейд</p>' : it.reward ? '<p class="hint center">Награда за серию заходов — вывести нельзя. Продай её, поставь в апгрейд или сыграй в мистери: выигрыш вывести можно</p>' : it.bought ? '<p class="hint center">Куплен за баланс — вывести нельзя. Продай его, поставь в апгрейд или сыграй в мистери: выигрыш вывести можно</p>' : `<p class="hint center">${garPair ? 'Garama and Madundung выводится от 2 шт. — нужна ещё одна' : `Вывести можно брейнрота от ${fmt(min)} BG`}</p>`}
+        ${canWithdraw ? '' : it.test ? '' : it.reward ? '<p class="hint center">Награда за серию заходов — вывести нельзя. Продай её, поставь в апгрейд или сыграй в мистери: выигрыш вывести можно</p>' : it.bought ? '<p class="hint center">Куплен за баланс — вывести нельзя. Продай его, поставь в апгрейд или сыграй в мистери: выигрыш вывести можно</p>' : `<p class="hint center">${garPair ? 'Garama and Madundung выводится от 2 шт. — нужна ещё одна' : `Вывести можно брейнрота от ${fmt(min)} BG`}</p>`}
         <div class="btn-row" style="margin-top:8px">
           <button class="btn ghost" data-a="sell">Продать за ${price(it.item.price)}</button>
           <button class="btn ghost" data-a="upgrade">Апгрейд</button>
@@ -4169,7 +4176,7 @@
         const r = await api('/api/inventory/sell', { method: 'POST', body: { ids: [it.id], key: newKey() } });
         setBalance(r.balance);
         if (r.test) state.me.testBalance = r.testBalance;
-        toast(r.test ? `Тестовое продано за ${fmt(r.total)} BG (в тест-баланс)` : `Продано за ${fmt(r.total)} BG`);
+        toast(r.test ? `Продано за ${fmt(r.total)} BG` : `Продано за ${fmt(r.total)} BG`);
         s.close();
         renderProfile();
       } catch (e) {

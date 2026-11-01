@@ -1711,3 +1711,13 @@ html.halloween h2::after { content: ' 🎃'; font-size: .8em; }
   .hw-bat { display: none; }
   .hw-hang, .hw-hang b, .hw-fog, .hw-pk, .hw-pumpkin { animation: none !important; }
 }
+/* Preserve the hit area while concealing admin links until hover or keyboard focus. */
+html.admin-concealed a[href="/admin"] {
+  opacity: 0;
+  transition: opacity .15s ease;
+}
+html.admin-concealed a[href="/admin"]:hover,
+html.admin-concealed a[href="/admin"]:focus-visible,
+html.admin-concealed a[href="/admin"]:active {
+  opacity: 1;
+}

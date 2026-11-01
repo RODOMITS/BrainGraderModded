@@ -352,7 +352,7 @@ def dispatch(path, body):
         if c.execute('SELECT 1 FROM promos WHERE code=?',(code,)).fetchone(): raise Problem('Такой код уже существует')
         c.execute('INSERT INTO promos VALUES (?,?,?)',(code,number(body.get('reward'),1),integer(body.get('uses'),1,10000)))
         return dict(ok=True)
-    raise Problem('Этот раздел не настроен в песочнице', 'not_available',404)
+    raise Problem('Раздел недоступен', 'not_available',404)
 
 
 def validate_catalog(cat):
