@@ -94,7 +94,23 @@ def init_db():
         CREATE INDEX IF NOT EXISTS live_drops_created ON live_drops(created DESC, inventory_id DESC);
         CREATE TABLE IF NOT EXISTS promos(code TEXT PRIMARY KEY, reward REAL NOT NULL, uses INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS claims(user_id TEXT, code TEXT, PRIMARY KEY(user_id,code));
+        CREATE TABLE IF NOT EXISTS giveaways(id INTEGER PRIMARY KEY, item TEXT NOT NULL,
+          ends REAL NOT NULL, minimum REAL NOT NULL, finished INTEGER NOT NULL DEFAULT 0,
+          winner_id TEXT, winner_num INTEGER);
+        CREATE TABLE IF NOT EXISTS giveaway_entries(giveaway_id INTEGER NOT NULL REFERENCES giveaways(id),
+          user_id TEXT NOT NULL REFERENCES users(id), num INTEGER NOT NULL,
+          PRIMARY KEY(giveaway_id,user_id), UNIQUE(giveaway_id,num));
+        CREATE TABLE IF NOT EXISTS giveaway_progress(giveaway_id INTEGER NOT NULL REFERENCES giveaways(id),
+          user_id TEXT NOT NULL REFERENCES users(id), amount REAL NOT NULL,
+          PRIMARY KEY(giveaway_id,user_id));
         ''')
+        if not c.execute('SELECT 1 FROM giveaways WHERE id=1').fetchone():
+            source_path=ROOT/'source_catalog.json'
+            source_items=json.loads(source_path.read_text(encoding='utf-8-sig'))['items'] if source_path.exists() else []
+            prize=next((x for x in source_items if x['name']=='Skibidi Toilet'),
+                       dict(id=1,name='Skibidi Toilet',price=13154,rarity='og',image='/img/brainrots/skibidi-toilet.webp'))
+            c.execute('INSERT INTO giveaways(id,item,ends,minimum) VALUES (1,?,?,500)',
+                      (json.dumps(prize),time.time()+9*86400+4*3600+46*60))
         if not c.execute("SELECT 1 FROM settings WHERE key='catalog'").fetchone():
             # Do not invent the original site's catalogue. Import its exported JSON instead.
             c.execute('INSERT INTO settings VALUES (?,?)', ('catalog', json.dumps(dict(items=[],cases=[]))))
@@ -216,6 +232,30 @@ def home():
     return dict(top=drop(top),drops=[drop(row) for row in recent],bonus=None)
 
 
+def settle_giveaways():
+    for giveaway in db().execute('SELECT * FROM giveaways WHERE finished=0 AND ends<=?',(time.time(),)).fetchall():
+        entries=db().execute('SELECT user_id,num FROM giveaway_entries WHERE giveaway_id=?',(giveaway['id'],)).fetchall()
+        winner=RNG.choice(entries) if entries else None
+        if winner:
+            add_item(json.loads(giveaway['item']),'giveaway',uid=winner['user_id'])
+        db().execute('UPDATE giveaways SET finished=1,winner_id=?,winner_num=? WHERE id=?',
+                     (winner['user_id'] if winner else None,winner['num'] if winner else None,giveaway['id']))
+
+
+def giveaway_view(row):
+    c=db(); gid=row['id']
+    entry=c.execute('SELECT num FROM giveaway_entries WHERE giveaway_id=? AND user_id=?',(gid,g.uid)).fetchone()
+    progress=c.execute('SELECT amount FROM giveaway_progress WHERE giveaway_id=? AND user_id=?',(gid,g.uid)).fetchone()
+    amount=progress[0] if progress else 0
+    winner=None
+    if row['winner_id']:
+        winner_user=c.execute('SELECT name FROM users WHERE id=?',(row['winner_id'],)).fetchone()
+        winner=dict(name=winner_user[0] if winner_user else 'Игрок',num=row['winner_num'],me=row['winner_id']==g.uid)
+    return dict(id=gid,item=json.loads(row['item']),endsAt=iso(row['ends']),needDeposit=row['minimum'],
+                deposited=amount,participants=c.execute('SELECT COUNT(*) FROM giveaway_entries WHERE giveaway_id=?',(gid,)).fetchone()[0],
+                myNum=entry[0] if entry else None,canJoin=not row['finished'] and amount>=row['minimum'],winner=winner)
+
+
 def selected(body, allow_test=False):
     ids = body.get('ids', [body['id']] if 'id' in body else [])
     if not isinstance(ids,list) or not 1 <= len(ids) <= 100:
@@ -255,7 +295,8 @@ def config():
                 dice=dict(enabled=True,min=1,max=100000,maxItems=5,colors=[dict(name=n,hex=h) for n,h in
                     zip(['Красный','Оранжевый','Жёлтый','Зелёный','Синий','Фиолетовый'],
                         ['#ef4444','#f97316','#facc15','#22c55e','#3b82f6','#a855f7'])],
-                    table=[dict(hits=h,mult=m) for h,m in [(1,0),(2,2),(3,5),(4,20)]]))
+                    table=[dict(hits=h,mult=m) for h,m in [(1,2),(2,0),(3,0),(4,3)]],
+                    rainbow=dict(mult=10)))
 
 
 def targets(body):
@@ -367,9 +408,15 @@ def dispatch(path, body):
         dice=[RNG.randrange(6) for _ in range(4)]
         if rig:
             hits=rig['hits']
+            if rig['mode']!='lose' and hits not in (1,4):
+                hits=1
             dice=[color]*hits+[RNG.choice([n for n in range(6) if n!=color]) for _ in range(4-hits)]
             RNG.shuffle(dice)
-        hits=dice.count(color); mult={0:0,1:0,2:2,3:5,4:20}[hits]
+        # The original does not expose its bonus probability; this version uses 1% per roll by default.
+        bonus=rig['mode']=='bonus' if rig else RNG.random()<number(os.getenv('DICE_BONUS_CHANCE','0.01'),0,1)
+        if bonus:
+            dice[RNG.randrange(4)]=6
+        hits=dice.count(color); mult=10 if bonus else {0:0,1:2,2:0,3:0,4:3}[hits]
         won=[]
         winnings=0
         if not mult: consume(rows,'dice')
@@ -378,9 +425,23 @@ def dispatch(path, body):
                 prize=rig['item'] if rig and rig.get('item') else row['item']
                 won.extend(add_item(prize,'dice') for _ in range(mult-1))
                 winnings+=prize['price']*(mult-1)
-        return dict(dice=dice,color=color,hits=hits,mult=mult,rainbow=False,wonIds=won,net=winnings if mult else -value)
+        return dict(dice=dice,color=color,hits=hits,mult=mult,rainbow=bonus,wonIds=won,net=winnings if mult else -value)
     if path=='home': return home()
-    if path=='giveaways' and not post: return dict(now=iso(),active=[],finished=[])
+    if path=='giveaways' and not post:
+        settle_giveaways()
+        rows=c.execute('SELECT * FROM giveaways ORDER BY id DESC').fetchall()
+        return dict(now=iso(),active=[giveaway_view(r) for r in rows if not r['finished']],
+                    finished=[giveaway_view(r) for r in rows if r['finished']])
+    if path.startswith('giveaways/') and path.endswith('/join') and post:
+        settle_giveaways()
+        row=c.execute('SELECT * FROM giveaways WHERE id=?',(integer(parts[1]),)).fetchone()
+        if not row or row['finished']: raise Problem('Розыгрыш завершён')
+        view=giveaway_view(row)
+        if view['myNum'] is not None: return dict(num=view['myNum'])
+        if not view['canJoin']: raise Problem('Недостаточно прогресса для участия')
+        num=view['participants']+1
+        c.execute('INSERT INTO giveaway_entries VALUES (?,?,?)',(row['id'],g.uid,num))
+        return dict(num=num)
     if path=='streak/checkin' and post: return dict(enabled=False,count=0,pending=[],fresh=False)
     if path=='referrals' and not post:
         return dict(code='SANDBOX',link='',bonusPercent=0,percent=0,preliminary=0,refBalance=0,count=0,earned=0,
@@ -405,7 +466,7 @@ def dispatch(path, body):
             c.execute('DELETE FROM next_results WHERE user_id=? AND game=?',(g.uid,game))
             return dict(ok=True)
         mode=body.get('mode','item')
-        if mode not in ('item','win','lose') or (game in ('case','mystery') and mode!='item'):
+        if mode not in ('item','win','lose','bonus') or (game in ('case','mystery') and mode!='item') or (mode=='bonus' and game!='dice'):
             raise Problem('Для кейса и мистери выбери конкретный предмет')
         item=None
         if mode=='item':
@@ -414,8 +475,16 @@ def dispatch(path, body):
                 raise Problem('Предмет не найден')
         value=dict(mode=mode,item=item)
         if game=='dice':
-            value['hits']=0 if mode=='lose' else integer(body.get('hits',2),2,4)
+            value['hits']=0 if mode in ('lose','bonus') else integer(body.get('hits',1),1,4)
+            if mode not in ('lose','bonus') and value['hits'] not in (1,4):
+                raise Problem('Выигрыш: 1 или 4 совпадения')
         c.execute('INSERT OR REPLACE INTO next_results VALUES (?,?,?)',(g.uid,game,json.dumps(value)))
+        return dict(ok=True)
+    if path=='admin/giveaway-progress' and post:
+        gid=integer(body.get('giveawayId',1)); uid=str(body.get('userId',g.uid)); amount=number(body.get('amount'))
+        if not c.execute('SELECT 1 FROM giveaways WHERE id=? AND finished=0',(gid,)).fetchone(): raise Problem('Активный розыгрыш не найден')
+        if not c.execute('SELECT 1 FROM users WHERE id=?',(uid,)).fetchone(): raise Problem('Игрок не найден')
+        c.execute('INSERT OR REPLACE INTO giveaway_progress VALUES (?,?,?)',(gid,uid,amount))
         return dict(ok=True)
     if path=='admin/balance' and post:
         uid=str(body.get('userId',g.uid)); amount=number(body.get('balance'))
@@ -483,7 +552,7 @@ def api(path):
     if not isinstance(body,dict): raise Problem('Нужен JSON-объект')
     c=db()
     try:
-        c.execute('BEGIN IMMEDIATE' if request.method=='POST' else 'BEGIN')
+        c.execute('BEGIN IMMEDIATE' if request.method=='POST' or path=='giveaways' else 'BEGIN')
         key=body.get('key'); fingerprint=json.dumps(body,sort_keys=True,separators=(',',':'))
         if key is not None:
             if not isinstance(key,str) or not 1<=len(key)<=100: raise Problem('Неверный ключ операции')
