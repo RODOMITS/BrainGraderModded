@@ -955,6 +955,12 @@
   }
   function loadAvatar() {
     avatarPromise ||= (async () => {
+      // Telegram provides this optional URL in the server-verified initData.
+      const photo = state.me?.photoUrl;
+      if (photo && /^https:\/\//.test(photo)) {
+        const src = await tryImage(photo);
+        if (src) return src;
+      }
       try {
         const headers = TG?.initData ? { authorization: 'tma ' + TG.initData } : DEV_ID ? { authorization: 'dev ' + DEV_ID } : {};
         const r = await fetch('/api/avatar', { headers });

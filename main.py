@@ -114,7 +114,8 @@ def user():
 
 def me():
     u = dict(user())
-    return dict(id=u['id'], firstName=u['name'], username='', balance=u['balance'], testBalance=u['testBalance'],
+    return dict(id=u['id'], firstName=u['name'], username=getattr(g,'username',''),
+                photoUrl=getattr(g,'photo_url',None), balance=u['balance'], testBalance=u['testBalance'],
                 isAdmin=True, isTester=True, isPartner=False, siteMode='open',
                 stats=dict(cases=u['cases'], upgrades=u['upgrades'], withdrawn=0))
 
@@ -125,6 +126,8 @@ def identify():
         return
     # Only these test-only identities are accepted; Telegram identities require a valid signature.
     auth = request.headers.get('Authorization', '')
+    g.photo_url = None
+    g.username = ''
     g.uid, name = 'guest:' + request.cookies.get('sandbox_id', secrets.token_hex(16)), 'Игрок'
     if auth.startswith('tma '):
         token = os.getenv('BOT_TOKEN', '')
@@ -147,6 +150,10 @@ def identify():
         if not hmac.compare_digest(expected, received) or not -60 <= age <= 86400:
             raise Problem('Сессия Telegram истекла или подпись неверна', 'auth_required', 401)
         g.uid, name = 'tg:' + str(uid), str(info.get('first_name', 'Игрок'))[:80]
+        photo = info.get('photo_url')
+        if isinstance(photo, str) and photo.startswith('https://'):
+            g.photo_url = photo
+        g.username = str(info.get('username', ''))[:80]
     c = db()
     c.execute('INSERT OR IGNORE INTO users(id,name) VALUES (?,?)', (g.uid,name))
     c.commit()
