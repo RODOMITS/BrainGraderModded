@@ -443,5 +443,11 @@ def static(name): return send_from_directory(ROOT/'public',name)
 
 init_db()
 if __name__=='__main__':
+    required = ['index.html', 'admin.html', 'app.js', 'styles.css', 'sandbox.js', 'og-sound.js']
+    missing = [name for name in required if not (ROOT / 'public' / name).is_file()]
+    if missing:
+        raise SystemExit('Missing frontend files in /app/public: ' + ', '.join(missing)
+                         + '. Add the public directory to the repository and redeploy.')
+    print('BrainGrader: frontend found; starting HTTP server.', flush=True)
     from waitress import serve
     serve(app,host='0.0.0.0',port=int(os.getenv('PORT','8000')),threads=8)

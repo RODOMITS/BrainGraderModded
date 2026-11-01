@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<!-- saved from url=(0027)https://brainrotgrader.com/ -->
+<html lang="ru" style="--tg-viewport-height: 100vh; --tg-viewport-stable-height: 100vh;"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8"><meta name="bg-build" content="mvwkeaag.mvwke4w0">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>Brainrot Grader</title>
+  <meta name="theme-color" content="#0c1110">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style></style><script src="/sandbox.js"></script></head>
+<body>
+  <header class="topbar">
+    <button class="menu-btn" id="menuBtn" aria-label="Меню" aria-haspopup="dialog" aria-expanded="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"></path></svg>
+    </button>
+    <a href="#/" aria-label="На главную"><img class="logo" src="/img/logo.svg" alt="Brainrot Grader"></a>
+    <nav class="topnav" id="topnav" aria-label="Разделы"></nav>
+    <div class="spacer"></div><a class="btn small" href="/admin" style="width:auto;margin-right:8px">Админка</a>
+    <button class="streak-pill hidden" id="streakPill" aria-label="Серия заходов"></button>
+    <div class="balance" aria-label="Баланс">
+      <img class="coin" src="/img/coin.webp" alt="">
+      <span id="balance">—</span>
+      <button class="plus" id="topup" aria-label="Пополнить баланс">+</button>
+    </div>
+    <button class="icon-btn set-btn" id="setBtn" aria-label="Настройки" title="Настройки"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"></path><circle cx="16" cy="7" r="2.2"></circle><circle cx="10" cy="17" r="2.2"></circle></svg></button>
+    <button class="fs-btn hidden" id="fsBtn" aria-label="Во весь экран" title="Во весь экран">⛶</button>
+    <a class="avatar" id="avatar" href="#/profile" aria-label="Профиль"></a>
+  </header>
+
+  <!-- Живая лента слева: только на широком экране (компьютер) -->
+  <aside class="livebar" id="livebar" aria-label="Живая лента дропов"></aside>
+
+  <div style="padding:8px 16px;background:#173126;color:#b7f9cf;text-align:center">Песочница · Админка доступна всем · Пополнение и вывод отключены</div><main id="view"><div class="empty">Открой Brainrot Grader через бота в Telegram</div></main>
+
+
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+  <script src="/og-sound.js"></script>
+  <script src="/app.js"></script>
+
+
+</body></html>
