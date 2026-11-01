@@ -844,7 +844,7 @@
   const stale = (t) => t !== state.render;
 
   async function api(path, { method = 'GET', body } = {}) {
-    const headers = {};
+    const headers = { 'X-Play-Session': window.playSession };
     if (TG?.initData) headers.authorization = 'tma ' + TG.initData;
     else if (DEV_ID) headers.authorization = 'dev ' + DEV_ID;
     if (body !== undefined) headers['content-type'] = 'application/json';

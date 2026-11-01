@@ -1,5 +1,7 @@
 """Public sandbox backend for the saved Brainrot Grader client. No real payments."""
 import hashlib
+import base64
+import binascii
 import hmac
 import json
 import math
@@ -8,16 +10,48 @@ from pathlib import Path
 import secrets
 import sqlite3
 import time
+import threading
 from datetime import datetime, timezone
 from urllib.parse import parse_qsl
 
-from flask import Flask, g, jsonify, redirect, request, send_from_directory
+from flask import Flask, Response, g, jsonify, redirect, request, send_from_directory
 
 ROOT = Path(__file__).resolve().parent
 app = Flask(__name__, static_folder=None)
 app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024
 DB_PATH = Path(os.getenv('DATABASE_PATH', str(ROOT / 'data' / 'brainrot.db')))
 RNG = secrets.SystemRandom()
+CUSTOM_SESSIONS = {}
+CUSTOM_LOCK = threading.RLock()
+
+
+def custom_session(create=False):
+    token = getattr(g, 'play_session', '')
+    if not token:
+        if create:
+            raise Problem('Переоткрой приложение, чтобы создать сессию')
+        return None
+    key = (g.uid, token)
+    with CUSTOM_LOCK:
+        if create and key not in CUSTOM_SESSIONS:
+            CUSTOM_SESSIONS[key] = dict(items=[], images={}, catalog=None, touched=time.time())
+        session = CUSTOM_SESSIONS.get(key)
+        if session:
+            session['touched'] = time.time()
+        return session
+
+
+def visible_item(item):
+    return not item.get('customSession') or item['customSession'] == getattr(g, 'play_session', '')
+
+
+def cleanup_custom_sessions(c):
+    with CUSTOM_LOCK:
+        expired = [key for key,s in CUSTOM_SESSIONS.items() if s['touched'] < time.time()-12*3600]
+        for uid, token in expired:
+            del CUSTOM_SESSIONS[(uid,token)]
+            c.execute("DELETE FROM inventory WHERE user_id=? AND json_extract(item,'$.customSession')=?", (uid,token))
+            c.execute("DELETE FROM next_results WHERE user_id=? AND json_extract(value,'$.item.customSession')=?", (uid,token))
 
 
 class Problem(Exception):
@@ -104,6 +138,9 @@ def init_db():
           user_id TEXT NOT NULL REFERENCES users(id), amount REAL NOT NULL,
           PRIMARY KEY(giveaway_id,user_id));
         ''')
+        # Uploaded assets exist only in process memory; discard their previous inventory snapshots on restart.
+        c.execute("DELETE FROM inventory WHERE json_extract(item,'$.customSession') IS NOT NULL")
+        c.execute("DELETE FROM next_results WHERE json_extract(value,'$.item.customSession') IS NOT NULL")
         if not c.execute('SELECT 1 FROM giveaways WHERE id=1').fetchone():
             source_path=ROOT/'source_catalog.json'
             source_items=json.loads(source_path.read_text(encoding='utf-8-sig'))['items'] if source_path.exists() else []
@@ -117,6 +154,7 @@ def init_db():
         # Preserve previous wins in the feed when upgrading an existing deployment.
         previous = c.execute('''SELECT i.* FROM inventory i
           WHERE i.test=0 AND i.source IN ('case','upgrade','mystery','dice')
+          AND json_extract(i.item,'$.customSession') IS NULL
           AND NOT EXISTS(SELECT 1 FROM live_drops d WHERE d.inventory_id=i.id)''').fetchall()
         for row in previous:
             item = json.loads(row['item'])
@@ -125,7 +163,7 @@ def init_db():
         c.commit()
 
 
-def catalog():
+def base_catalog():
     personal = db().execute('SELECT value FROM user_catalogs WHERE user_id=?', (g.uid,)).fetchone()
     if personal:
         return json.loads(personal[0])
@@ -135,6 +173,17 @@ def catalog():
         validate_catalog(data)
         return data
     return json.loads(db().execute("SELECT value FROM settings WHERE key='catalog'").fetchone()[0])
+
+
+def catalog():
+    data = base_catalog()
+    session = custom_session()
+    if session:
+        if session['catalog'] is not None:
+            data = json.loads(json.dumps(session['catalog']))
+        known = {item['id'] for item in data['items']}
+        data['items'].extend(dict(item) for item in session['items'] if item['id'] not in known)
+    return data
 
 
 def user():
@@ -155,6 +204,8 @@ def identify():
         return
     # Only these test-only identities are accepted; Telegram identities require a valid signature.
     auth = request.headers.get('Authorization', '')
+    session_token=request.headers.get('X-Play-Session','')
+    g.play_session=session_token if len(session_token)==32 and all(ch in '0123456789abcdef' for ch in session_token) else ''
     g.photo_url = None
     g.username = ''
     g.uid, name = 'guest:' + request.cookies.get('sandbox_id', secrets.token_hex(16)), 'Игрок'
@@ -185,6 +236,7 @@ def identify():
         g.username = str(info.get('username', ''))[:80]
     c = db()
     c.execute('INSERT OR IGNORE INTO users(id,name) VALUES (?,?)', (g.uid,name))
+    cleanup_custom_sessions(c)
     c.commit()
 
 
@@ -203,16 +255,18 @@ def inventory(owned=False):
     rows = db().execute("SELECT * FROM inventory WHERE user_id=? AND status='owned' ORDER BY id DESC LIMIT 2000", (g.uid,))
     return [dict(id=r['id'], item=json.loads(r['item']), status=r['status'], test=bool(r['test']),
                  source=r['source'], createdAt=iso(r['created']), withdrawable=False) for r in rows
-            if not owned or r['status']=='owned']
+            if (not owned or r['status']=='owned') and visible_item(json.loads(r['item']))]
 
 
 def add_item(item, source, test=False, uid=None):
+    if item.get('customSession') and (not visible_item(item) or uid not in (None,g.uid)):
+        raise Problem('Кастомный предмет доступен только в текущей сессии')
     details = source if isinstance(source, dict) else dict(kind=source)
     kind = details['kind']
     created = time.time()
     iid = db().execute('INSERT INTO inventory(user_id,item,test,source,created) VALUES (?,?,?,?,?)',
                        (uid or g.uid,json.dumps(item),int(test),kind,created)).lastrowid
-    if not test and kind in ('case','upgrade','mystery','dice'):
+    if not test and not item.get('customSession') and kind in ('case','upgrade','mystery','dice'):
         db().execute('INSERT INTO live_drops VALUES (?,?,?,?,?)',
                      (iid,json.dumps(item),json.dumps(details),item['price'],created))
     return iid
@@ -317,8 +371,11 @@ def take_next_result(game):
     row = db().execute('SELECT value FROM next_results WHERE user_id=? AND game=?', (g.uid,game)).fetchone()
     if not row:
         return None
+    result=json.loads(row[0])
+    if result.get('item') and not visible_item(result['item']):
+        return None
     db().execute('DELETE FROM next_results WHERE user_id=? AND game=?', (g.uid,game))
-    return json.loads(row[0])
+    return result
 
 
 def dispatch(path, body):
@@ -456,7 +513,8 @@ def dispatch(path, body):
     if path=='admin/state' and not post:
         return dict(me=me(),users=[dict(r) for r in c.execute('SELECT * FROM users ORDER BY rowid DESC LIMIT 500')],
                     catalog=catalog(),promos=[dict(r) for r in c.execute('SELECT * FROM promos')],
-                    nextResults={r['game']:json.loads(r['value']) for r in c.execute('SELECT game,value FROM next_results WHERE user_id=?',(g.uid,))},
+                    nextResults={r['game']:json.loads(r['value']) for r in c.execute('SELECT game,value FROM next_results WHERE user_id=?',(g.uid,))
+                                 if not json.loads(r['value']).get('item') or visible_item(json.loads(r['value'])['item'])},
                     history=[dict(r) for r in c.execute('SELECT id,user_id,kind,created FROM history ORDER BY id DESC LIMIT 50')])
     if path in ('admin/next-result','admin/next-result/cancel') and post:
         game=body.get('game')
@@ -497,10 +555,19 @@ def dispatch(path, body):
     if path=='admin/catalog' and post:
         body = {k:v for k,v in body.items() if k!='key'}
         validate_catalog(body)
-        c.execute('INSERT OR REPLACE INTO user_catalogs VALUES (?,?)',(g.uid,json.dumps(body)))
+        if any(item.get('customSession') for item in body['items']):
+            custom_session(create=True)['catalog']=body
+        else:
+            c.execute('INSERT OR REPLACE INTO user_catalogs VALUES (?,?)',(g.uid,json.dumps(body)))
+            session=custom_session()
+            if session:
+                session['catalog']=None
         return dict(ok=True)
     if path=='admin/catalog/reset' and post:
         c.execute('DELETE FROM user_catalogs WHERE user_id=?',(g.uid,))
+        session=custom_session()
+        if session:
+            session['catalog']=None
         return dict(ok=True)
     if path=='admin/promo' and post:
         code=str(body.get('code','')).upper().strip()
@@ -523,7 +590,13 @@ def validate_catalog(cat):
         if it.get('rarity') not in ['common','rare','epic','legendary','og']: raise Problem('Неизвестная редкость')
         for key in ['name','image']:
             if not isinstance(it.get(key),str) or not 1<=len(it[key])<=500: raise Problem('Проверь название и картинку')
-        validate_image(it['image'])
+        if it.get('customSession'):
+            session=custom_session()
+            original=next((x for x in session['items'] if x['id']==iid),None) if session else None
+            if not original or it['customSession']!=g.play_session or it['image']!=original['image']:
+                raise Problem('Кастомный предмет доступен только в своей сессии')
+        else:
+            validate_image(it['image'])
     seen=set()
     for cs in cat['cases']:
         cid=integer(cs.get('id'))
@@ -569,6 +642,72 @@ def api(path):
     except Exception:
         c.rollback()
         raise
+
+
+@app.post('/api/admin/custom-item')
+def upload_custom_item():
+    body=request.get_json(silent=True)
+    if not isinstance(body,dict):
+        raise Problem('Нужны данные предмета')
+    name=body.get('name')
+    if not isinstance(name,str) or not 1<=len(name.strip())<=80:
+        raise Problem('Название: от 1 до 80 символов')
+    rarity=body.get('rarity')
+    if rarity not in ('common','rare','epic','legendary','og'):
+        raise Problem('Выбери редкость')
+    price=number(body.get('price'),0.01)
+    encoded=body.get('imageData','')
+    if not isinstance(encoded,str) or ',' not in encoded or len(encoded)>1_500_000:
+        raise Problem('Загрузи PNG, JPEG или WebP размером до 1 МБ')
+    try:
+        raw=base64.b64decode(encoded.split(',',1)[1],validate=True)
+    except (ValueError,binascii.Error):
+        raise Problem('Не удалось прочитать картинку')
+    if not 1<=len(raw)<=1024*1024:
+        raise Problem('Размер картинки: до 1 МБ')
+    if raw.startswith(b'\x89PNG\r\n\x1a\n'):
+        mime='image/png'
+    elif raw.startswith(b'\xff\xd8\xff'):
+        mime='image/jpeg'
+    elif raw.startswith(b'RIFF') and raw[8:12]==b'WEBP':
+        mime='image/webp'
+    else:
+        raise Problem('Поддерживаются PNG, JPEG и WebP')
+    session=custom_session(create=True)
+    occupied={i['id'] for i in catalog()['items']}
+    with CUSTOM_LOCK:
+        if len(session['items'])>=20 or sum(len(v[0]) for v in session['images'].values())+len(raw)>5*1024*1024:
+            raise Problem('Лимит сессии: 20 предметов и 5 МБ картинок')
+        iid=700_000_000+secrets.randbelow(299_999_999)
+        while iid in occupied:
+            iid=700_000_000+secrets.randbelow(299_999_999)
+        item=dict(id=iid,name=name.strip(),price=price,rarity=rarity,
+                  image=f'/session-img/{g.play_session}/{iid}',customSession=g.play_session)
+        session['items'].append(item)
+        session['images'][iid]=(raw,mime)
+    c=db()
+    try:
+        c.execute('BEGIN IMMEDIATE')
+        inventory_id=add_item(item,'custom')
+        c.commit()
+    except Exception:
+        c.rollback()
+        with CUSTOM_LOCK:
+            session['items']=[i for i in session['items'] if i['id']!=iid]
+            session['images'].pop(iid,None)
+        raise
+    return jsonify(ok=True,item=item,inventoryId=inventory_id)
+
+
+@app.get('/session-img/<token>/<int:item_id>')
+def custom_image(token,item_id):
+    with CUSTOM_LOCK:
+        for (_,session_token),session in CUSTOM_SESSIONS.items():
+            if session_token==token and session['touched']>=time.time()-12*3600:
+                image=session['images'].get(item_id)
+                if image:
+                    return Response(image[0],mimetype=image[1],headers={'Cache-Control':'no-store'})
+    raise Problem('Картинка больше недоступна', 'not_found',404)
 
 
 @app.get('/health')
