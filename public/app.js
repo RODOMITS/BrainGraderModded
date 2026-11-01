@@ -2582,7 +2582,7 @@
       const r = await api('/api/shop/buy', { method: 'POST', body: { itemId: it.id, key: newKey() } });
       setBalance(r.balance);
       haptic('success');
-      toast(`${r.item.name} в инвентаре — выбран для апгрейда`);
+      toast(`${r.item?.name || it.name} в инвентаре — выбран для апгрейда`);
       up.inv = (await api('/api/inventory')).filter((i) => i.status === 'owned');
       if (up.selected.length < state.cfg.upgrade.maxItems) up.selected.push(r.inventoryId);
       up.view = 'targets';

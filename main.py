@@ -438,7 +438,7 @@ def dispatch(path, body):
         if not it: raise Problem('Предмет не найден')
         if user()['balance']<it['price']: raise Problem('Недостаточно BG')
         c.execute('UPDATE users SET balance=balance-? WHERE id=?',(it['price'],g.uid))
-        return dict(inventoryId=add_item(it,'shop'),balance=user()['balance'])
+        return dict(item=it,inventoryId=add_item(it,'shop'),balance=user()['balance'])
     if path=='upgrade/targets' and post: return targets(body)
     if path=='upgrade' and post:
         options=targets(body); target=next((x for x in options['targets'] if x['id']==integer(body.get('targetId'))),None)
