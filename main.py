@@ -79,6 +79,8 @@ def init_db():
           cases INTEGER NOT NULL DEFAULT 0, upgrades INTEGER NOT NULL DEFAULT 0);
         CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS user_catalogs(user_id TEXT PRIMARY KEY REFERENCES users(id), value TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS next_results(user_id TEXT NOT NULL REFERENCES users(id), game TEXT NOT NULL,
+          value TEXT NOT NULL, PRIMARY KEY(user_id,game));
         CREATE TABLE IF NOT EXISTS inventory(id INTEGER PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id),
           item TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'owned', test INTEGER NOT NULL DEFAULT 0,
           source TEXT NOT NULL, created REAL NOT NULL);
@@ -262,11 +264,20 @@ def targets(body):
         raise Problem('Можно поставить до 5 предметов')
     value=sum(i['item']['price'] for i in rows)
     options=[dict(x,chance=round(value/x['price']*90,2)) for x in catalog()['items'] if 1<=value/x['price']*90<=90]
+    options.sort(key=lambda x: (x['price'], x['id']))
     presets=[]
     for n in [1.25,2,3,5,10]:
         target=min(options,key=lambda x:abs(x['price']-value*n)) if options else None
         presets.append(dict(label=f'×{n}',target=target,chance=target['chance'] if target else 0))
     return dict(inputValue=value,targets=options,presets=presets)
+
+
+def take_next_result(game):
+    row = db().execute('SELECT value FROM next_results WHERE user_id=? AND game=?', (g.uid,game)).fetchone()
+    if not row:
+        return None
+    db().execute('DELETE FROM next_results WHERE user_id=? AND game=?', (g.uid,game))
+    return json.loads(row[0])
 
 
 def dispatch(path, body):
@@ -300,9 +311,11 @@ def dispatch(path, body):
         field='testBalance' if test else 'balance'; cost=cs['price']*n
         if user()[field]<cost: raise Problem('Недостаточно BG. Добавь баланс в админке.', 'insufficient_balance')
         c.execute(f'UPDATE users SET {field}={field}-?, cases=cases+? WHERE id=?',(cost,0 if test else n,g.uid))
+        rig = None if test else take_next_result('case')
         drops=[]
-        for _ in range(n):
-            item=dict(RNG.choices(cs['items'],weights=[x['weight'] for x in cs['items']])[0]); item.pop('weight',None)
+        for index in range(n):
+            item=dict(rig['item']) if rig and index==0 else dict(RNG.choices(cs['items'],weights=[x['weight'] for x in cs['items']])[0])
+            item.pop('weight',None)
             iid=add_item(item,dict(kind='case',caseId=cs['id'],caseName=cs['name'],caseImage=cs['image']),test)
             drops.append(dict(item=item,inventoryId=iid))
         return dict(drops=drops,balance=user()['balance'],testBalance=user()['testBalance'],test=test)
@@ -314,7 +327,7 @@ def dispatch(path, body):
         field='testBalance' if test else 'balance'
         c.execute(f'UPDATE users SET {field}={field}+? WHERE id=?',(total,g.uid))
         return dict(total=total,balance=user()['balance'],testBalance=user()['testBalance'],test=test)
-    if path=='shop' and not post: return dict(enabled=True,items=catalog()['items'])
+    if path=='shop' and not post: return dict(enabled=True,items=sorted(catalog()['items'],key=lambda x:(x['price'],x['id'])))
     if path=='shop/buy' and post:
         it=find_item(body.get('itemId'))
         if not it: raise Problem('Предмет не найден')
@@ -325,27 +338,47 @@ def dispatch(path, body):
     if path=='upgrade' and post:
         options=targets(body); target=next((x for x in options['targets'] if x['id']==integer(body.get('targetId'))),None)
         if not target: raise Problem('Недопустимая цель')
-        rows=selected(body); roll=RNG.random()*100; won=roll<target['chance']; consume(rows,'upgraded')
+        rows=selected(body)
+        rig=take_next_result('upgrade')
+        if rig and rig.get('item'):
+            target=dict(rig['item'],chance=target['chance'])
+        chance=target['chance']
+        roll=RNG.random()*100
+        if rig:
+            roll=chance/2 if rig['mode']!='lose' else chance+(100-chance)/2
+        won=roll<chance
+        consume(rows,'upgraded')
         c.execute('UPDATE users SET upgrades=upgrades+1 WHERE id=?',(g.uid,))
         return dict(won=won,chance=target['chance'],roll=roll,target=target,inventoryIds=[add_item(target,'upgrade')] if won else [])
     if path in ('mystery/info','mystery') and post:
         row=selected(body)[0]; value=row['item']['price']; pool=[x for x in catalog()['items'] if value/3<=x['price']<=value*3]
         if path.endswith('info'): return dict(ok=bool(pool),min=value/3,max=value*3,items=pool,reason='Нет подходящих предметов')
         if not pool: raise Problem('Нет подходящих предметов')
-        it=RNG.choice(pool); consume([row],'mystery')
-        return dict(item=it,inventoryId=add_item(it,'mystery'),shuffle=[x['image'] for x in pool],balance=user()['balance'])
+        rig=take_next_result('mystery')
+        it=rig['item'] if rig else RNG.choice(pool)
+        consume([row],'mystery')
+        return dict(item=it,inventoryId=add_item(it,'mystery'),shuffle=[x['image'] for x in pool]+[it['image']],balance=user()['balance'])
     if path=='dice/my' and not post:
         return [json.loads(r[0]) for r in c.execute("SELECT payload FROM history WHERE user_id=? AND kind='dice' ORDER BY id DESC LIMIT 20",(g.uid,))]
     if path=='dice' and post:
         rows=selected(body); color=integer(body.get('color'),0,5); value=sum(i['item']['price'] for i in rows)
         if len(rows)>5 or value>100000: raise Problem('Ставка: до 5 предметов и до 100000 BG')
-        dice=[RNG.randrange(6) for _ in range(4)]; hits=dice.count(color); mult={0:0,1:0,2:2,3:5,4:20}[hits]
+        rig=take_next_result('dice')
+        dice=[RNG.randrange(6) for _ in range(4)]
+        if rig:
+            hits=rig['hits']
+            dice=[color]*hits+[RNG.choice([n for n in range(6) if n!=color]) for _ in range(4-hits)]
+            RNG.shuffle(dice)
+        hits=dice.count(color); mult={0:0,1:0,2:2,3:5,4:20}[hits]
         won=[]
+        winnings=0
         if not mult: consume(rows,'dice')
         else:
             for row in rows:
-                won.extend(add_item(row['item'],'dice') for _ in range(mult-1))
-        return dict(dice=dice,color=color,hits=hits,mult=mult,rainbow=False,wonIds=won,net=value*(mult-1))
+                prize=rig['item'] if rig and rig.get('item') else row['item']
+                won.extend(add_item(prize,'dice') for _ in range(mult-1))
+                winnings+=prize['price']*(mult-1)
+        return dict(dice=dice,color=color,hits=hits,mult=mult,rainbow=False,wonIds=won,net=winnings if mult else -value)
     if path=='home': return home()
     if path=='giveaways' and not post: return dict(now=iso(),active=[],finished=[])
     if path=='streak/checkin' and post: return dict(enabled=False,count=0,pending=[],fresh=False)
@@ -362,7 +395,28 @@ def dispatch(path, body):
     if path=='admin/state' and not post:
         return dict(me=me(),users=[dict(r) for r in c.execute('SELECT * FROM users ORDER BY rowid DESC LIMIT 500')],
                     catalog=catalog(),promos=[dict(r) for r in c.execute('SELECT * FROM promos')],
+                    nextResults={r['game']:json.loads(r['value']) for r in c.execute('SELECT game,value FROM next_results WHERE user_id=?',(g.uid,))},
                     history=[dict(r) for r in c.execute('SELECT id,user_id,kind,created FROM history ORDER BY id DESC LIMIT 50')])
+    if path in ('admin/next-result','admin/next-result/cancel') and post:
+        game=body.get('game')
+        if game not in ('case','upgrade','mystery','dice'):
+            raise Problem('Выбери игру')
+        if path.endswith('/cancel'):
+            c.execute('DELETE FROM next_results WHERE user_id=? AND game=?',(g.uid,game))
+            return dict(ok=True)
+        mode=body.get('mode','item')
+        if mode not in ('item','win','lose') or (game in ('case','mystery') and mode!='item'):
+            raise Problem('Для кейса и мистери выбери конкретный предмет')
+        item=None
+        if mode=='item':
+            item=find_item(body.get('itemId'))
+            if not item:
+                raise Problem('Предмет не найден')
+        value=dict(mode=mode,item=item)
+        if game=='dice':
+            value['hits']=0 if mode=='lose' else integer(body.get('hits',2),2,4)
+        c.execute('INSERT OR REPLACE INTO next_results VALUES (?,?,?)',(g.uid,game,json.dumps(value)))
+        return dict(ok=True)
     if path=='admin/balance' and post:
         uid=str(body.get('userId',g.uid)); amount=number(body.get('balance'))
         if not c.execute('UPDATE users SET balance=? WHERE id=?',(amount,uid)).rowcount: raise Problem('Игрок не найден')
