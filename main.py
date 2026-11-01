@@ -359,8 +359,10 @@ def targets(body):
         raise Problem('Можно поставить до 5 предметов')
     value=sum(i['item']['price'] for i in rows)
     input_ids={i['item']['id'] for i in rows}
+    input_prices={round(i['item']['price'],2) for i in rows}
     options=[dict(x,chance=round(value/x['price']*90,2)) for x in catalog()['items']
-             if x['id'] not in input_ids and 1<=value/x['price']*90<=90]
+             if x['id'] not in input_ids and round(x['price'],2) not in input_prices
+             and 1<=value/x['price']*90<=90]
     options.sort(key=lambda x: (x['price'], x['id']))
     presets=[]
     for n in [1.25,2,3,5,10]:
