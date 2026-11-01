@@ -87,12 +87,23 @@ def init_db():
         CREATE TABLE IF NOT EXISTS cooldown(user_id TEXT NOT NULL, case_id INTEGER NOT NULL, until REAL NOT NULL,
           PRIMARY KEY(user_id,case_id));
         CREATE TABLE IF NOT EXISTS history(id INTEGER PRIMARY KEY, user_id TEXT, kind TEXT, payload TEXT, created REAL);
+        CREATE TABLE IF NOT EXISTS live_drops(inventory_id INTEGER PRIMARY KEY REFERENCES inventory(id),
+          item TEXT NOT NULL, source TEXT NOT NULL, price REAL NOT NULL, created REAL NOT NULL);
+        CREATE INDEX IF NOT EXISTS live_drops_created ON live_drops(created DESC, inventory_id DESC);
         CREATE TABLE IF NOT EXISTS promos(code TEXT PRIMARY KEY, reward REAL NOT NULL, uses INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS claims(user_id TEXT, code TEXT, PRIMARY KEY(user_id,code));
         ''')
         if not c.execute("SELECT 1 FROM settings WHERE key='catalog'").fetchone():
             # Do not invent the original site's catalogue. Import its exported JSON instead.
             c.execute('INSERT INTO settings VALUES (?,?)', ('catalog', json.dumps(dict(items=[],cases=[]))))
+        # Preserve previous wins in the feed when upgrading an existing deployment.
+        previous = c.execute('''SELECT i.* FROM inventory i
+          WHERE i.test=0 AND i.source IN ('case','upgrade','mystery','dice')
+          AND NOT EXISTS(SELECT 1 FROM live_drops d WHERE d.inventory_id=i.id)''').fetchall()
+        for row in previous:
+            item = json.loads(row['item'])
+            c.execute('INSERT INTO live_drops VALUES (?,?,?,?,?)',
+                      (row['id'],row['item'],json.dumps(dict(kind=row['source'])),item['price'],row['created']))
         c.commit()
 
 
@@ -178,8 +189,29 @@ def inventory(owned=False):
 
 
 def add_item(item, source, test=False, uid=None):
-    return db().execute('INSERT INTO inventory(user_id,item,test,source,created) VALUES (?,?,?,?,?)',
-                        (uid or g.uid,json.dumps(item),int(test),source,time.time())).lastrowid
+    details = source if isinstance(source, dict) else dict(kind=source)
+    kind = details['kind']
+    created = time.time()
+    iid = db().execute('INSERT INTO inventory(user_id,item,test,source,created) VALUES (?,?,?,?,?)',
+                       (uid or g.uid,json.dumps(item),int(test),kind,created)).lastrowid
+    if not test and kind in ('case','upgrade','mystery','dice'):
+        db().execute('INSERT INTO live_drops VALUES (?,?,?,?,?)',
+                     (iid,json.dumps(item),json.dumps(details),item['price'],created))
+    return iid
+
+
+def home():
+    def drop(row):
+        if row is None:
+            return None
+        return dict(json.loads(row['item']),id=row['inventory_id'],
+                    source=json.loads(row['source']),createdAt=iso(row['created']))
+    # Calendar day in Moscow, matching the user-facing timezone.
+    start_of_day = math.floor((time.time()+10800)/86400)*86400-10800
+    recent = db().execute('SELECT * FROM live_drops ORDER BY created DESC,inventory_id DESC LIMIT 30').fetchall()
+    top = db().execute('SELECT * FROM live_drops WHERE created>=? ORDER BY price DESC,created DESC LIMIT 1',
+                       (start_of_day,)).fetchone()
+    return dict(top=drop(top),drops=[drop(row) for row in recent],bonus=None)
 
 
 def selected(body, allow_test=False):
@@ -216,7 +248,7 @@ def case(i):
 def config():
     return dict(build='',theme='default',caseAnim='classic',sandbox=True,depositEnabled=False,withdrawEnabled=False,
                 starsRate=1,starsMin=1,starsMax=10000,refBonusPercent=0,withdrawMin=1,withdrawWindow='отключён',
-                upgrade=dict(maxItems=5,minChance=1,maxChance=90,presets=[dict(label=f'×{n}',mult=n) for n in [2,3,5,10]]),
+                upgrade=dict(maxItems=5,minChance=1,maxChance=90,presets=[dict(label=f'×{n}',mult=n) for n in [1.25,2,3,5,10]]),
                 mystery=dict(enabled=True,mult=3,minInput=1,maxInput=1e9,floor=1,cap=1e9),
                 dice=dict(enabled=True,min=1,max=100000,maxItems=5,colors=[dict(name=n,hex=h) for n,h in
                     zip(['Красный','Оранжевый','Жёлтый','Зелёный','Синий','Фиолетовый'],
@@ -231,7 +263,7 @@ def targets(body):
     value=sum(i['item']['price'] for i in rows)
     options=[dict(x,chance=round(value/x['price']*90,2)) for x in catalog()['items'] if 1<=value/x['price']*90<=90]
     presets=[]
-    for n in [2,3,5,10]:
+    for n in [1.25,2,3,5,10]:
         target=min(options,key=lambda x:abs(x['price']-value*n)) if options else None
         presets.append(dict(label=f'×{n}',target=target,chance=target['chance'] if target else 0))
     return dict(inputValue=value,targets=options,presets=presets)
@@ -271,7 +303,8 @@ def dispatch(path, body):
         drops=[]
         for _ in range(n):
             item=dict(RNG.choices(cs['items'],weights=[x['weight'] for x in cs['items']])[0]); item.pop('weight',None)
-            iid=add_item(item,'case',test); drops.append(dict(item=item,inventoryId=iid))
+            iid=add_item(item,dict(kind='case',caseId=cs['id'],caseName=cs['name'],caseImage=cs['image']),test)
+            drops.append(dict(item=item,inventoryId=iid))
         return dict(drops=drops,balance=user()['balance'],testBalance=user()['testBalance'],test=test)
     if post and path in ('inventory/sell','inventory/sell-all','test/sell'):
         test=path=='test/sell'
@@ -313,7 +346,7 @@ def dispatch(path, body):
             for row in rows:
                 won.extend(add_item(row['item'],'dice') for _ in range(mult-1))
         return dict(dice=dice,color=color,hits=hits,mult=mult,rainbow=False,wonIds=won,net=value*(mult-1))
-    if path=='home': return dict(top=None,drops=[],bonus=None)
+    if path=='home': return home()
     if path=='giveaways' and not post: return dict(now=iso(),active=[],finished=[])
     if path=='streak/checkin' and post: return dict(enabled=False,count=0,pending=[],fresh=False)
     if path=='referrals' and not post:
