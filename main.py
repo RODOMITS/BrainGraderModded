@@ -382,6 +382,9 @@ def dispatch(path, body):
     c=db()
     parts=path.split('/')
     post=request.method=='POST'
+    if post and path in ('admin/balance','admin/grant','admin/giveaway-progress'):
+        if 'userId' in body and str(body['userId'])!=g.uid:
+            raise Problem('Это действие доступно только для своего аккаунта', 'forbidden',403)
     # All payment and withdrawal mutations are rejected, including unknown nested routes.
     if path.startswith('deposit') or (path.startswith('withdraw') and post):
         raise Problem('Пополнение и вывод отключены. Баланс можно изменить в общей админке.', 'payments_disabled',403)
@@ -511,11 +514,11 @@ def dispatch(path, body):
         c.execute('UPDATE users SET balance=balance+? WHERE id=?',(r['reward'],g.uid))
         return dict(type='coins',kind='coins',reward=r['reward'],balance=user()['balance'])
     if path=='admin/state' and not post:
-        return dict(me=me(),users=[dict(r) for r in c.execute('SELECT * FROM users ORDER BY rowid DESC LIMIT 500')],
+        return dict(me=me(),
                     catalog=catalog(),promos=[dict(r) for r in c.execute('SELECT * FROM promos')],
                     nextResults={r['game']:json.loads(r['value']) for r in c.execute('SELECT game,value FROM next_results WHERE user_id=?',(g.uid,))
                                  if not json.loads(r['value']).get('item') or visible_item(json.loads(r['value'])['item'])},
-                    history=[dict(r) for r in c.execute('SELECT id,user_id,kind,created FROM history ORDER BY id DESC LIMIT 50')])
+                    history=[dict(r) for r in c.execute('SELECT id,user_id,kind,created FROM history WHERE user_id=? ORDER BY id DESC LIMIT 50',(g.uid,))])
     if path in ('admin/next-result','admin/next-result/cancel') and post:
         game=body.get('game')
         if game not in ('case','upgrade','mystery','dice'):
@@ -539,17 +542,17 @@ def dispatch(path, body):
         c.execute('INSERT OR REPLACE INTO next_results VALUES (?,?,?)',(g.uid,game,json.dumps(value)))
         return dict(ok=True)
     if path=='admin/giveaway-progress' and post:
-        gid=integer(body.get('giveawayId',1)); uid=str(body.get('userId',g.uid)); amount=number(body.get('amount'))
+        gid=integer(body.get('giveawayId',1)); uid=g.uid; amount=number(body.get('amount'))
         if not c.execute('SELECT 1 FROM giveaways WHERE id=? AND finished=0',(gid,)).fetchone(): raise Problem('Активный розыгрыш не найден')
         if not c.execute('SELECT 1 FROM users WHERE id=?',(uid,)).fetchone(): raise Problem('Игрок не найден')
         c.execute('INSERT OR REPLACE INTO giveaway_progress VALUES (?,?,?)',(gid,uid,amount))
         return dict(ok=True)
     if path=='admin/balance' and post:
-        uid=str(body.get('userId',g.uid)); amount=number(body.get('balance'))
+        uid=g.uid; amount=number(body.get('balance'))
         if not c.execute('UPDATE users SET balance=? WHERE id=?',(amount,uid)).rowcount: raise Problem('Игрок не найден')
         return dict(ok=True,balance=amount)
     if path=='admin/grant' and post:
-        it=find_item(body.get('itemId')); uid=str(body.get('userId',g.uid)); qty=integer(body.get('qty',1),1,100)
+        it=find_item(body.get('itemId')); uid=g.uid; qty=integer(body.get('qty',1),1,100)
         if not it or not c.execute('SELECT 1 FROM users WHERE id=?',(uid,)).fetchone(): raise Problem('Игрок или предмет не найден')
         return dict(ok=True,ids=[add_item(it,'admin',uid=uid) for _ in range(qty)])
     if path=='admin/catalog' and post:
