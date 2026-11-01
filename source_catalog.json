@@ -1,0 +1,2882 @@
+{
+  "items": [
+    {
+      "id": 62,
+      "name": "Dragon Cannelloni",
+      "price": 973,
+      "rarity": "epic",
+      "image": "/img/brainrots/dragon-cannelloni.webp"
+    },
+    {
+      "id": 3273,
+      "name": "Gym Bros",
+      "price": 90,
+      "rarity": "rare",
+      "image": "/img/brainrots/gym-bros.webp"
+    },
+    {
+      "id": 117,
+      "name": "W or L",
+      "price": 74,
+      "rarity": "rare",
+      "image": "/img/brainrots/w-or-l.webp"
+    },
+    {
+      "id": 125,
+      "name": "Las Sis",
+      "price": 50,
+      "rarity": "rare",
+      "image": "/img/brainrots/las-sis.webp"
+    },
+    {
+      "id": 134,
+      "name": "Garama and Madundung",
+      "price": 45,
+      "rarity": "common",
+      "image": "/img/brainrots/garama-and-madundung.webp"
+    },
+    {
+      "id": 144,
+      "name": "Lavadorito Spinito",
+      "price": 31,
+      "rarity": "common",
+      "image": "/img/brainrots/lavadorito-spinito.webp"
+    },
+    {
+      "id": 151,
+      "name": "Esok Sekolah",
+      "price": 16,
+      "rarity": "common",
+      "image": "/img/brainrots/esok-sekolah.webp"
+    },
+    {
+      "id": 155,
+      "name": "Los 67",
+      "price": 12,
+      "rarity": "common",
+      "image": "/img/brainrots/los-67.webp"
+    },
+    {
+      "id": 103,
+      "name": "Los Cupids",
+      "price": 120,
+      "rarity": "rare",
+      "image": "/img/brainrots/los-cupids.webp"
+    },
+    {
+      "id": 114,
+      "name": "John Doe",
+      "price": 80,
+      "rarity": "rare",
+      "image": "/img/brainrots/john-doe.webp"
+    },
+    {
+      "id": 118,
+      "name": "Eviledon",
+      "price": 71,
+      "rarity": "rare",
+      "image": "/img/brainrots/eviledon.webp"
+    },
+    {
+      "id": 8145,
+      "name": "Easter Base",
+      "price": 21,
+      "rarity": "common",
+      "image": "/img/brainrots/easter-base.webp"
+    },
+    {
+      "id": 10130,
+      "name": "Pot of Gold Base",
+      "price": 16,
+      "rarity": "common",
+      "image": "/img/brainrots/pot-of-gold-base.webp"
+    },
+    {
+      "id": 10134,
+      "name": "Valentine's Base",
+      "price": 16,
+      "rarity": "common",
+      "image": "/img/brainrots/valentines-base.webp"
+    },
+    {
+      "id": 8139,
+      "name": "Lucky Base",
+      "price": 15,
+      "rarity": "common",
+      "image": "/img/brainrots/lucky-base.webp"
+    },
+    {
+      "id": 10128,
+      "name": "Bunny Basket Base",
+      "price": 13,
+      "rarity": "common",
+      "image": "/img/brainrots/bunny-basket-base.webp"
+    },
+    {
+      "id": 10132,
+      "name": "Halloween Base",
+      "price": 12,
+      "rarity": "common",
+      "image": "/img/brainrots/halloween-base.webp"
+    },
+    {
+      "id": 10131,
+      "name": "Christmas Base",
+      "price": 10,
+      "rarity": "common",
+      "image": "/img/brainrots/christmas-base.webp"
+    },
+    {
+      "id": 88,
+      "name": "Dug dug dug",
+      "price": 300,
+      "rarity": "rare",
+      "image": "/img/brainrots/dug-dug-dug.webp"
+    },
+    {
+      "id": 3260,
+      "name": "La Ginger Sekolah",
+      "price": 30,
+      "rarity": "common",
+      "image": "/img/brainrots/la-ginger-sekolah.webp"
+    },
+    {
+      "id": 140,
+      "name": "Mieteteira Bicicleteira",
+      "price": 28,
+      "rarity": "common",
+      "image": "/img/brainrots/mieteteira-bicicleteira.webp"
+    },
+    {
+      "id": 142,
+      "name": "Los Puggies",
+      "price": 27,
+      "rarity": "common",
+      "image": "/img/brainrots/los-puggies.webp"
+    },
+    {
+      "id": 145,
+      "name": "Ketupat Kepat",
+      "price": 25,
+      "rarity": "common",
+      "image": "/img/brainrots/ketupat-kepat.webp"
+    },
+    {
+      "id": 147,
+      "name": "Cyber Slap",
+      "price": 23,
+      "rarity": "common",
+      "image": "/img/brainrots/cyber-slap.webp"
+    },
+    {
+      "id": 148,
+      "name": "Los Mobilis",
+      "price": 22,
+      "rarity": "common",
+      "image": "/img/brainrots/los-mobilis.webp"
+    },
+    {
+      "id": 5467,
+      "name": "Tic Tac Sahur",
+      "price": 20,
+      "rarity": "common",
+      "image": "/img/brainrots/time-moving-slow.webp"
+    },
+    {
+      "id": 153,
+      "name": "Nuclearo Dinossauro",
+      "price": 15,
+      "rarity": "common",
+      "image": "/img/brainrots/nuclearo-dinossauro.webp"
+    },
+    {
+      "id": 154,
+      "name": "Money Puggy",
+      "price": 14,
+      "rarity": "common",
+      "image": "/img/brainrots/money-puggy.webp"
+    },
+    {
+      "id": 3272,
+      "name": "Hydra Serpent",
+      "price": 530,
+      "rarity": "epic",
+      "image": "/img/brainrots/hydra-serpent.webp"
+    },
+    {
+      "id": 85,
+      "name": "Cangurato Gelato",
+      "price": 242,
+      "rarity": "rare",
+      "image": "/img/brainrots/cangurato-gelato.webp"
+    },
+    {
+      "id": 102,
+      "name": "Los Hotspotsitos",
+      "price": 124,
+      "rarity": "rare",
+      "image": "/img/brainrots/los-hotspotsitos.webp"
+    },
+    {
+      "id": 115,
+      "name": "Pizza and Ranch",
+      "price": 80,
+      "rarity": "rare",
+      "image": "/img/brainrots/pizza-and-ranch.webp"
+    },
+    {
+      "id": 120,
+      "name": "Noodle Noodle Poodle",
+      "price": 54,
+      "rarity": "rare",
+      "image": "/img/brainrots/noodle-noodle-poodle.webp"
+    },
+    {
+      "id": 104,
+      "name": "Gold Gold Gold",
+      "price": 50,
+      "rarity": "rare",
+      "image": "/img/brainrots/gold-gold-gold.webp"
+    },
+    {
+      "id": 128,
+      "name": "Rainbow Slap",
+      "price": 50,
+      "rarity": "rare",
+      "image": "/img/brainrots/rainbow-slap.webp"
+    },
+    {
+      "id": 99,
+      "name": "Los Spaghettis",
+      "price": 50,
+      "rarity": "rare",
+      "image": "/img/brainrots/los-spaghettis.webp"
+    },
+    {
+      "id": 131,
+      "name": "Cash or Card",
+      "price": 49,
+      "rarity": "common",
+      "image": "/img/brainrots/cash-or-card.webp"
+    },
+    {
+      "id": 137,
+      "name": "Camera Ramen",
+      "price": 39,
+      "rarity": "common",
+      "image": "/img/brainrots/camera-ramen.webp"
+    },
+    {
+      "id": 3284,
+      "name": "Money Money Reindeer",
+      "price": 21,
+      "rarity": "common",
+      "image": "/img/brainrots/money-money-reindeer.webp"
+    },
+    {
+      "id": 3266,
+      "name": "La summer Grande",
+      "price": 20,
+      "rarity": "common",
+      "image": "/img/brainrots/la-summer-grande.webp"
+    },
+    {
+      "id": 61,
+      "name": "Pancake and Syrup",
+      "price": 1009,
+      "rarity": "epic",
+      "image": "/img/brainrots/pancake-and-syrup.webp"
+    },
+    {
+      "id": 68,
+      "name": "Rico Dinero",
+      "price": 370,
+      "rarity": "rare",
+      "image": "/img/brainrots/rico-dinero.webp"
+    },
+    {
+      "id": 86,
+      "name": "Fortunu and Cashuru",
+      "price": 149,
+      "rarity": "rare",
+      "image": "/img/brainrots/fortunu-and-cashuru.webp"
+    },
+    {
+      "id": 111,
+      "name": "Popcuru and Fizzuru",
+      "price": 87,
+      "rarity": "rare",
+      "image": "/img/brainrots/popcuru-and-fizzuru.webp"
+    },
+    {
+      "id": 81,
+      "name": "Tralaledon",
+      "price": 47,
+      "rarity": "rare",
+      "image": "/img/brainrots/tralaledon.webp"
+    },
+    {
+      "id": 106,
+      "name": "Los Primos",
+      "price": 38,
+      "rarity": "rare",
+      "image": "/img/brainrots/los-primos.webp"
+    },
+    {
+      "id": 51,
+      "name": "La Supreme Combinasion",
+      "price": 2304,
+      "rarity": "epic",
+      "image": "/img/brainrots/la-supreme-combinasion.webp"
+    },
+    {
+      "id": 70,
+      "name": "Los Secret Combinasionas",
+      "price": 419,
+      "rarity": "rare",
+      "image": "/img/brainrots/los-secret-combinasionas.webp"
+    },
+    {
+      "id": 77,
+      "name": "Los Sekolahs",
+      "price": 325,
+      "rarity": "rare",
+      "image": "/img/brainrots/los-sekolahs.webp"
+    },
+    {
+      "id": 78,
+      "name": "Duggy Bros",
+      "price": 323,
+      "rarity": "rare",
+      "image": "/img/brainrots/duggy-bros.webp"
+    },
+    {
+      "id": 76,
+      "name": "Guest 666",
+      "price": 230,
+      "rarity": "rare",
+      "image": "/img/brainrots/guest-666.webp"
+    },
+    {
+      "id": 92,
+      "name": "Reinito Sleighito",
+      "price": 176,
+      "rarity": "rare",
+      "image": "/img/brainrots/reinito-sleighito.webp"
+    },
+    {
+      "id": 97,
+      "name": "Sammyni Fattini",
+      "price": 140,
+      "rarity": "rare",
+      "image": "/img/brainrots/sammyni-fattini.webp"
+    },
+    {
+      "id": 109,
+      "name": "La Secret Combinasion",
+      "price": 57,
+      "rarity": "rare",
+      "image": "/img/brainrots/la-secret-combinasion.webp"
+    },
+    {
+      "id": 135,
+      "name": "Ventoliero Pavonero",
+      "price": 41,
+      "rarity": "common",
+      "image": "/img/brainrots/ventoliero-pavonero.webp"
+    },
+    {
+      "id": 136,
+      "name": "Yes My Examine",
+      "price": 41,
+      "rarity": "common",
+      "image": "/img/brainrots/yes-my-examine.webp"
+    },
+    {
+      "id": 3275,
+      "name": "Noo my resume",
+      "price": 40,
+      "rarity": "common",
+      "image": "/img/brainrots/noo-my-resume.webp"
+    },
+    {
+      "id": 56,
+      "name": "Ketupat Bros",
+      "price": 700,
+      "rarity": "epic",
+      "image": "/img/brainrots/ketupat-bros.webp"
+    },
+    {
+      "id": 3252,
+      "name": "La Breakfast Combinasion",
+      "price": 300,
+      "rarity": "rare",
+      "image": "/img/brainrots/la-breakfast-combinasion.webp"
+    },
+    {
+      "id": 82,
+      "name": "Los Tacoritas",
+      "price": 276,
+      "rarity": "rare",
+      "image": "/img/brainrots/los-tacoritas.webp"
+    },
+    {
+      "id": 83,
+      "name": "Quackini Snackini",
+      "price": 258,
+      "rarity": "rare",
+      "image": "/img/brainrots/quackini-snackini.webp"
+    },
+    {
+      "id": 73,
+      "name": "S'more Serat",
+      "price": 200,
+      "rarity": "rare",
+      "image": "/img/brainrots/smore-serat.webp"
+    },
+    {
+      "id": 87,
+      "name": "Cooki and Milki",
+      "price": 130,
+      "rarity": "rare",
+      "image": "/img/brainrots/cooki-and-milki.webp"
+    },
+    {
+      "id": 98,
+      "name": "Pop Pop Petalini",
+      "price": 129,
+      "rarity": "rare",
+      "image": "/img/brainrots/pop-pop-petalini.webp"
+    },
+    {
+      "id": 101,
+      "name": "La Taco Combinasion",
+      "price": 125,
+      "rarity": "rare",
+      "image": "/img/brainrots/la-taco-combinasion.webp"
+    },
+    {
+      "id": 3261,
+      "name": "Los Chillis",
+      "price": 120,
+      "rarity": "rare",
+      "image": "/img/brainrots/los-chillis.webp"
+    },
+    {
+      "id": 105,
+      "name": "La Food Combinasion",
+      "price": 103,
+      "rarity": "rare",
+      "image": "/img/brainrots/la-food-combinasion.webp"
+    },
+    {
+      "id": 112,
+      "name": "Burguro And Fryuro",
+      "price": 86,
+      "rarity": "rare",
+      "image": "/img/brainrots/burguro-and-fryuro.webp"
+    },
+    {
+      "id": 84,
+      "name": "Cloverat Clapat",
+      "price": 170,
+      "rarity": "rare",
+      "image": "/img/brainrots/cloverat-clapat.webp"
+    },
+    {
+      "id": 96,
+      "name": "Swaggy Bros",
+      "price": 142,
+      "rarity": "rare",
+      "image": "/img/brainrots/swaggy-bros.webp"
+    },
+    {
+      "id": 108,
+      "name": "Celestial Pegasus",
+      "price": 93,
+      "rarity": "rare",
+      "image": "/img/brainrots/celestial-pegasus.webp"
+    },
+    {
+      "id": 116,
+      "name": "Los Tictacs",
+      "price": 78,
+      "rarity": "rare",
+      "image": "/img/brainrots/los-tictacs.webp"
+    },
+    {
+      "id": 45,
+      "name": "Arcadragon",
+      "price": 10860,
+      "rarity": "legendary",
+      "image": "/img/brainrots/arcadragon.webp"
+    },
+    {
+      "id": 3248,
+      "name": "Love Love Bear",
+      "price": 6300,
+      "rarity": "legendary",
+      "image": "/img/brainrots/love-love-bear.webp"
+    },
+    {
+      "id": 3257,
+      "name": "Sammyni Cakini",
+      "price": 787,
+      "rarity": "epic",
+      "image": "/img/brainrots/sammyni-cakini.webp"
+    },
+    {
+      "id": 63,
+      "name": "Capitano Americano",
+      "price": 720,
+      "rarity": "epic",
+      "image": "/img/brainrots/capitano-americano.webp"
+    },
+    {
+      "id": 57,
+      "name": "Venuspino",
+      "price": 700,
+      "rarity": "epic",
+      "image": "/img/brainrots/venuspino.webp"
+    },
+    {
+      "id": 67,
+      "name": "Rosey and Teddy",
+      "price": 400,
+      "rarity": "epic",
+      "image": "/img/brainrots/rosey-and-teddy.webp"
+    },
+    {
+      "id": 64,
+      "name": "Sammyni Trackini",
+      "price": 378,
+      "rarity": "epic",
+      "image": "/img/brainrots/sammyni-trackini.webp"
+    },
+    {
+      "id": 94,
+      "name": "Cerberus",
+      "price": 155,
+      "rarity": "rare",
+      "image": "/img/brainrots/cerberus.webp"
+    },
+    {
+      "id": 89,
+      "name": "Spooky and Pumpky",
+      "price": 140,
+      "rarity": "rare",
+      "image": "/img/brainrots/spooky-and-pumpky.webp"
+    },
+    {
+      "id": 3278,
+      "name": "Lovin Rose",
+      "price": 140,
+      "rarity": "rare",
+      "image": "/img/brainrots/lovin-rose.webp"
+    },
+    {
+      "id": 44,
+      "name": "Los Dragons",
+      "price": 5000,
+      "rarity": "legendary",
+      "image": "/img/brainrots/los-dragons.webp"
+    },
+    {
+      "id": 55,
+      "name": "Moby Bros",
+      "price": 1604,
+      "rarity": "epic",
+      "image": "/img/brainrots/moby-bros.webp"
+    },
+    {
+      "id": 91,
+      "name": "Los Amigos",
+      "price": 191,
+      "rarity": "rare",
+      "image": "/img/brainrots/los-amigos.webp"
+    },
+    {
+      "id": 49,
+      "name": "Kalika Bros",
+      "price": 3470,
+      "rarity": "epic",
+      "image": "/img/brainrots/kalika-bros.webp"
+    },
+    {
+      "id": 52,
+      "name": "Kraken",
+      "price": 2030,
+      "rarity": "epic",
+      "image": "/img/brainrots/kraken.webp"
+    },
+    {
+      "id": 54,
+      "name": "Hydra Bunny",
+      "price": 1722,
+      "rarity": "epic",
+      "image": "/img/brainrots/hydra-bunny.webp"
+    },
+    {
+      "id": 58,
+      "name": "Tirilikalika Tirilikalako",
+      "price": 1500,
+      "rarity": "epic",
+      "image": "/img/brainrots/tirilikalika-tirilikalako.webp"
+    },
+    {
+      "id": 3251,
+      "name": "Jelly Moby",
+      "price": 1160,
+      "rarity": "epic",
+      "image": "/img/brainrots/jelly-moby.webp"
+    },
+    {
+      "id": 93,
+      "name": "Globa Steppa",
+      "price": 164,
+      "rarity": "rare",
+      "image": "/img/brainrots/globa-steppa.webp"
+    },
+    {
+      "id": 80,
+      "name": "Hopilikalika Hopalikalako",
+      "price": 150,
+      "rarity": "rare",
+      "image": "/img/brainrots/hopilikalika-hopalikalako.webp"
+    },
+    {
+      "id": 3277,
+      "name": "Noo my Examen",
+      "price": 150,
+      "rarity": "rare",
+      "image": "/img/brainrots/noo-my-examen.webp"
+    },
+    {
+      "id": 3259,
+      "name": "Sammyni Spookyni",
+      "price": 320,
+      "rarity": "epic",
+      "image": "/img/brainrots/sammyni-spookyni.webp"
+    },
+    {
+      "id": 3247,
+      "name": "Dragon Gingerini",
+      "price": 4913,
+      "rarity": "legendary",
+      "image": "/img/brainrots/dragon-gingerini.webp"
+    },
+    {
+      "id": 48,
+      "name": "Dragon Aquanini",
+      "price": 3701,
+      "rarity": "epic",
+      "image": "/img/brainrots/dragon-aquanini.webp"
+    },
+    {
+      "id": 59,
+      "name": "Hydra Dragon Cannelloni",
+      "price": 1220,
+      "rarity": "epic",
+      "image": "/img/brainrots/hydra-dragon-cannelloni.webp"
+    },
+    {
+      "id": 75,
+      "name": "Los Admins",
+      "price": 370,
+      "rarity": "rare",
+      "image": "/img/brainrots/los-admins.webp"
+    },
+    {
+      "id": 72,
+      "name": "Los Hackers",
+      "price": 248,
+      "rarity": "rare",
+      "image": "/img/brainrots/los-hackers.webp"
+    },
+    {
+      "id": 69,
+      "name": "Yetimatic",
+      "price": 200,
+      "rarity": "rare",
+      "image": "/img/brainrots/yetimatic.webp"
+    },
+    {
+      "id": 90,
+      "name": "La Fuse Machine",
+      "price": 175,
+      "rarity": "rare",
+      "image": "/img/brainrots/la-fuse-machine.webp"
+    },
+    {
+      "id": 46,
+      "name": "Griffin",
+      "price": 6307,
+      "rarity": "legendary",
+      "image": "/img/brainrots/griffin.webp"
+    },
+    {
+      "id": 47,
+      "name": "Digi Narwhal",
+      "price": 2139,
+      "rarity": "epic",
+      "image": "/img/brainrots/digi-narwhal.webp"
+    },
+    {
+      "id": 60,
+      "name": "Grabatron",
+      "price": 820,
+      "rarity": "epic",
+      "image": "/img/brainrots/grabatron.webp"
+    },
+    {
+      "id": 53,
+      "name": "Bumbatron",
+      "price": 600,
+      "rarity": "epic",
+      "image": "/img/brainrots/bumbatron.webp"
+    },
+    {
+      "id": 3262,
+      "name": "Rubiko and Kubiko",
+      "price": 375,
+      "rarity": "epic",
+      "image": "/img/brainrots/rubiko-and-kubiko.webp"
+    },
+    {
+      "id": 74,
+      "name": "Examen Bros",
+      "price": 374,
+      "rarity": "rare",
+      "image": "/img/brainrots/examen-bros.webp"
+    },
+    {
+      "id": 3264,
+      "name": "Rubrikiko",
+      "price": 287,
+      "rarity": "epic",
+      "image": "/img/brainrots/rubrikiko.webp"
+    },
+    {
+      "id": 3269,
+      "name": "Caylusaurus",
+      "price": 230,
+      "rarity": "rare",
+      "image": "/img/brainrots/caylusaurus.webp"
+    },
+    {
+      "id": 50,
+      "name": "Ginger Gerat",
+      "price": 1965,
+      "rarity": "epic",
+      "image": "/img/brainrots/ginger-gerat.webp"
+    },
+    {
+      "id": 66,
+      "name": "La Casa Boo",
+      "price": 620,
+      "rarity": "epic",
+      "image": "/img/brainrots/la-casa-boo.webp"
+    },
+    {
+      "id": 71,
+      "name": "Foxini Lanternini",
+      "price": 405,
+      "rarity": "rare",
+      "image": "/img/brainrots/foxini-lanternini.webp"
+    },
+    {
+      "id": 3250,
+      "name": "Elefanto frigo",
+      "price": 12000,
+      "rarity": "legendary",
+      "image": "/img/brainrots/elefanto-frigo.webp"
+    },
+    {
+      "id": 3256,
+      "name": "Fishino Clownino",
+      "price": 2500,
+      "rarity": "epic",
+      "image": "/img/brainrots/fishino-clownino.webp"
+    },
+    {
+      "id": 43,
+      "name": "Orchidox",
+      "price": 14932,
+      "rarity": "legendary",
+      "image": "/img/brainrots/orchidox.webp"
+    },
+    {
+      "id": 3246,
+      "name": "Phoenix",
+      "price": 3500,
+      "rarity": "epic",
+      "image": "/img/brainrots/phoenix.webp"
+    },
+    {
+      "id": 41,
+      "name": "Strawberry Elephant",
+      "price": 42509,
+      "rarity": "og",
+      "image": "/img/brainrots/strawberry-elephant.webp"
+    },
+    {
+      "id": 3243,
+      "name": "Meowl",
+      "price": 16820,
+      "rarity": "og",
+      "image": "/img/brainrots/meowl.webp"
+    },
+    {
+      "id": 3244,
+      "name": "John Pork",
+      "price": 14530,
+      "rarity": "og",
+      "image": "/img/brainrots/john-pork.webp"
+    },
+    {
+      "id": 3245,
+      "name": "Skibidi Toilet",
+      "price": 13154,
+      "rarity": "og",
+      "image": "/img/brainrots/skibidi-toilet.webp"
+    },
+    {
+      "id": 3255,
+      "name": "Antonio",
+      "price": 5500,
+      "rarity": "legendary",
+      "image": "/img/brainrots/antonio.webp"
+    },
+    {
+      "id": 3271,
+      "name": "Pollaroidini",
+      "price": 40120,
+      "rarity": "legendary",
+      "image": "/img/brainrots/polaroidini.webp"
+    },
+    {
+      "id": 42,
+      "name": "Signore Carapace",
+      "price": 33024,
+      "rarity": "legendary",
+      "image": "/img/brainrots/signore-carapace.webp"
+    },
+    {
+      "id": 157,
+      "name": "La Grande Combinasion",
+      "price": 9,
+      "rarity": "common",
+      "image": "/img/brainrots/la-grande-combinasion.webp"
+    },
+    {
+      "id": 122,
+      "name": "Candy Slap",
+      "price": 10,
+      "rarity": "rare",
+      "image": "/img/brainrots/candy-slap.webp"
+    },
+    {
+      "id": 123,
+      "name": "Cursed Slap",
+      "price": 10,
+      "rarity": "rare",
+      "image": "/img/brainrots/cursed-slap.webp"
+    },
+    {
+      "id": 130,
+      "name": "Yin Yang Slap",
+      "price": 11,
+      "rarity": "rare",
+      "image": "/img/brainrots/yin-yang-slap.webp"
+    },
+    {
+      "id": 121,
+      "name": "Alien Slap",
+      "price": 12,
+      "rarity": "rare",
+      "image": "/img/brainrots/alien-slap.webp"
+    },
+    {
+      "id": 127,
+      "name": "Radioactive Slap",
+      "price": 12,
+      "rarity": "rare",
+      "image": "/img/brainrots/radioactive-slap.webp"
+    },
+    {
+      "id": 3267,
+      "name": "Spaghetti tualetti",
+      "price": 12,
+      "rarity": "common",
+      "image": "/img/brainrots/spaghetti-tualetti.webp"
+    },
+    {
+      "id": 124,
+      "name": "Divine Slap",
+      "price": 13,
+      "rarity": "rare",
+      "image": "/img/brainrots/divine-slap.webp"
+    },
+    {
+      "id": 3288,
+      "name": "Swag soda",
+      "price": 16,
+      "rarity": "common",
+      "image": "/img/brainrots/swag-soda.webp"
+    },
+    {
+      "id": 3286,
+      "name": "Los Bros",
+      "price": 17,
+      "rarity": "common",
+      "image": "/img/brainrots/los-bros.webp"
+    },
+    {
+      "id": 3270,
+      "name": "Steakini fattini",
+      "price": 25,
+      "rarity": "common",
+      "image": "/img/brainrots/steakini-fattini.webp"
+    },
+    {
+      "id": 141,
+      "name": "Orcaledon",
+      "price": 28,
+      "rarity": "common",
+      "image": "/img/brainrots/orcaledon.webp"
+    },
+    {
+      "id": 132,
+      "name": "Ketchuru and Musturu",
+      "price": 30,
+      "rarity": "common",
+      "image": "/img/brainrots/ketchuru-and-musturu.webp"
+    },
+    {
+      "id": 3287,
+      "name": "Los fruits",
+      "price": 32,
+      "rarity": "common",
+      "image": "/img/brainrots/los-fruits.webp"
+    },
+    {
+      "id": 3283,
+      "name": "Chilin Chili",
+      "price": 34,
+      "rarity": "common",
+      "image": "/img/brainrots/chilin-chili.webp"
+    },
+    {
+      "id": 107,
+      "name": "Scorpino Coasterino",
+      "price": 35,
+      "rarity": "rare",
+      "image": "/img/brainrots/scorpino-coasterino.webp"
+    },
+    {
+      "id": 3280,
+      "name": "Honey Honey Bear",
+      "price": 35,
+      "rarity": "common",
+      "image": "/img/brainrots/honey-honey-bear.webp"
+    },
+    {
+      "id": 3276,
+      "name": "abyssaloco",
+      "price": 38,
+      "rarity": "common",
+      "image": "/img/brainrots/abyssaloco.webp"
+    },
+    {
+      "id": 3281,
+      "name": "La Jolly Grande",
+      "price": 38,
+      "rarity": "common",
+      "image": "/img/brainrots/la-jolly-grande.webp"
+    },
+    {
+      "id": 138,
+      "name": "Mi Gatito",
+      "price": 39,
+      "rarity": "common",
+      "image": "/img/brainrots/mi-gatito.webp"
+    },
+    {
+      "id": 3282,
+      "name": "Tuff Toucan",
+      "price": 45,
+      "rarity": "common",
+      "image": "/img/brainrots/tuff-toucan.webp"
+    },
+    {
+      "id": 133,
+      "name": "Los Planitos",
+      "price": 46,
+      "rarity": "common",
+      "image": "/img/brainrots/los-planitos.webp"
+    },
+    {
+      "id": 3265,
+      "name": "Queen Bee",
+      "price": 75,
+      "rarity": "rare",
+      "image": "/img/brainrots/queen-bee.webp"
+    },
+    {
+      "id": 113,
+      "name": "Los Jolly Combinasionas",
+      "price": 86,
+      "rarity": "rare",
+      "image": "/img/brainrots/los-jolly-combinasionas.webp"
+    },
+    {
+      "id": 110,
+      "name": "Los Mariachis",
+      "price": 87,
+      "rarity": "rare",
+      "image": "/img/brainrots/los-mariachis.webp"
+    },
+    {
+      "id": 3263,
+      "name": "Festive 67",
+      "price": 90,
+      "rarity": "rare",
+      "image": "/img/brainrots/festive-67.webp"
+    },
+    {
+      "id": 3279,
+      "name": "Fragola La La La",
+      "price": 120,
+      "rarity": "rare",
+      "image": "/img/brainrots/fragola-la-la-la.webp"
+    },
+    {
+      "id": 3258,
+      "name": "Boppin Bunny",
+      "price": 123,
+      "rarity": "rare",
+      "image": "/img/brainrots/boppin-bunny.webp"
+    },
+    {
+      "id": 100,
+      "name": "Capitano Moby",
+      "price": 127,
+      "rarity": "rare",
+      "image": "/img/brainrots/capitano-moby.webp"
+    },
+    {
+      "id": 95,
+      "name": "La Craft Machine",
+      "price": 144,
+      "rarity": "rare",
+      "image": "/img/brainrots/la-craft-machine.webp"
+    },
+    {
+      "id": 79,
+      "name": "Fragrama and Chocrama",
+      "price": 149,
+      "rarity": "rare",
+      "image": "/img/brainrots/fragrama-and-chocrama.webp"
+    }
+  ],
+  "cases": [
+    {
+      "id": 29,
+      "name": "За подписку",
+      "price": 0,
+      "category": "free",
+      "freeKind": "daily",
+      "image": "/img/cases/free-sub.webp",
+      "items": [
+        {
+          "itemId": 62,
+          "weight": 1
+        },
+        {
+          "itemId": 3273,
+          "weight": 1
+        },
+        {
+          "itemId": 117,
+          "weight": 1
+        },
+        {
+          "itemId": 125,
+          "weight": 1
+        },
+        {
+          "itemId": 134,
+          "weight": 1
+        },
+        {
+          "itemId": 144,
+          "weight": 1
+        },
+        {
+          "itemId": 151,
+          "weight": 1
+        },
+        {
+          "itemId": 155,
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": 30,
+      "name": "За тег",
+      "price": 0,
+      "category": "free",
+      "freeKind": "daily",
+      "image": "/img/cases/free-tag.webp",
+      "items": [
+        {
+          "itemId": 62,
+          "weight": 1
+        },
+        {
+          "itemId": 103,
+          "weight": 1
+        },
+        {
+          "itemId": 114,
+          "weight": 1
+        },
+        {
+          "itemId": 118,
+          "weight": 1
+        },
+        {
+          "itemId": 125,
+          "weight": 1
+        },
+        {
+          "itemId": 134,
+          "weight": 1
+        },
+        {
+          "itemId": 144,
+          "weight": 1
+        },
+        {
+          "itemId": 155,
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": 43,
+      "name": "Базовый",
+      "price": 14,
+      "category": "start",
+      "freeKind": null,
+      "image": "/img/cases/bazovy.webp",
+      "items": [
+        {
+          "itemId": 8145,
+          "weight": 1
+        },
+        {
+          "itemId": 10130,
+          "weight": 1
+        },
+        {
+          "itemId": 10134,
+          "weight": 1
+        },
+        {
+          "itemId": 8139,
+          "weight": 1
+        },
+        {
+          "itemId": 10128,
+          "weight": 1
+        },
+        {
+          "itemId": 10132,
+          "weight": 1
+        },
+        {
+          "itemId": 10131,
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": 45,
+      "name": "Нубини",
+      "price": 23,
+      "category": "start",
+      "freeKind": null,
+      "image": "/img/cases/nubinni.webp",
+      "items": [
+        {
+          "itemId": 88,
+          "weight": 1
+        },
+        {
+          "itemId": 117,
+          "weight": 1
+        },
+        {
+          "itemId": 134,
+          "weight": 1
+        },
+        {
+          "itemId": 144,
+          "weight": 1
+        },
+        {
+          "itemId": 3260,
+          "weight": 1
+        },
+        {
+          "itemId": 140,
+          "weight": 1
+        },
+        {
+          "itemId": 142,
+          "weight": 1
+        },
+        {
+          "itemId": 145,
+          "weight": 1
+        },
+        {
+          "itemId": 147,
+          "weight": 1
+        },
+        {
+          "itemId": 148,
+          "weight": 1
+        },
+        {
+          "itemId": 5467,
+          "weight": 1
+        },
+        {
+          "itemId": 151,
+          "weight": 1
+        },
+        {
+          "itemId": 153,
+          "weight": 1
+        },
+        {
+          "itemId": 154,
+          "weight": 1
+        },
+        {
+          "itemId": 155,
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": 40,
+      "name": "Слепы",
+      "price": 30,
+      "category": "start",
+      "freeKind": null,
+      "image": "/img/cases/slepy.webp",
+      "items": [
+        {
+          "itemId": 3272,
+          "weight": 1
+        },
+        {
+          "itemId": 85,
+          "weight": 1
+        },
+        {
+          "itemId": 102,
+          "weight": 1
+        },
+        {
+          "itemId": 115,
+          "weight": 1
+        },
+        {
+          "itemId": 120,
+          "weight": 1
+        },
+        {
+          "itemId": 104,
+          "weight": 1
+        },
+        {
+          "itemId": 125,
+          "weight": 1
+        },
+        {
+          "itemId": 128,
+          "weight": 1
+        },
+        {
+          "itemId": 99,
+          "weight": 1
+        },
+        {
+          "itemId": 131,
+          "weight": 1
+        },
+        {
+          "itemId": 134,
+          "weight": 1
+        },
+        {
+          "itemId": 137,
+          "weight": 1
+        },
+        {
+          "itemId": 144,
+          "weight": 1
+        },
+        {
+          "itemId": 3260,
+          "weight": 1
+        },
+        {
+          "itemId": 142,
+          "weight": 1
+        },
+        {
+          "itemId": 145,
+          "weight": 1
+        },
+        {
+          "itemId": 147,
+          "weight": 1
+        },
+        {
+          "itemId": 148,
+          "weight": 1
+        },
+        {
+          "itemId": 3284,
+          "weight": 1
+        },
+        {
+          "itemId": 5467,
+          "weight": 1
+        },
+        {
+          "itemId": 3266,
+          "weight": 1
+        },
+        {
+          "itemId": 151,
+          "weight": 1
+        },
+        {
+          "itemId": 153,
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": 44,
+      "name": "Копейка",
+      "price": 50,
+      "category": "start",
+      "freeKind": null,
+      "image": "/img/cases/kopeyka.webp",
+      "items": [
+        {
+          "itemId": 61,
+          "weight": 1
+        },
+        {
+          "itemId": 68,
+          "weight": 1
+        },
+        {
+          "itemId": 88,
+          "weight": 1
+        },
+        {
+          "itemId": 86,
+          "weight": 1
+        },
+        {
+          "itemId": 102,
+          "weight": 1
+        },
+        {
+          "itemId": 111,
+          "weight": 1
+        },
+        {
+          "itemId": 117,
+          "weight": 1
+        },
+        {
+          "itemId": 104,
+          "weight": 1
+        },
+        {
+          "itemId": 99,
+          "weight": 1
+        },
+        {
+          "itemId": 131,
+          "weight": 1
+        },
+        {
+          "itemId": 81,
+          "weight": 1
+        },
+        {
+          "itemId": 106,
+          "weight": 1
+        },
+        {
+          "itemId": 3260,
+          "weight": 1
+        },
+        {
+          "itemId": 142,
+          "weight": 1
+        },
+        {
+          "itemId": 145,
+          "weight": 1
+        },
+        {
+          "itemId": 3284,
+          "weight": 1
+        },
+        {
+          "itemId": 5467,
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": 22,
+      "name": "Секретный",
+      "price": 60,
+      "category": "standard",
+      "freeKind": null,
+      "image": "/img/cases/sekretny.webp",
+      "items": [
+        {
+          "itemId": 51,
+          "weight": 1
+        },
+        {
+          "itemId": 70,
+          "weight": 1
+        },
+        {
+          "itemId": 77,
+          "weight": 1
+        },
+        {
+          "itemId": 78,
+          "weight": 1
+        },
+        {
+          "itemId": 76,
+          "weight": 1
+        },
+        {
+          "itemId": 92,
+          "weight": 1
+        },
+        {
+          "itemId": 97,
+          "weight": 1
+        },
+        {
+          "itemId": 103,
+          "weight": 1
+        },
+        {
+          "itemId": 3273,
+          "weight": 1
+        },
+        {
+          "itemId": 118,
+          "weight": 1
+        },
+        {
+          "itemId": 109,
+          "weight": 1
+        },
+        {
+          "itemId": 125,
+          "weight": 1
+        },
+        {
+          "itemId": 134,
+          "weight": 1
+        },
+        {
+          "itemId": 135,
+          "weight": 1
+        },
+        {
+          "itemId": 136,
+          "weight": 1
+        },
+        {
+          "itemId": 3275,
+          "weight": 1
+        },
+        {
+          "itemId": 106,
+          "weight": 1
+        },
+        {
+          "itemId": 3260,
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "name": "Обжорка",
+      "price": 70,
+      "category": "standard",
+      "freeKind": null,
+      "image": "/img/cases/obzhorka.webp",
+      "items": [
+        {
+          "itemId": 61,
+          "weight": 1
+        },
+        {
+          "itemId": 56,
+          "weight": 1
+        },
+        {
+          "itemId": 78,
+          "weight": 1
+        },
+        {
+          "itemId": 3252,
+          "weight": 1
+        },
+        {
+          "itemId": 82,
+          "weight": 1
+        },
+        {
+          "itemId": 83,
+          "weight": 1
+        },
+        {
+          "itemId": 85,
+          "weight": 1
+        },
+        {
+          "itemId": 73,
+          "weight": 1
+        },
+        {
+          "itemId": 97,
+          "weight": 1
+        },
+        {
+          "itemId": 87,
+          "weight": 1
+        },
+        {
+          "itemId": 98,
+          "weight": 1
+        },
+        {
+          "itemId": 101,
+          "weight": 1
+        },
+        {
+          "itemId": 3261,
+          "weight": 1
+        },
+        {
+          "itemId": 105,
+          "weight": 1
+        },
+        {
+          "itemId": 111,
+          "weight": 1
+        },
+        {
+          "itemId": 112,
+          "weight": 1
+        },
+        {
+          "itemId": 115,
+          "weight": 1
+        },
+        {
+          "itemId": 120,
+          "weight": 1
+        },
+        {
+          "itemId": 99,
+          "weight": 1
+        },
+        {
+          "itemId": 104,
+          "weight": 1
+        },
+        {
+          "itemId": 128,
+          "weight": 1
+        },
+        {
+          "itemId": 125,
+          "weight": 1
+        },
+        {
+          "itemId": 131,
+          "weight": 1
+        },
+        {
+          "itemId": 137,
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "name": "Куш",
+      "price": 90,
+      "category": "standard",
+      "freeKind": null,
+      "image": "/img/cases/kush.webp",
+      "items": [
+        {
+          "itemId": 51,
+          "weight": 1
+        },
+        {
+          "itemId": 70,
+          "weight": 1
+        },
+        {
+          "itemId": 68,
+          "weight": 1
+        },
+        {
+          "itemId": 78,
+          "weight": 1
+        },
+        {
+          "itemId": 88,
+          "weight": 1
+        },
+        {
+          "itemId": 84,
+          "weight": 1
+        },
+        {
+          "itemId": 86,
+          "weight": 1
+        },
+        {
+          "itemId": 96,
+          "weight": 1
+        },
+        {
+          "itemId": 102,
+          "weight": 1
+        },
+        {
+          "itemId": 103,
+          "weight": 1
+        },
+        {
+          "itemId": 108,
+          "weight": 1
+        },
+        {
+          "itemId": 116,
+          "weight": 1
+        },
+        {
+          "itemId": 117,
+          "weight": 1
+        },
+        {
+          "itemId": 118,
+          "weight": 1
+        },
+        {
+          "itemId": 109,
+          "weight": 1
+        },
+        {
+          "itemId": 131,
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": 27,
+      "name": "Красный",
+      "price": 200,
+      "category": "standard",
+      "freeKind": null,
+      "image": "/img/cases/krasny.webp",
+      "items": [
+        {
+          "itemId": 45,
+          "weight": 1
+        },
+        {
+          "itemId": 3248,
+          "weight": 1
+        },
+        {
+          "itemId": 3257,
+          "weight": 1
+        },
+        {
+          "itemId": 63,
+          "weight": 1
+        },
+        {
+          "itemId": 57,
+          "weight": 1
+        },
+        {
+          "itemId": 67,
+          "weight": 1
+        },
+        {
+          "itemId": 64,
+          "weight": 1
+        },
+        {
+          "itemId": 76,
+          "weight": 1
+        },
+        {
+          "itemId": 94,
+          "weight": 1
+        },
+        {
+          "itemId": 97,
+          "weight": 1
+        },
+        {
+          "itemId": 89,
+          "weight": 1
+        },
+        {
+          "itemId": 3278,
+          "weight": 1
+        },
+        {
+          "itemId": 98,
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": 28,
+      "name": "Комбо",
+      "price": 200,
+      "category": "standard",
+      "freeKind": null,
+      "image": "/img/cases/kombo.webp",
+      "items": [
+        {
+          "itemId": 44,
+          "weight": 1
+        },
+        {
+          "itemId": 51,
+          "weight": 1
+        },
+        {
+          "itemId": 55,
+          "weight": 1
+        },
+        {
+          "itemId": 56,
+          "weight": 1
+        },
+        {
+          "itemId": 70,
+          "weight": 1
+        },
+        {
+          "itemId": 78,
+          "weight": 1
+        },
+        {
+          "itemId": 91,
+          "weight": 1
+        },
+        {
+          "itemId": 96,
+          "weight": 1
+        },
+        {
+          "itemId": 97,
+          "weight": 1
+        },
+        {
+          "itemId": 89,
+          "weight": 1
+        },
+        {
+          "itemId": 3278,
+          "weight": 1
+        },
+        {
+          "itemId": 101,
+          "weight": 1
+        },
+        {
+          "itemId": 105,
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": 24,
+      "name": "Галактический",
+      "price": 220,
+      "category": "standard",
+      "freeKind": null,
+      "image": "/img/cases/galakticheskiy.webp",
+      "items": [
+        {
+          "itemId": 49,
+          "weight": 1
+        },
+        {
+          "itemId": 52,
+          "weight": 1
+        },
+        {
+          "itemId": 54,
+          "weight": 1
+        },
+        {
+          "itemId": 58,
+          "weight": 1
+        },
+        {
+          "itemId": 3251,
+          "weight": 1
+        },
+        {
+          "itemId": 57,
+          "weight": 1
+        },
+        {
+          "itemId": 3272,
+          "weight": 1
+        },
+        {
+          "itemId": 68,
+          "weight": 1
+        },
+        {
+          "itemId": 76,
+          "weight": 1
+        },
+        {
+          "itemId": 91,
+          "weight": 1
+        },
+        {
+          "itemId": 92,
+          "weight": 1
+        },
+        {
+          "itemId": 93,
+          "weight": 1
+        },
+        {
+          "itemId": 94,
+          "weight": 1
+        },
+        {
+          "itemId": 80,
+          "weight": 1
+        },
+        {
+          "itemId": 3277,
+          "weight": 1
+        },
+        {
+          "itemId": 86,
+          "weight": 1
+        },
+        {
+          "itemId": 98,
+          "weight": 1
+        },
+        {
+          "itemId": 101,
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": 41,
+      "name": "Тако Блок",
+      "price": 230,
+      "category": "standard",
+      "freeKind": null,
+      "image": "/img/cases/taco-blok.webp",
+      "items": [
+        {
+          "itemId": 51,
+          "weight": 1
+        },
+        {
+          "itemId": 3257,
+          "weight": 1
+        },
+        {
+          "itemId": 70,
+          "weight": 1
+        },
+        {
+          "itemId": 78,
+          "weight": 1
+        },
+        {
+          "itemId": 3259,
+          "weight": 1
+        },
+        {
+          "itemId": 82,
+          "weight": 1
+        },
+        {
+          "itemId": 83,
+          "weight": 1
+        },
+        {
+          "itemId": 85,
+          "weight": 1
+        },
+        {
+          "itemId": 73,
+          "weight": 1
+        },
+        {
+          "itemId": 93,
+          "weight": 1
+        },
+        {
+          "itemId": 97,
+          "weight": 1
+        },
+        {
+          "itemId": 87,
+          "weight": 1
+        },
+        {
+          "itemId": 98,
+          "weight": 1
+        },
+        {
+          "itemId": 101,
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": 25,
+      "name": "Драконий клад",
+      "price": 240,
+      "category": "standard",
+      "freeKind": null,
+      "image": "/img/cases/drakoniy-klad.webp",
+      "items": [
+        {
+          "itemId": 3247,
+          "weight": 1
+        },
+        {
+          "itemId": 48,
+          "weight": 1
+        },
+        {
+          "itemId": 59,
+          "weight": 1
+        },
+        {
+          "itemId": 62,
+          "weight": 1
+        },
+        {
+          "itemId": 56,
+          "weight": 1
+        },
+        {
+          "itemId": 57,
+          "weight": 1
+        },
+        {
+          "itemId": 70,
+          "weight": 1
+        },
+        {
+          "itemId": 75,
+          "weight": 1
+        },
+        {
+          "itemId": 78,
+          "weight": 1
+        },
+        {
+          "itemId": 72,
+          "weight": 1
+        },
+        {
+          "itemId": 69,
+          "weight": 1
+        },
+        {
+          "itemId": 90,
+          "weight": 1
+        },
+        {
+          "itemId": 84,
+          "weight": 1
+        },
+        {
+          "itemId": 93,
+          "weight": 1
+        },
+        {
+          "itemId": 86,
+          "weight": 1
+        },
+        {
+          "itemId": 3278,
+          "weight": 1
+        },
+        {
+          "itemId": 98,
+          "weight": 1
+        },
+        {
+          "itemId": 103,
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "name": "Механика",
+      "price": 320,
+      "category": "standard",
+      "freeKind": null,
+      "image": "/img/cases/mehanika.webp",
+      "items": [
+        {
+          "itemId": 46,
+          "weight": 1
+        },
+        {
+          "itemId": 47,
+          "weight": 1
+        },
+        {
+          "itemId": 60,
+          "weight": 1
+        },
+        {
+          "itemId": 53,
+          "weight": 1
+        },
+        {
+          "itemId": 64,
+          "weight": 1
+        },
+        {
+          "itemId": 3262,
+          "weight": 1
+        },
+        {
+          "itemId": 74,
+          "weight": 1
+        },
+        {
+          "itemId": 75,
+          "weight": 1
+        },
+        {
+          "itemId": 78,
+          "weight": 1
+        },
+        {
+          "itemId": 88,
+          "weight": 1
+        },
+        {
+          "itemId": 3264,
+          "weight": 1
+        },
+        {
+          "itemId": 72,
+          "weight": 1
+        },
+        {
+          "itemId": 85,
+          "weight": 1
+        },
+        {
+          "itemId": 76,
+          "weight": 1
+        },
+        {
+          "itemId": 3269,
+          "weight": 1
+        },
+        {
+          "itemId": 69,
+          "weight": 1
+        },
+        {
+          "itemId": 92,
+          "weight": 1
+        },
+        {
+          "itemId": 90,
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": 26,
+      "name": "Кошмары",
+      "price": 400,
+      "category": "standard",
+      "freeKind": null,
+      "image": "/img/cases/koshmary.webp",
+      "items": [
+        {
+          "itemId": 3247,
+          "weight": 1
+        },
+        {
+          "itemId": 51,
+          "weight": 1
+        },
+        {
+          "itemId": 47,
+          "weight": 1
+        },
+        {
+          "itemId": 50,
+          "weight": 1
+        },
+        {
+          "itemId": 3257,
+          "weight": 1
+        },
+        {
+          "itemId": 57,
+          "weight": 1
+        },
+        {
+          "itemId": 66,
+          "weight": 1
+        },
+        {
+          "itemId": 53,
+          "weight": 1
+        },
+        {
+          "itemId": 71,
+          "weight": 1
+        },
+        {
+          "itemId": 64,
+          "weight": 1
+        },
+        {
+          "itemId": 3262,
+          "weight": 1
+        },
+        {
+          "itemId": 3259,
+          "weight": 1
+        },
+        {
+          "itemId": 3252,
+          "weight": 1
+        },
+        {
+          "itemId": 3264,
+          "weight": 1
+        },
+        {
+          "itemId": 82,
+          "weight": 1
+        },
+        {
+          "itemId": 83,
+          "weight": 1
+        },
+        {
+          "itemId": 72,
+          "weight": 1
+        },
+        {
+          "itemId": 76,
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": 18,
+      "name": "Глубина",
+      "price": 650,
+      "category": "standard",
+      "freeKind": null,
+      "image": "/img/cases/glubina.webp",
+      "items": [
+        {
+          "itemId": 3250,
+          "weight": 1
+        },
+        {
+          "itemId": 48,
+          "weight": 1
+        },
+        {
+          "itemId": 3256,
+          "weight": 1
+        },
+        {
+          "itemId": 47,
+          "weight": 1
+        },
+        {
+          "itemId": 52,
+          "weight": 1
+        },
+        {
+          "itemId": 54,
+          "weight": 1
+        },
+        {
+          "itemId": 55,
+          "weight": 1
+        },
+        {
+          "itemId": 59,
+          "weight": 1
+        },
+        {
+          "itemId": 3251,
+          "weight": 1
+        },
+        {
+          "itemId": 63,
+          "weight": 1
+        },
+        {
+          "itemId": 3272,
+          "weight": 1
+        },
+        {
+          "itemId": 70,
+          "weight": 1
+        },
+        {
+          "itemId": 71,
+          "weight": 1
+        },
+        {
+          "itemId": 3262,
+          "weight": 1
+        },
+        {
+          "itemId": 68,
+          "weight": 1
+        },
+        {
+          "itemId": 77,
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": 42,
+      "name": "Rolex",
+      "price": 1000,
+      "category": "standard",
+      "freeKind": null,
+      "image": "/img/cases/rolex.webp",
+      "items": [
+        {
+          "itemId": 43,
+          "weight": 1
+        },
+        {
+          "itemId": 3247,
+          "weight": 1
+        },
+        {
+          "itemId": 48,
+          "weight": 1
+        },
+        {
+          "itemId": 47,
+          "weight": 1
+        },
+        {
+          "itemId": 54,
+          "weight": 1
+        },
+        {
+          "itemId": 55,
+          "weight": 1
+        },
+        {
+          "itemId": 58,
+          "weight": 1
+        },
+        {
+          "itemId": 59,
+          "weight": 1
+        },
+        {
+          "itemId": 62,
+          "weight": 1
+        },
+        {
+          "itemId": 63,
+          "weight": 1
+        },
+        {
+          "itemId": 56,
+          "weight": 1
+        },
+        {
+          "itemId": 57,
+          "weight": 1
+        },
+        {
+          "itemId": 66,
+          "weight": 1
+        },
+        {
+          "itemId": 53,
+          "weight": 1
+        },
+        {
+          "itemId": 3272,
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "name": "Логово драконов",
+      "price": 2500,
+      "category": "standard",
+      "freeKind": null,
+      "image": "/img/cases/drakony.webp",
+      "items": [
+        {
+          "itemId": 45,
+          "weight": 1
+        },
+        {
+          "itemId": 46,
+          "weight": 1
+        },
+        {
+          "itemId": 3248,
+          "weight": 1
+        },
+        {
+          "itemId": 44,
+          "weight": 1
+        },
+        {
+          "itemId": 48,
+          "weight": 1
+        },
+        {
+          "itemId": 3246,
+          "weight": 1
+        },
+        {
+          "itemId": 49,
+          "weight": 1
+        },
+        {
+          "itemId": 51,
+          "weight": 1
+        },
+        {
+          "itemId": 59,
+          "weight": 1
+        },
+        {
+          "itemId": 62,
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "name": "ОГ",
+      "price": 9800,
+      "category": "standard",
+      "freeKind": null,
+      "image": "/img/cases/og.webp",
+      "items": [
+        {
+          "itemId": 41,
+          "weight": 1
+        },
+        {
+          "itemId": 3243,
+          "weight": 1
+        },
+        {
+          "itemId": 3244,
+          "weight": 1
+        },
+        {
+          "itemId": 3245,
+          "weight": 1
+        },
+        {
+          "itemId": 3250,
+          "weight": 1
+        },
+        {
+          "itemId": 45,
+          "weight": 1
+        },
+        {
+          "itemId": 46,
+          "weight": 1
+        },
+        {
+          "itemId": 3248,
+          "weight": 1
+        },
+        {
+          "itemId": 3255,
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": 35,
+      "name": "Платина 1",
+      "price": 250,
+      "category": "platina",
+      "freeKind": null,
+      "image": "/img/cases/platina-1.webp",
+      "items": [
+        {
+          "itemId": 49,
+          "weight": 1
+        },
+        {
+          "itemId": 50,
+          "weight": 1
+        },
+        {
+          "itemId": 57,
+          "weight": 1
+        },
+        {
+          "itemId": 70,
+          "weight": 1
+        },
+        {
+          "itemId": 67,
+          "weight": 1
+        },
+        {
+          "itemId": 78,
+          "weight": 1
+        },
+        {
+          "itemId": 69,
+          "weight": 1
+        },
+        {
+          "itemId": 92,
+          "weight": 1
+        },
+        {
+          "itemId": 90,
+          "weight": 1
+        },
+        {
+          "itemId": 84,
+          "weight": 1
+        },
+        {
+          "itemId": 86,
+          "weight": 1
+        },
+        {
+          "itemId": 96,
+          "weight": 1
+        },
+        {
+          "itemId": 98,
+          "weight": 1
+        },
+        {
+          "itemId": 101,
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": 36,
+      "name": "Платина 2",
+      "price": 500,
+      "category": "platina",
+      "freeKind": null,
+      "image": "/img/cases/platina-2.webp",
+      "items": [
+        {
+          "itemId": 3248,
+          "weight": 1
+        },
+        {
+          "itemId": 47,
+          "weight": 1
+        },
+        {
+          "itemId": 52,
+          "weight": 1
+        },
+        {
+          "itemId": 62,
+          "weight": 1
+        },
+        {
+          "itemId": 53,
+          "weight": 1
+        },
+        {
+          "itemId": 67,
+          "weight": 1
+        },
+        {
+          "itemId": 64,
+          "weight": 1
+        },
+        {
+          "itemId": 74,
+          "weight": 1
+        },
+        {
+          "itemId": 68,
+          "weight": 1
+        },
+        {
+          "itemId": 75,
+          "weight": 1
+        },
+        {
+          "itemId": 78,
+          "weight": 1
+        },
+        {
+          "itemId": 3264,
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": 37,
+      "name": "Платина 3",
+      "price": 1000,
+      "category": "platina",
+      "freeKind": null,
+      "image": "/img/cases/platina-3.webp",
+      "items": [
+        {
+          "itemId": 45,
+          "weight": 1
+        },
+        {
+          "itemId": 47,
+          "weight": 1
+        },
+        {
+          "itemId": 54,
+          "weight": 1
+        },
+        {
+          "itemId": 55,
+          "weight": 1
+        },
+        {
+          "itemId": 59,
+          "weight": 1
+        },
+        {
+          "itemId": 62,
+          "weight": 1
+        },
+        {
+          "itemId": 60,
+          "weight": 1
+        },
+        {
+          "itemId": 3257,
+          "weight": 1
+        },
+        {
+          "itemId": 63,
+          "weight": 1
+        },
+        {
+          "itemId": 57,
+          "weight": 1
+        },
+        {
+          "itemId": 56,
+          "weight": 1
+        },
+        {
+          "itemId": 66,
+          "weight": 1
+        },
+        {
+          "itemId": 53,
+          "weight": 1
+        },
+        {
+          "itemId": 3272,
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": 38,
+      "name": "Платина 4",
+      "price": 2000,
+      "category": "platina",
+      "freeKind": null,
+      "image": "/img/cases/platina-4.webp",
+      "items": [
+        {
+          "itemId": 3271,
+          "weight": 1
+        },
+        {
+          "itemId": 43,
+          "weight": 1
+        },
+        {
+          "itemId": 45,
+          "weight": 1
+        },
+        {
+          "itemId": 3248,
+          "weight": 1
+        },
+        {
+          "itemId": 49,
+          "weight": 1
+        },
+        {
+          "itemId": 51,
+          "weight": 1
+        },
+        {
+          "itemId": 47,
+          "weight": 1
+        },
+        {
+          "itemId": 52,
+          "weight": 1
+        },
+        {
+          "itemId": 54,
+          "weight": 1
+        },
+        {
+          "itemId": 55,
+          "weight": 1
+        },
+        {
+          "itemId": 58,
+          "weight": 1
+        },
+        {
+          "itemId": 59,
+          "weight": 1
+        },
+        {
+          "itemId": 3251,
+          "weight": 1
+        },
+        {
+          "itemId": 61,
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": 39,
+      "name": "Платина 5",
+      "price": 3000,
+      "category": "platina",
+      "freeKind": null,
+      "image": "/img/cases/platina-5.webp",
+      "items": [
+        {
+          "itemId": 42,
+          "weight": 1
+        },
+        {
+          "itemId": 45,
+          "weight": 1
+        },
+        {
+          "itemId": 46,
+          "weight": 1
+        },
+        {
+          "itemId": 3247,
+          "weight": 1
+        },
+        {
+          "itemId": 48,
+          "weight": 1
+        },
+        {
+          "itemId": 49,
+          "weight": 1
+        },
+        {
+          "itemId": 3256,
+          "weight": 1
+        },
+        {
+          "itemId": 51,
+          "weight": 1
+        },
+        {
+          "itemId": 47,
+          "weight": 1
+        },
+        {
+          "itemId": 52,
+          "weight": 1
+        },
+        {
+          "itemId": 50,
+          "weight": 1
+        },
+        {
+          "itemId": 54,
+          "weight": 1
+        },
+        {
+          "itemId": 55,
+          "weight": 1
+        },
+        {
+          "itemId": 58,
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": 31,
+      "name": "Skibidi ALL-IN",
+      "price": 29,
+      "category": "allin",
+      "freeKind": null,
+      "image": "/img/cases/allin-skibidi.webp",
+      "items": [
+        {
+          "itemId": 3245,
+          "weight": 1
+        },
+        {
+          "itemId": 157,
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": 32,
+      "name": "Meowl ALL-IN",
+      "price": 39,
+      "category": "allin",
+      "freeKind": null,
+      "image": "/img/cases/allin-meowl.webp",
+      "items": [
+        {
+          "itemId": 3243,
+          "weight": 1
+        },
+        {
+          "itemId": 153,
+          "weight": 1
+        },
+        {
+          "itemId": 154,
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": 33,
+      "name": "Pork ALL-IN",
+      "price": 39,
+      "category": "allin",
+      "freeKind": null,
+      "image": "/img/cases/allin-pork.webp",
+      "items": [
+        {
+          "itemId": 3244,
+          "weight": 1
+        },
+        {
+          "itemId": 153,
+          "weight": 1
+        },
+        {
+          "itemId": 154,
+          "weight": 1
+        }
+      ]
+    },
+    {
+      "id": 34,
+      "name": "Elephant ALL-IN",
+      "price": 39,
+      "category": "allin",
+      "freeKind": null,
+      "image": "/img/cases/allin-elephant.webp",
+      "items": [
+        {
+          "itemId": 41,
+          "weight": 1
+        },
+        {
+          "itemId": 153,
+          "weight": 1
+        },
+        {
+          "itemId": 154,
+          "weight": 1
+        }
+      ]
+    }
+  ]
+}
