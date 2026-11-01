@@ -1725,8 +1725,8 @@ html.admin-concealed .admin-visibility-option:focus-within,
 html.admin-concealed .admin-visibility-option:active {
   opacity: 1;
 }
-html.admin-concealed .menu-list a[data-id="admin"],
-html.admin-concealed .topnav a[data-id="admin"] {
+html.admin-concealed .menu-list a[href="/admin"],
+html.admin-concealed .topnav a[href="/admin"] {
   display: none;
 }
 html.admin-concealed a[href="/admin"]:hover,
