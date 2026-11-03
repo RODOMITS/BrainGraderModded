@@ -11,5 +11,5 @@ window.sandboxReady = fetch('/api/me', {credentials:'same-origin',headers:{'X-Pl
 });
 try {
   const saved = JSON.parse(localStorage.getItem('bg_prefs') || '{}');
-  document.documentElement.classList.toggle('admin-concealed', saved.showAdmin === false);
+  document.documentElement.classList.toggle('admin-concealed', saved.modded === false || saved.showAdmin === false);
 } catch {}

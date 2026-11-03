@@ -94,6 +94,9 @@
       count: [1, 3, 5].includes(p.count) ? p.count : 1,
       fast: !!p.fast,
       showAdmin: p.showAdmin !== false,
+      modded: p.modded !== false,
+      minesEnabled: !!p.minesEnabled,
+      minesCount: Number.isInteger(p.minesCount) && p.minesCount>=1 && p.minesCount<=24 ? p.minesCount : 3,
       sound: p.sound !== false,
       volume: Number.isFinite(v) ? Math.min(100, Math.max(0, Math.round(v))) : 60,
       sm: {
@@ -105,7 +108,7 @@
     };
   })();
   const savePrefs = () => { try { localStorage.setItem('bg_prefs', JSON.stringify(prefs)); } catch {} };
-  const applyAdminVisibility = () => document.documentElement.classList.toggle('admin-concealed', !prefs.showAdmin);
+  const applyAdminVisibility = () => document.documentElement.classList.toggle('admin-concealed', !(prefs.modded && prefs.showAdmin));
   applyAdminVisibility();
 
   // ---------- Звуки: синтезируем на лету, без файлов. Мягкие щелчки ленты и короткие аккорды ----------
@@ -998,6 +1001,7 @@
     cases: '<path d="M3 9h18v11H3z"/><path d="M5 9V5h14v4"/><path d="M10 13h4"/>',
     upgrade: '<circle cx="12" cy="12" r="9"/><path d="M12 16V8"/><path d="m8.5 11.5 3.5-3.5 3.5 3.5"/>',
     gift: '<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M5 12v8h14v-8"/><path d="M12 8v12"/><path d="M12 8c-1.5-3-5-4-6-2s2 2.6 6 2c4 .6 7 0 6-2s-4.5-1-6 2z"/>',
+    mines: '<path d="M8 3h8l5 7-9 11L3 10zM3 10h18M8 3l4 18 4-18"/>',
     dice: '<rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8" cy="8" r="1.3"/><circle cx="16" cy="8" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="8" cy="16" r="1.3"/><circle cx="16" cy="16" r="1.3"/>',
     mystery: '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9.6 9.6a2.4 2.4 0 1 1 3.4 2.2c-.6.3-1 .8-1 1.5v.6"/><path d="M12 16.8h.01"/>',
     settings: '<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2.2"/><circle cx="10" cy="17" r="2.2"/>',
@@ -1012,6 +1016,7 @@
         { id: 'upgrade', label: 'Апгрейдер', href: '#/upgrade', icon: 'upgrade' },
         { id: 'mystery', label: 'Мистери', href: '#/mystery', icon: 'mystery', show: () => state.cfg?.mystery?.enabled !== false },
         { id: 'dice', label: 'Колор Дайс', href: '#/dice', icon: 'dice', show: () => !!state.cfg?.dice?.enabled },
+        { id: 'mines', label: 'Мины', href: '#/mines', icon: 'mines', badge: 'NEW', show: () => prefs.modded && prefs.minesEnabled },
         { id: 'giveaways', label: 'Розыгрыши', href: '#/giveaways', icon: 'gift', badge: 'NEW' },
       ],
     },
@@ -1032,6 +1037,7 @@
     if (path.startsWith('/upgrade')) return 'upgrade';
     if (path.startsWith('/mystery')) return 'mystery';
     if (path.startsWith('/dice')) return 'dice';
+    if (path.startsWith('/mines')) return 'mines';
     if (path.startsWith('/giveaways')) return 'giveaways';
     if (path.startsWith('/referrals') || path.startsWith('/partner')) return 'referrals';
     if (path.startsWith('/profile')) return 'profile';
@@ -1188,10 +1194,6 @@
             <div class="grow"><b>Быстрая прокрутка</b><p>Кейсы и апгрейдер крутятся в несколько раз быстрее.</p></div>
             ${sw('fast', prefs.fast, 'Быстрая прокрутка')}
           </div>
-          <div class="set-row admin-visibility-option">
-            <div class="grow"><b>Показывать админку</b><p>Если выключить, кнопка появляется при наведении на её место. Настройка сохраняется на этом устройстве.</p></div>
-            ${sw('showAdmin', prefs.showAdmin, 'Показывать админку')}
-          </div>
         </section>
 
         <section class="set-group">
@@ -1218,15 +1220,31 @@
             </div>
           </div>
         </section>
+        <section class="set-group modded-settings ${prefs.modded ? '' : 'modded-off'}" id="moddedSettings">
+          <div class="set-row main modded-main">
+            <div class="grow"><b>Моддед</b><p>Дополнительные возможности</p></div>
+            ${sw('modded', prefs.modded, 'Моддед')}
+          </div>
+          <div class="set-sub modded-sub">
+            <div class="set-row"><div class="grow"><b>Админ-панель</b><p>Показывать кнопку админки</p></div>${sw('showAdmin', prefs.showAdmin, 'Админ-панель')}</div>
+            <div class="set-row"><div class="grow"><b>Мины</b><p>Поле с алмазами и минами, ставка брейнротом</p></div>${sw('minesEnabled', prefs.minesEnabled, 'Мины')}</div>
+          </div>
+        </section>
       </div>`);
     openSheet('Настройки', body);
-    const save = () => { savePrefs(); applyStreamer(); syncSpeedSound(); applyAdminVisibility(); };
+    const save = () => {
+      savePrefs(); applyStreamer(); syncSpeedSound(); applyAdminVisibility(); drawTopnav();
+      $('#moddedSettings',body).classList.toggle('modded-off',!prefs.modded);
+      if (!(prefs.modded && prefs.minesEnabled) && location.hash.startsWith('#/mines')) location.hash='#/';
+    };
     $$('.sw', body).forEach((b) => (b.onclick = () => {
       const k = b.dataset.k;
       let on;
       if (k === 'sound') { on = prefs.sound = !prefs.sound; $('.set-vol', body).classList.toggle('off', !on); }
       else if (k === 'fast') on = prefs.fast = !prefs.fast;
       else if (k === 'showAdmin') on = prefs.showAdmin = !prefs.showAdmin;
+      else if (k === 'modded') on = prefs.modded = !prefs.modded;
+      else if (k === 'minesEnabled') on = prefs.minesEnabled = !prefs.minesEnabled;
       else if (k === 'sm') { on = sm.on = !sm.on; $('#smSub', body).classList.toggle('off', !on); }
       else if (k === 'hover') on = sm.hover = !sm.hover;
       else if (k.startsWith('hide:')) { const id = k.slice(5); on = sm.hide[id] = !sm.hide[id]; }
@@ -1268,7 +1286,7 @@
     closeMenu();
     stopTimers();
     newRender();
-    const tab = path.startsWith('/upgrade') ? 'upgrade' : path.startsWith('/mystery') ? 'mystery' : path.startsWith('/dice') ? 'dice' : path.startsWith('/giveaways') ? 'giveaways' : path.startsWith('/profile') ? 'profile' : path.startsWith('/referrals') ? 'referrals' : path.startsWith('/partner') ? 'partner' : path.startsWith('/faq') ? 'faq' : 'home';
+    const tab = path.startsWith('/upgrade') ? 'upgrade' : path.startsWith('/mystery') ? 'mystery' : path.startsWith('/dice') ? 'dice' : path.startsWith('/mines') ? 'mines' : path.startsWith('/giveaways') ? 'giveaways' : path.startsWith('/profile') ? 'profile' : path.startsWith('/referrals') ? 'referrals' : path.startsWith('/partner') ? 'partner' : path.startsWith('/faq') ? 'faq' : 'home';
     const m = /^\/case\/(\d+)$/.exec(path);
     view.dataset.page = m ? 'case' : tab; // для раскладки на компьютере
     drawTopnav();
@@ -1282,6 +1300,7 @@
     if (tab === 'upgrade') return renderUpgrade(new URLSearchParams(qs || ''));
     if (tab === 'mystery') return renderMystery(new URLSearchParams(qs || ''));
     if (tab === 'dice') return renderDice();
+    if (tab === 'mines') return renderMines();
     if (tab === 'giveaways') return renderGiveaways();
     if (tab === 'profile') return renderProfile();
     if (tab === 'referrals') return renderReferrals();
@@ -1311,7 +1330,7 @@
     drops.set(String(d.id), d);
     if (drops.size > 300) drops.delete(drops.keys().next().value);
   }
-  const dropHref = (d) => (d.source?.kind === 'case' && d.source.caseId ? `#/case/${d.source.caseId}` : d.source?.kind === 'upgrade' ? '#/upgrade' : d.source?.kind === 'mystery' ? '#/mystery' : null);
+  const dropHref = (d) => (d.source?.kind === 'case' && d.source.caseId ? `#/case/${d.source.caseId}` : d.source?.kind === 'upgrade' ? '#/upgrade' : d.source?.kind === 'mystery' ? '#/mystery' : d.source?.kind === 'mines' ? '#/mines' : null);
   // Слой «откуда выпал»: при наведении он плавно заезжает на место брейнрота (без шанса апгрейда)
   const srcLayer = (d) => {
     const src = d.source || {};
@@ -1319,6 +1338,7 @@
       return `<span class="drop-src">${src.caseImage ? `<img src="${esc(src.caseImage)}" alt="">` : `<i class="ds-ico">${svgIcon('box')}</i>`}<span class="ds-txt"><small>Кейс</small><b>${esc(src.caseName || 'Кейс')}</b></span></span>`;
     }
     if (src.kind === 'upgrade') return `<span class="drop-src"><i class="ds-ico">${svgIcon('upgrade')}</i><span class="ds-txt"><b>Апгрейд</b></span></span>`;
+    if (src.kind === 'mines') return `<span class="drop-src"><i class="ds-ico">${svgIcon('mines')}</i><span class="ds-txt"><b>Мины</b></span></span>`;
     if (src.kind === 'mystery') return `<span class="drop-src"><i class="ds-ico">${svgIcon('mystery')}</i><span class="ds-txt"><b>Мистери</b></span></span>`;
     return '';
   };
@@ -2894,6 +2914,111 @@
   //                         КОЛОР ДАЙС
   // 4 кубика по 6 цветов: выбираешь цвет и ставку, выплата за число кубиков твоего цвета.
   // =====================================================================
+  const minesUI = { game: null, inv: [], pool: [], selected: null, busy: false };
+  const mineGlyph = (bomb) => bomb
+    ? '<svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="14" cy="19" r="9" fill="currentColor"/><path d="m20 12 4-4m-2-3 4 4m-1-8 1 3m3 2 3-1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="m9 17 2-3" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>'
+    : '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M8 5h16l6 9-14 15L2 14z" fill="currentColor"/><path d="M2 14h28M8 5l8 24L24 5" fill="none" stroke="#103d2c" stroke-width="1.5"/></svg>';
+
+  async function renderMines() {
+    if (!(prefs.modded && prefs.minesEnabled)) {
+      view.innerHTML='<div class="empty">Включи «Мины» в настройках раздела «Моддед»</div>';
+      return;
+    }
+    const t=state.render;
+    view.innerHTML='<div class="skeleton"></div>';
+    try {
+      const [current,inv,shop]=await Promise.all([api('/api/mines/current'),api('/api/inventory'),api('/api/shop')]);
+      if (stale(t)) return;
+      minesUI.game=current.game;
+      minesUI.inv=inv.filter(i=>i.status==='owned'&&!i.test);
+      minesUI.pool=shop.items;
+      minesUI.busy=false;
+      minesUI.selected=null;
+      if (current.game) prefs.minesCount=current.game.mines;
+      view.innerHTML=`<section class="mines-wrap"><div class="section-head"><h1>Мины</h1><span class="muted" id="minesStatus">Выбери ставку</span></div>
+        <div class="mines-board" id="minesBoard" role="group" aria-label="Поле мин 5 на 5">${Array.from({length:25},(_,i)=>`<button class="mine-tile" data-tile="${i}" aria-label="Клетка ${i+1}"><span class="mine-flip"><span class="mine-front"><i></i></span><span class="mine-back"></span></span></button>`).join('')}</div>
+        <div class="mines-stats"><div class="mines-stat"><label for="minesCount">Количество мин</label><input id="minesCount" type="number" min="1" max="24" step="1" inputmode="numeric" value="${prefs.minesCount}"></div><div class="mines-stat"><span>Множитель</span><b id="minesMult">×1</b></div><div class="mines-stat mines-return"><span>Получишь</span><div id="minesReward"></div></div></div>
+        <button class="btn" id="minesGo">Начать</button>
+        <div class="mines-stake" id="minesStake"></div><h2>Брейнрот для ставки</h2><div class="items" id="minesInv"></div></section>`;
+      $$('#minesBoard [data-tile]').forEach(button=>button.onclick=()=>{
+        if (!minesUI.game || minesUI.game.status!=='active' || minesUI.busy) return;
+        minesMove('/api/mines/reveal',{gameId:minesUI.game.id,tile:Number(button.dataset.tile)});
+      });
+      $('#minesCount').oninput=()=>{
+        const n=Number($('#minesCount').value);
+        if(Number.isInteger(n)&&n>=1&&n<=24){prefs.minesCount=n;savePrefs();}
+        drawMinesSummary();
+      };
+      $('#minesGo').onclick=()=>{
+        if(minesUI.busy)return;
+        const game=minesUI.game;
+        if(game?.status==='active')return minesMove('/api/mines/cashout',{gameId:game.id});
+        const item=minesUI.inv.find(i=>i.id===minesUI.selected);
+        const n=Number($('#minesCount').value);
+        if(!item||!Number.isInteger(n)||n<1||n>24)return;
+        minesMove('/api/mines/start',{ids:[item.id],mines:n});
+      };
+      drawMinesInventory();drawMinesBoard();drawMinesSummary();
+    } catch(e){if(!stale(t)){view.innerHTML='<div class="empty">Не удалось открыть мины</div>';fail(e);}}
+  }
+
+  function drawMinesInventory(){
+    const box=$('#minesInv');if(!box)return;
+    box.innerHTML=minesUI.inv.length?minesUI.inv.map(i=>`<button class="item rar-${esc(i.item.rarity)} ${minesUI.selected===i.id?'sel':''}" data-mine-item="${i.id}" ${minesUI.game?.status==='active'||minesUI.busy?'disabled':''}>${ogTag(i.item)}<img src="${itemImg(i.item.image)}" alt=""><div class="n">${esc(i.item.name)}</div>${price(i.item.price)}</button>`).join(''):'<div class="empty">Нет брейнротов для ставки. Открой кейс или выдай предмет в админке</div>';
+    $$('[data-mine-item]',box).forEach(button=>button.onclick=()=>{
+      if(minesUI.busy||minesUI.game?.status==='active')return;
+      minesUI.selected=Number(button.dataset.mineItem);
+      drawMinesInventory();drawMinesSummary();
+    });
+  }
+
+  function drawMinesBoard(){
+    const game=minesUI.game;const active=game?.status==='active';
+    $$('#minesBoard [data-tile]').forEach(button=>{
+      const tile=Number(button.dataset.tile);
+      const opened=game?.revealed.includes(tile);
+      const bomb=game?.bombs.includes(tile);
+      const flip=!!game&&(opened||game.status!=='active');
+      $('.mine-back',button).innerHTML=mineGlyph(bomb);
+      button.classList.toggle('bomb',!!bomb);
+      button.classList.toggle('mine-dim',flip&&!opened&&tile!==game?.payout?.bomb);
+      button.disabled=!active||opened||minesUI.busy;
+      button.setAttribute('aria-label',flip?(bomb?'Мина':'Алмаз'):`Клетка ${tile+1}`);
+      requestAnimationFrame(()=>button.classList.toggle('flipped',flip));
+    });
+  }
+
+  function drawMinesSummary(){
+    if(!$('#minesGo'))return;
+    const game=minesUI.game;const active=game?.status==='active';
+    const item=active?game.stake:minesUI.inv.find(i=>i.id===minesUI.selected)?.item;
+    let reward=game&&!minesUI.selected?game.reward:null;
+    if(!reward&&item){const nearest=[...minesUI.pool].filter(i=>i.price<=item.price).sort((a,b)=>b.price-a.price||a.id-b.id)[0];reward={item:nearest||null,coins:Math.round((item.price-(nearest?.price||0))*100)/100,total:item.price};}
+    $('#minesCount').disabled=active||minesUI.busy;
+    $('#minesMult').textContent='×'+fmt(game&&!minesUI.selected?game.multiplier:1);
+    $('#minesReward').innerHTML=reward?`${reward.item?`<div class="mines-prize"><img src="${itemImg(reward.item.image)}" alt=""><span>${esc(reward.item.name)}</span></div>`:''}<b>${price(reward.total)}</b>${reward.coins>0?`<small>+ ${fmt(reward.coins)} BG доплатой</small>`:''}`:'<span class="muted">Выбери ставку</span>';
+    $('#minesStake').innerHTML=item?`Ставка: <b>${esc(item.name)}</b> · ${price(item.price)}`:'';
+    $('#minesStatus').textContent=active?`Открыто ${game.revealed.length} из ${25-game.mines}`:game?.status==='lost'?'Мина — ставка проиграна':game?.status==='cashed'?'Награда в инвентаре':'Выбери ставку';
+    const go=$('#minesGo');go.textContent=minesUI.busy?'Подожди':active?'Забрать '+fmt(game.reward.total)+' BG':game?'Начать новую игру':'Начать';
+    const n=Number($('#minesCount').value);
+    go.disabled=minesUI.busy||(!active&&(!item||!Number.isInteger(n)||n<1||n>24));
+  }
+
+  async function minesMove(path,body){
+    if(minesUI.busy)return;
+    const t=state.render;minesUI.busy=true;drawMinesBoard();drawMinesSummary();drawMinesInventory();
+    try{
+      const r=await api(path,{method:'POST',body:{...body,key:newKey()}});
+      minesUI.game=r.game;minesUI.selected=null;
+      if(r.balance!==undefined)setBalance(r.balance);
+      minesUI.inv=(await api('/api/inventory')).filter(i=>i.status==='owned'&&!i.test);
+      if(r.game.status==='lost'){haptic('error');sfx.upLose();}
+      else if(r.game.status==='cashed'){haptic('success');sfx.upWin();toast('Получено '+fmt(r.game.payout.total)+' BG предметом и доплатой');}
+      else tick();
+    }catch(e){fail(e);try{minesUI.game=(await api('/api/mines/current')).game;}catch{}}
+    finally{minesUI.busy=false;if(!stale(t)){drawMinesBoard();drawMinesSummary();drawMinesInventory();}}
+  }
+
   const dice = { color: 0, sel: [], inv: [], busy: false };
   const RAINBOW = 6;
   const diceFace = (c, cls = '') => `<div class="cd-die ${cls}" style="--c:${esc(c.hex)}"><i></i></div>`;

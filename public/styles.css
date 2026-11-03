@@ -1711,26 +1711,37 @@ html.halloween h2::after { content: ' 🎃'; font-size: .8em; }
   .hw-bat { display: none; }
   .hw-hang, .hw-hang b, .hw-fog, .hw-pk, .hw-pumpkin { animation: none !important; }
 }
-/* Preserve the hit area while concealing admin links until hover or keyboard focus. */
-html.admin-concealed a[href="/admin"] {
-  opacity: 0;
-  transition: opacity .15s ease;
-}
-html.admin-concealed .admin-visibility-option {
-  opacity: 0;
-  transition: opacity .15s ease;
-}
-html.admin-concealed .admin-visibility-option:hover,
-html.admin-concealed .admin-visibility-option:focus-within,
-html.admin-concealed .admin-visibility-option:active {
-  opacity: 1;
-}
-html.admin-concealed .menu-list a[href="/admin"],
-html.admin-concealed .topnav a[href="/admin"] {
-  display: none;
-}
-html.admin-concealed a[href="/admin"]:hover,
-html.admin-concealed a[href="/admin"]:focus-visible,
-html.admin-concealed a[href="/admin"]:active {
-  opacity: 1;
-}
+/* Modded master: no reserved navigation slot when disabled. */
+html.admin-concealed a[href="/admin"] { display: none; }
+.modded-settings { position: relative; }
+.modded-settings.modded-off { height: 0; min-height: 0; padding: 0 !important; margin: 0 !important; border: 0 !important; overflow: visible; }
+.modded-off .modded-sub { display: none; }
+.modded-off .modded-main { position: absolute; bottom: 0; left: 0; right: 0; height: 8px; min-height: 8px; padding: 0; margin: 0; overflow: hidden; opacity: 0; z-index: 8; border-radius: 12px; }
+.modded-off .modded-main:hover, .modded-off .modded-main:has(:focus-visible) { height: auto; min-height: 72px; opacity: 1; padding: 16px; background: var(--stone-2); border: 1px solid var(--ridge-2); }
+.modded-off .modded-main .sw { flex-shrink: 0; }
+.mines-wrap { max-width: 800px; margin: 0 auto; }
+.mines-board { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 12px; max-width: 560px; margin: 24px auto; }
+.mine-tile { aspect-ratio: 1; min-width: 0; perspective: 600px; border-radius: 12px; }
+.mine-flip { display: block; position: relative; width: 100%; height: 100%; transform-style: preserve-3d; transition: transform .32s cubic-bezier(.22,1,.36,1); }
+.mine-front,.mine-back { position: absolute; inset: 0; display: grid; place-items: center; border-radius: 12px; backface-visibility: hidden; -webkit-backface-visibility: hidden; border: 1px solid var(--ridge-2); }
+.mine-front { background: var(--stone-2); }
+.mine-front i { width: 16px; height: 16px; border: 2px solid var(--ridge-2); border-radius: 4px; transform: rotate(45deg); }
+.mine-back { transform: rotateY(180deg); background: #153b2b; color: var(--crystal); border-color: #276848; }
+.mine-back svg { width: 48%; height: 48%; }
+.mine-tile.flipped .mine-flip { transform: rotateY(180deg); }
+.mine-tile.bomb .mine-back { color: #ed8d8d; background: #432326; border-color: #8b4147; }
+.mine-tile.mine-dim { opacity: .45; }
+.mine-tile:hover:not(:disabled) .mine-front { border-color: var(--crystal); }
+.mine-tile:disabled { cursor: default; }
+.mines-stats { display: grid; grid-template-columns: 1fr 1fr 1.4fr; gap: 12px; margin: 24px 0 16px; }
+.mines-stat { background: var(--stone); border: 1px solid var(--ridge); padding: 16px; border-radius: 12px; min-width: 0; }
+.mines-stat>span,.mines-stat>label { display: block; color: var(--muted); font-size: 13px; margin-bottom: 12px; }
+.mines-stat>b { display: block; font: 600 28px/1.2 var(--body); font-variant-numeric: tabular-nums; }
+.mines-stat input { color: var(--text); background: var(--cave); border: 1px solid var(--ridge-2); border-radius: 8px; padding: 8px; width: 100%; font-size: 20px; }
+.mines-prize { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 13px; }
+.mines-prize img { width: 40px; height: 40px; object-fit: contain; }
+.mines-return small { display: block; color: var(--crystal-hi); margin-top: 8px; }
+.mines-stake { text-align: center; color: var(--muted); margin: 12px 0 24px; font-size: 13px; }
+.mines-stake .price { font-size: inherit; }
+@media(max-width:520px){.mines-board{gap:8px;margin:16px auto}.mines-stats{gap:8px}.mines-stat{padding:12px 8px}.mines-stat>label,.mines-stat>span{font-size:12px}.mines-stat>b{font-size:24px}.mines-prize{flex-direction:column;align-items:flex-start}.mines-prize img{width:32px;height:32px}}
+@media(prefers-reduced-motion:reduce){.mine-flip{transition:none}}

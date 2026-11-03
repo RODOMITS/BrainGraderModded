@@ -115,6 +115,10 @@ def init_db():
         CREATE TABLE IF NOT EXISTS user_catalogs(user_id TEXT PRIMARY KEY REFERENCES users(id), value TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS next_results(user_id TEXT NOT NULL REFERENCES users(id), game TEXT NOT NULL,
           value TEXT NOT NULL, PRIMARY KEY(user_id,game));
+        CREATE TABLE IF NOT EXISTS mines_games(id INTEGER PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id),
+          status TEXT NOT NULL, mine_count INTEGER NOT NULL, board TEXT NOT NULL, revealed TEXT NOT NULL,
+          stake TEXT NOT NULL, stake_value REAL NOT NULL, custom_session TEXT, created REAL NOT NULL, payout TEXT);
+        CREATE UNIQUE INDEX IF NOT EXISTS mines_active_user ON mines_games(user_id) WHERE status='active';
         CREATE TABLE IF NOT EXISTS inventory(id INTEGER PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id),
           item TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'owned', test INTEGER NOT NULL DEFAULT 0,
           source TEXT NOT NULL, created REAL NOT NULL);
@@ -141,6 +145,7 @@ def init_db():
         # Uploaded assets exist only in process memory; discard their previous inventory snapshots on restart.
         c.execute("DELETE FROM inventory WHERE json_extract(item,'$.customSession') IS NOT NULL")
         c.execute("DELETE FROM next_results WHERE json_extract(value,'$.item.customSession') IS NOT NULL")
+        c.execute("UPDATE mines_games SET status='expired' WHERE status='active' AND custom_session IS NOT NULL")
         if not c.execute('SELECT 1 FROM giveaways WHERE id=1').fetchone():
             source_path=ROOT/'source_catalog.json'
             source_items=json.loads(source_path.read_text(encoding='utf-8-sig'))['items'] if source_path.exists() else []
@@ -153,7 +158,7 @@ def init_db():
             c.execute('INSERT INTO settings VALUES (?,?)', ('catalog', json.dumps(dict(items=[],cases=[]))))
         # Preserve previous wins in the feed when upgrading an existing deployment.
         previous = c.execute('''SELECT i.* FROM inventory i
-          WHERE i.test=0 AND i.source IN ('case','upgrade','mystery','dice')
+          WHERE i.test=0 AND i.source IN ('case','upgrade','mystery','dice','mines')
           AND json_extract(i.item,'$.customSession') IS NULL
           AND NOT EXISTS(SELECT 1 FROM live_drops d WHERE d.inventory_id=i.id)''').fetchall()
         for row in previous:
@@ -266,7 +271,7 @@ def add_item(item, source, test=False, uid=None):
     created = time.time()
     iid = db().execute('INSERT INTO inventory(user_id,item,test,source,created) VALUES (?,?,?,?,?)',
                        (uid or g.uid,json.dumps(item),int(test),kind,created)).lastrowid
-    if not test and not item.get('customSession') and kind in ('case','upgrade','mystery','dice'):
+    if not test and not item.get('customSession') and kind in ('case','upgrade','mystery','dice','mines'):
         db().execute('INSERT INTO live_drops VALUES (?,?,?,?,?)',
                      (iid,json.dumps(item),json.dumps(details),item['price'],created))
     return iid
@@ -382,6 +387,47 @@ def take_next_result(game):
     return result
 
 
+def mines_multiplier(count, opened):
+    if not opened:
+        return 1.0
+    return math.floor(0.99*math.comb(25,opened)/math.comb(25-count,opened)*100)/100
+
+
+def mines_reward(value):
+    pool=[i for i in catalog()['items'] if i['price']<=value]
+    item=max(pool,key=lambda i:(i['price'],-i['id'])) if pool else None
+    return dict(item=item,coins=round(value-(item['price'] if item else 0),2),total=value)
+
+
+def mines_view(row):
+    opened=json.loads(row['revealed']); count=row['mine_count']
+    mult=mines_multiplier(count,len(opened))
+    value=round(row['stake_value']*mult,2)
+    result=json.loads(row['payout']) if row['payout'] else None
+    return dict(id=row['id'],status=row['status'],mines=count,revealed=opened,
+                bombs=json.loads(row['board']) if row['status']!='active' else [],
+                stake=json.loads(row['stake']),stakeValue=row['stake_value'],multiplier=mult,
+                reward=result if result else mines_reward(value),payout=result)
+
+
+def mines_current():
+    row=db().execute("SELECT * FROM mines_games WHERE user_id=? AND status='active'",(g.uid,)).fetchone()
+    if row and row['custom_session'] and (row['custom_session']!=g.play_session or not custom_session()):
+        db().execute("UPDATE mines_games SET status='expired' WHERE id=?",(row['id'],))
+        return None
+    return row
+
+
+def mines_cashout(row):
+    mult=mines_multiplier(row['mine_count'],len(json.loads(row['revealed'])))
+    payout=mines_reward(round(row['stake_value']*mult,2))
+    if payout['item']:
+        payout['inventoryId']=add_item(payout['item'],'mines')
+    db().execute('UPDATE users SET balance=balance+? WHERE id=?',(payout['coins'],g.uid))
+    db().execute("UPDATE mines_games SET status='cashed',payout=? WHERE id=?",(json.dumps(payout),row['id']))
+    return db().execute('SELECT * FROM mines_games WHERE id=?',(row['id'],)).fetchone()
+
+
 def dispatch(path, body):
     c=db()
     parts=path.split('/')
@@ -394,6 +440,43 @@ def dispatch(path, body):
         raise Problem('Пополнение и вывод отключены. Баланс можно изменить в общей админке.', 'payments_disabled',403)
     if path=='me': return me()
     if path=='config': return config()
+    if path=='mines/current' and not post:
+        row=mines_current()
+        return dict(game=mines_view(row) if row else None)
+    if path=='mines/start' and post:
+        if mines_current(): raise Problem('Сначала заверши текущую игру')
+        count=integer(body.get('mines'),1,24); rows=selected(body)
+        if len(rows)!=1: raise Problem('Выбери одного брейнрота для ставки')
+        item=rows[0]['item']; bombs=RNG.sample(range(25),count)
+        consume(rows,'mines')
+        gid=c.execute("INSERT INTO mines_games(user_id,status,mine_count,board,revealed,stake,stake_value,custom_session,created) VALUES (?,'active',?,?,'[]',?,?,?,?)",
+                      (g.uid,count,json.dumps(bombs),json.dumps(item),item['price'],item.get('customSession'),time.time())).lastrowid
+        return dict(game=mines_view(c.execute('SELECT * FROM mines_games WHERE id=?',(gid,)).fetchone()))
+    if path in ('mines/reveal','mines/cashout') and post:
+        row=mines_current()
+        if not row or row['id']!=integer(body.get('gameId')): raise Problem('Активная игра не найдена')
+        if path.endswith('cashout'):
+            row=mines_cashout(row)
+            return dict(game=mines_view(row),balance=user()['balance'])
+        tile=integer(body.get('tile'),0,24); opened=json.loads(row['revealed']); bombs=json.loads(row['board'])
+        if tile in opened: return dict(game=mines_view(row))
+        rig=take_next_result('mines')
+        if rig:
+            if rig['mode']=='safe' and tile in bombs:
+                other=RNG.choice([i for i in range(25) if i not in opened and i not in bombs])
+                bombs.remove(tile); bombs.append(other)
+            elif rig['mode']=='bomb' and tile not in bombs:
+                other=RNG.choice(bombs); bombs.remove(other); bombs.append(tile)
+        c.execute('UPDATE mines_games SET board=? WHERE id=?',(json.dumps(bombs),row['id']))
+        if tile in bombs:
+            c.execute("UPDATE mines_games SET status='lost',payout=? WHERE id=?",(json.dumps(dict(item=None,coins=0,total=0,bomb=tile)),row['id']))
+        else:
+            opened.append(tile)
+            c.execute('UPDATE mines_games SET revealed=? WHERE id=?',(json.dumps(opened),row['id']))
+        row=c.execute('SELECT * FROM mines_games WHERE id=?',(row['id'],)).fetchone()
+        if row['status']=='active' and len(opened)==25-row['mine_count']:
+            row=mines_cashout(row)
+        return dict(game=mines_view(row),balance=user()['balance'])
     if path in ('ping','diag'): return dict(ok=True)
     if path=='avatar': raise Problem('Нет аватара','not_found',404)
     if path=='inventory' and not post: return inventory()
@@ -525,13 +608,15 @@ def dispatch(path, body):
                     history=[dict(r) for r in c.execute('SELECT id,user_id,kind,created FROM history WHERE user_id=? ORDER BY id DESC LIMIT 50',(g.uid,))])
     if path in ('admin/next-result','admin/next-result/cancel') and post:
         game=body.get('game')
-        if game not in ('case','upgrade','mystery','dice'):
+        if game not in ('case','upgrade','mystery','dice','mines'):
             raise Problem('Выбери игру')
         if path.endswith('/cancel'):
             c.execute('DELETE FROM next_results WHERE user_id=? AND game=?',(g.uid,game))
             return dict(ok=True)
         mode=body.get('mode','item')
-        if mode not in ('item','win','lose','bonus') or (game in ('case','mystery') and mode!='item') or (mode=='bonus' and game!='dice'):
+        allowed={'case':('item',),'mystery':('item',),'upgrade':('item','win','lose'),
+                 'dice':('item','win','lose','bonus'),'mines':('safe','bomb')}
+        if mode not in allowed[game]:
             raise Problem('Для кейса и мистери выбери конкретный предмет')
         item=None
         if mode=='item':
@@ -632,7 +717,7 @@ def api(path):
     if not isinstance(body,dict): raise Problem('Нужен JSON-объект')
     c=db()
     try:
-        c.execute('BEGIN IMMEDIATE' if request.method=='POST' or path=='giveaways' else 'BEGIN')
+        c.execute('BEGIN IMMEDIATE' if request.method=='POST' or path in ('giveaways','mines/current') else 'BEGIN')
         key=body.get('key'); fingerprint=json.dumps(body,sort_keys=True,separators=(',',':'))
         if key is not None:
             if not isinstance(key,str) or not 1<=len(key)<=100: raise Problem('Неверный ключ операции')
