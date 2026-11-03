@@ -13,6 +13,8 @@ import time
 import threading
 from datetime import datetime, timezone
 from urllib.parse import parse_qsl
+from urllib.request import Request, urlopen
+from urllib.error import HTTPError, URLError
 
 from flask import Flask, Response, g, jsonify, redirect, request, send_from_directory
 
@@ -27,6 +29,8 @@ DB_PATH = Path(os.getenv('DATABASE_PATH', str(ROOT / 'data' / 'brainrot.db')))
 RNG = secrets.SystemRandom()
 CUSTOM_SESSIONS = {}
 CUSTOM_LOCK = threading.RLock()
+REAL_LIVE = {}
+REAL_LIVE_LOCK = threading.RLock()
 
 
 def custom_session(create=False):
@@ -116,6 +120,7 @@ def init_db():
           balance REAL NOT NULL DEFAULT 10000 CHECK(balance>=0), testBalance REAL NOT NULL DEFAULT 100000,
           cases INTEGER NOT NULL DEFAULT 0, upgrades INTEGER NOT NULL DEFAULT 0);
         CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS user_live(user_id TEXT PRIMARY KEY, value TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS user_catalogs(user_id TEXT PRIMARY KEY REFERENCES users(id), value TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS next_results(user_id TEXT NOT NULL REFERENCES users(id), game TEXT NOT NULL,
           value TEXT NOT NULL, PRIMARY KEY(user_id,game));
@@ -281,7 +286,7 @@ def add_item(item, source, test=False, uid=None):
     return iid
 
 
-def home():
+def local_home():
     def drop(row):
         if row is None:
             return None
@@ -293,6 +298,51 @@ def home():
     top = db().execute('SELECT * FROM live_drops WHERE created>=? ORDER BY price DESC,created DESC LIMIT 1',
                        (start_of_day,)).fetchone()
     return dict(top=drop(top),drops=[drop(row) for row in recent],bonus=None)
+
+
+def live_settings():
+    row=db().execute('SELECT value FROM user_live WHERE user_id=?',(g.uid,)).fetchone()
+    return json.loads(row[0]) if row else dict(mode='local',drops=[],topId=None)
+
+
+def home():
+    config=live_settings()
+    if config['mode']=='editor':
+        drops=[dict(d,source=dict(kind=d['source']) if isinstance(d.get('source'),str) else d.get('source')) for d in config['drops']]
+        top=next((d for d in drops if d['id']==config.get('topId')),None)
+        return dict(drops=drops,top=top or max(drops,key=lambda d:d['price'],default=None),bonus=None,liveMode='editor')
+    if config['mode']!='real':
+        return dict(local_home(),liveMode='local')
+    key=(g.uid,g.play_session)
+    # Credentials and cached original responses remain in memory, never in SQLite/history.
+    with REAL_LIVE_LOCK:
+        entry=REAL_LIVE.get(key)
+        if not entry or entry['expires']<time.time():
+            REAL_LIVE.pop(key,None)
+            return dict(drops=[],top=None,bonus=None,liveMode='real',liveError='Подключи сессию оригинала в редакторе лайв-дропов')
+        if entry.get('next',0)>time.time():
+            return entry['data']
+        try:
+            req=Request('https://brainrotgrader.com/api/home',headers={'Authorization':'tma '+entry['token'],'Accept':'application/json'})
+            with urlopen(req,timeout=4) as response:
+                data=json.loads(response.read(512_001))
+            if not isinstance(data,dict) or not isinstance(data.get('drops'),list):
+                raise ValueError('format')
+            clean=[]
+            def clean_drop(d):
+                if not isinstance(d,dict): raise ValueError('drop')
+                image=str(d.get('image',''))
+                if not image.startswith('/img/'): image='/img/coin.webp'
+                return dict(id='real:'+str(d.get('id',''))[:100],name=str(d.get('name',''))[:120],
+                            image=image,price=number(d.get('price',0)),rarity=d.get('rarity') if d.get('rarity') in ('common','rare','epic','legendary','og') else 'common',
+                            source=d.get('source') if isinstance(d.get('source'),(str,dict)) else 'case',createdAt=d.get('createdAt'))
+            clean=[clean_drop(d) for d in data['drops'][:30]]
+            entry['data']=dict(drops=clean,top=clean_drop(data['top']) if data.get('top') else None,bonus=None,liveMode='real')
+        except (HTTPError,URLError,TimeoutError,ValueError,TypeError,OSError,Problem) as error:
+            message='Оригинал отклонил сессию. Открой его заново и переподключись.' if isinstance(error,HTTPError) and error.code in (401,403) else 'Лента оригинала временно недоступна'
+            entry['data']=dict(entry.get('data') or dict(drops=[],top=None,bonus=None),liveMode='real',liveError=message)
+        entry['next']=time.time()+10
+        return entry['data']
 
 
 def settle_giveaways():
@@ -537,7 +587,7 @@ def dispatch(path, body):
         chance=target['chance']
         roll=RNG.random()*100
         if rig:
-            roll=chance/2 if rig['mode']!='lose' else chance+(100-chance)/2
+            roll=RNG.random()*chance if rig['mode']!='lose' else chance+RNG.random()*(100-chance)
         won=roll<chance
         consume(rows,'upgraded')
         c.execute('UPDATE users SET upgrades=upgrades+1 WHERE id=?',(g.uid,))
@@ -605,7 +655,7 @@ def dispatch(path, body):
         c.execute('UPDATE users SET balance=balance+? WHERE id=?',(r['reward'],g.uid))
         return dict(type='coins',kind='coins',reward=r['reward'],balance=user()['balance'])
     if path=='admin/state' and not post:
-        result=dict(me=me(),promos=[dict(r) for r in c.execute('SELECT * FROM promos')],nextResults={})
+        result=dict(me=me(),promos=[dict(r) for r in c.execute('SELECT * FROM promos')],nextResults={},live=live_settings())
         if request.args.get('catalog','1')!='0':
             result['catalog']=catalog()
         for r in c.execute('SELECT game,value FROM next_results WHERE user_id=?',(g.uid,)):
@@ -613,6 +663,24 @@ def dispatch(path, body):
             if not value.get('item') or visible_item(value['item']):
                 result['nextResults'][r['game']]=value
         return result
+    if path=='admin/live' and post:
+        mode=body.get('mode')
+        if mode not in ('local','editor','real'): raise Problem('Выбери источник ленты')
+        rows=body.get('drops',[])
+        if not isinstance(rows,list) or len(rows)>30: raise Problem('В ленте максимум 30 дропов')
+        drops=[]
+        for row in rows:
+            if not isinstance(row,dict): raise Problem('Неверная запись дропа')
+            item=find_item(row.get('itemId'))
+            if not item or item.get('customSession'): raise Problem('Выбери обычный предмет из каталога')
+            ident=str(row.get('id') or secrets.token_hex(8))[:80]
+            if any(d['id']==ident for d in drops): raise Problem('Повторный ID дропа')
+            source=row.get('source','case')
+            if source not in ('case','upgrade','mystery','dice','mines'): raise Problem('Неизвестная игра')
+            drops.append(dict(item,id=ident,itemId=item['id'],source=source,createdAt=iso(time.time())))
+        live_config=dict(mode=mode,drops=drops,topId=body.get('topId'))
+        c.execute('INSERT OR REPLACE INTO user_live VALUES (?,?)',(g.uid,json.dumps(live_config)))
+        return dict(ok=True)
     if path in ('admin/next-result','admin/next-result/cancel') and post:
         game=body.get('game')
         if game not in ('case','upgrade','mystery','dice','mines'):
@@ -741,6 +809,24 @@ def api(path):
     except Exception:
         c.rollback()
         raise
+
+
+@app.post('/api/admin/live-connect')
+def connect_real_live():
+    body=request.get_json(silent=True) or {}
+    if not isinstance(body,dict): raise Problem('Нужен JSON-объект')
+    if not g.play_session: raise Problem('Переоткрой приложение для подключения сессии')
+    token=body.get('initData','')
+    if not isinstance(token,str) or not 20<len(token)<16000 or '\n' in token or '\r' in token:
+        raise Problem('Вставь Telegram.WebApp.initData из оригинального приложения')
+    with REAL_LIVE_LOCK:
+        now=time.time()
+        for key in list(REAL_LIVE):
+            if REAL_LIVE[key]['expires']<now: del REAL_LIVE[key]
+        if len(REAL_LIVE)>=100 and (g.uid,g.play_session) not in REAL_LIVE:
+            raise Problem('Слишком много подключений. Попробуй позже')
+        REAL_LIVE[(g.uid,g.play_session)]=dict(token=token,expires=now+3600)
+    return jsonify(dict(ok=True))
 
 
 @app.post('/api/admin/custom-item')

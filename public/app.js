@@ -1067,6 +1067,14 @@
     const bar = $('#livebar');
     if (!bar) return;
     if (!bar.firstChild) bar.innerHTML = '<div class="lb-head"><span class="live"><i></i>LIVE</span></div><div class="lb-top" id="lbTop"></div><div class="lb-list" id="lbList"></div>';
+    const head=$('.lb-head',bar);
+    head.title=home.liveError||'';
+    head.innerHTML='<span class="live"><i></i>LIVE</span>';
+    if(home.liveError){const error=document.createElement('small');error.textContent=home.liveError;head.append(error);}
+    const signature=JSON.stringify([home.liveMode,home.drops]);
+    if(live.signature!==signature && home.liveMode==='editor')animate=false;
+    if(live.mode!==home.liveMode)animate=false;
+    live.signature=signature;live.mode=home.liveMode;
     const top = home.top;
     $('#lbTop', bar).innerHTML = top
       ? (rememberDrop(top), '') + `<div class="lb-top-in swap rar-${esc(top.rarity)}" data-drop="${esc(top.id)}" role="link" tabindex="0"><span class="td-label">🏆 Топ-дроп дня</span>${ogTag(top)}<img src="${itemImg(top.image)}" alt=""><b>${esc(top.name)}</b><span class="td-price">${COIN}${fmt(top.price)}</span>${srcLayer(top)}</div>`
