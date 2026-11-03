@@ -5,7 +5,8 @@ if (!/^[a-f0-9]{32}$/.test(window.playSession || '')) {
   window.playSession = crypto.randomUUID().replaceAll('-', '');
   sessionStorage.setItem('bg_play_session', window.playSession);
 }
-window.sandboxReady = fetch('/api/me', {credentials:'same-origin',headers:{'X-Play-Session':window.playSession}}).then(r => {
+// Admin has a single initial request that establishes the guest cookie itself.
+window.sandboxReady = document.currentScript?.hasAttribute('data-admin-bootstrap') ? Promise.resolve(null) : fetch('/api/me', {credentials:'same-origin',headers:{'X-Play-Session':window.playSession}}).then(r => {
   if(!r.ok) throw new Error('Не удалось создать сессию');
   return r.json();
 });

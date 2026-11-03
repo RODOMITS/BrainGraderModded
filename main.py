@@ -18,7 +18,7 @@ from flask import Flask, Response, g, jsonify, redirect, request, send_from_dire
 
 ROOT = Path(__file__).resolve().parent
 FRONTEND_BUILD = hashlib.sha256(b''.join(
-    (ROOT/'public'/name).read_bytes() for name in ('index.html','app.js','styles.css','sandbox.js')
+    (ROOT/'public'/name).read_bytes() for name in ('index.html','app.js','styles.css','sandbox.js','admin.html','admin.js','telegram-web-app.js')
     if (ROOT/'public'/name).is_file()
 )).hexdigest()[:12]
 app = Flask(__name__, static_folder=None)
@@ -605,11 +605,14 @@ def dispatch(path, body):
         c.execute('UPDATE users SET balance=balance+? WHERE id=?',(r['reward'],g.uid))
         return dict(type='coins',kind='coins',reward=r['reward'],balance=user()['balance'])
     if path=='admin/state' and not post:
-        return dict(me=me(),
-                    catalog=catalog(),promos=[dict(r) for r in c.execute('SELECT * FROM promos')],
-                    nextResults={r['game']:json.loads(r['value']) for r in c.execute('SELECT game,value FROM next_results WHERE user_id=?',(g.uid,))
-                                 if not json.loads(r['value']).get('item') or visible_item(json.loads(r['value'])['item'])},
-                    history=[dict(r) for r in c.execute('SELECT id,user_id,kind,created FROM history WHERE user_id=? ORDER BY id DESC LIMIT 50',(g.uid,))])
+        result=dict(me=me(),promos=[dict(r) for r in c.execute('SELECT * FROM promos')],nextResults={})
+        if request.args.get('catalog','1')!='0':
+            result['catalog']=catalog()
+        for r in c.execute('SELECT game,value FROM next_results WHERE user_id=?',(g.uid,)):
+            value=json.loads(r['value'])
+            if not value.get('item') or visible_item(value['item']):
+                result['nextResults'][r['game']]=value
+        return result
     if path in ('admin/next-result','admin/next-result/cancel') and post:
         game=body.get('game')
         if game not in ('case','upgrade','mystery','dice','mines'):
@@ -834,7 +837,9 @@ def index():
 
 
 @app.get('/admin')
-def admin(): return send_from_directory(ROOT/'public','admin.html')
+def admin():
+    html=(ROOT/'public'/'admin.html').read_text(encoding='utf-8').replace('__BG_BUILD__',FRONTEND_BUILD)
+    return Response(html,mimetype='text/html',headers={'Cache-Control':'no-store'})
 
 
 @app.get('/<path:name>')
@@ -843,7 +848,7 @@ def static(name): return send_from_directory(ROOT/'public',name)
 
 init_db()
 if __name__=='__main__':
-    required = ['index.html', 'admin.html', 'app.js', 'styles.css', 'sandbox.js', 'og-sound.js']
+    required = ['index.html', 'admin.html', 'admin.js', 'app.js', 'styles.css', 'sandbox.js', 'og-sound.js', 'telegram-web-app.js']
     missing = [name for name in required if not (ROOT / 'public' / name).is_file()]
     if missing:
         raise SystemExit('Missing frontend files in /app/public: ' + ', '.join(missing)
