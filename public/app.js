@@ -310,6 +310,7 @@
     } catch {}
   }
   function lockedNotice() {
+    if(state.welcomeOpen)return;
     if (Date.now() - lastLockToast < 1500) return;
     lastLockToast = Date.now();
     tick();
@@ -317,6 +318,7 @@
   }
   // Клики по ссылкам, «+», меню и аватарке не срабатывают, пока идёт прокрутка
   document.addEventListener('click', (e) => {
+    if(e.target.closest('.modded-welcome'))return;
     if (!state.locked) return;
     if (e.target.closest('a[href], #topup, #avatar, #menuBtn, .back')) {
       e.preventDefault();
@@ -4529,13 +4531,13 @@
 
   function showModdedWelcome(){
     return new Promise(resolve=>{
-      const dialog=h(`<dialog class="modded-welcome" aria-labelledby="moddedWelcomeTitle"><div class="mw-content"><h2 id="moddedWelcomeTitle">Привет, спасибо что зашёл в мой Моддед!</h2><p>Я старался чтобы сделать этот проект, поддержи меня подписавшись на <a href="https://t.me/brainrotmoddedgrader" id="mwChannel">@brainrotmoddedgrader</a>🙏</p><button class="btn" id="mwConfirm" disabled>Ясно, спасибо (5)</button></div></dialog>`);
+      const dialog=h(`<dialog class="modded-welcome" aria-labelledby="moddedWelcomeTitle"><div class="mw-content"><h2 id="moddedWelcomeTitle">Привет, спасибо что зашёл в мой Моддед!</h2><p>Я старался чтобы сделать этот проект, поддержи меня подписавшись на <a href="https://t.me/brainrotmoddedgrader" id="mwChannel">@brainrotmoddedgrader</a>🙏</p><button class="btn" id="mwConfirm" disabled>Ясно, спасибо (10)</button></div></dialog>`);
       const button=$('#mwConfirm',dialog),previousLocked=state.locked;
-      state.locked=true;
+      state.welcomeOpen=true;state.locked=true;
       try{TG?.BackButton?.hide();}catch{}
       dialog.addEventListener('cancel',event=>event.preventDefault());
       document.body.append(dialog);dialog.showModal();
-      const deadline=performance.now()+5000;
+      const deadline=performance.now()+10000;
       const tickWelcome=()=>{
         const left=Math.max(0,Math.ceil((deadline-performance.now())/1000));
         button.textContent=left?`Ясно, спасибо (${left})`:'Ясно, спасибо';
@@ -4545,7 +4547,7 @@
       const timer=setInterval(tickWelcome,100);
       button.onclick=()=>{
         if(button.disabled||performance.now()<deadline)return;
-        clearInterval(timer);state.locked=previousLocked;dialog.close();dialog.remove();
+        clearInterval(timer);state.welcomeOpen=false;state.locked=previousLocked;dialog.close();dialog.remove();
         try{if((location.hash||'#/')!=='#/')TG?.BackButton?.show();}catch{}
         resolve();
       };
