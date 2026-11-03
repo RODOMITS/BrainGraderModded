@@ -1757,3 +1757,14 @@ html.admin-concealed a[href="/admin"] { display: none; }
   70% { transform: translate3d(2px,-1px,0); }
 }
 @media(prefers-reduced-motion:reduce){.mines-loss-burst{animation:none}.mines-loss-burst .mine-tile.bomb .mine-back{box-shadow:none}}
+.mines-wrap { max-width: 1240px; }
+.mines-stats { max-width: 800px; margin-left: auto; margin-right: auto; }
+#minesGo { display: block; max-width: 800px; margin-left: auto; margin-right: auto; }
+.mines-bet-panels { display: grid; grid-template-columns: minmax(0,1fr); gap: 16px; }
+.mines-bet-panels .up-col { min-width: 0; max-height: 620px; overflow-y: auto; padding: 16px; border-radius: 20px; background: rgba(19,26,24,.6); border: 1px solid var(--ridge); scrollbar-width: thin; }
+.mines-bet-panels .col-head { display: flex !important; margin-top: 0; }
+.mines-bet-panels .items { grid-template-columns: repeat(auto-fill,minmax(118px,1fr)); gap: 8px; }
+.mines-bet-panels button.item:disabled { cursor: default; }
+.mines-bet-panels .item.sel { border-color: var(--crystal); background: var(--crystal-dim); }
+@media(min-width:900px){.mines-bet-panels{grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}.mines-bet-tabs{display:none}}
+@media(max-width:899px){.mines-bet-panels[data-tab='mine'] .mines-shop-panel,.mines-bet-panels[data-tab='shop'] .mines-mine-panel{display:none}.mines-bet-panels .items{grid-template-columns:repeat(3,minmax(0,1fr))}}

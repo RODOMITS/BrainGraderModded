@@ -95,7 +95,7 @@
       fast: !!p.fast,
       showAdmin: p.showAdmin !== false,
       modded: p.modded !== false,
-      minesEnabled: !!p.minesEnabled,
+      minesEnabled: p.minesEnabled !== false,
       minesCount: Number.isInteger(p.minesCount) && p.minesCount>=1 && p.minesCount<=24 ? p.minesCount : 3,
       sound: p.sound !== false,
       volume: Number.isFinite(v) ? Math.min(100, Math.max(0, Math.round(v))) : 60,
@@ -2915,7 +2915,7 @@
   //                         КОЛОР ДАЙС
   // 4 кубика по 6 цветов: выбираешь цвет и ставку, выплата за число кубиков твоего цвета.
   // =====================================================================
-  const minesUI = { game: null, inv: [], pool: [], selected: null, busy: false };
+  const minesUI = { game: null, inv: [], pool: [], selected: null, busy: false, tab: 'mine', shopQuery: '' };
   const mineGlyph = (bomb) => bomb
     ? '<svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="14" cy="19" r="9" fill="currentColor"/><path d="m20 12 4-4m-2-3 4 4m-1-8 1 3m3 2 3-1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="m9 17 2-3" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>'
     : '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M8 5h16l6 9-14 15L2 14z" fill="currentColor"/><path d="M2 14h28M8 5l8 24L24 5" fill="none" stroke="#103d2c" stroke-width="1.5"/></svg>';
@@ -2994,12 +2994,23 @@
       minesUI.pool=shop.items;
       minesUI.busy=false;
       minesUI.selected=null;
+      minesUI.tab='mine';minesUI.shopQuery='';
       if (current.game) prefs.minesCount=current.game.mines;
       view.innerHTML=`<section class="mines-wrap"><div class="section-head"><h1>Мины</h1><span class="muted" id="minesStatus">Выбери ставку</span></div>
         <div class="mines-board" id="minesBoard" role="group" aria-label="Поле мин 5 на 5">${Array.from({length:25},(_,i)=>`<button class="mine-tile" data-tile="${i}" aria-label="Клетка ${i+1}"><span class="mine-flip"><span class="mine-front"><i></i></span><span class="mine-back"></span></span></button>`).join('')}</div>
         <div class="mines-stats"><div class="mines-stat"><label for="minesCount">Количество мин</label><input id="minesCount" type="number" min="1" max="24" step="1" inputmode="numeric" value="${prefs.minesCount}"></div><div class="mines-stat"><span>Множитель</span><b id="minesMult">×1</b></div><div class="mines-stat mines-return"><span>Получишь</span><div id="minesReward"></div></div></div>
         <button class="btn" id="minesGo">Начать</button>
-        <div class="mines-stake" id="minesStake"></div><h2>Брейнрот для ставки</h2><div class="items" id="minesInv"></div></section>`;
+        <div class="mines-stake" id="minesStake"></div>
+        <div class="mines-bet-panels" id="minesBetPanels" data-tab="mine">
+          <div class="seg mines-bet-tabs" role="group" aria-label="Предметы для ставки"><button data-mines-tab="mine" class="on">Мои брейнроты</button><button data-mines-tab="shop">Магазин</button></div>
+          <div class="up-col mines-mine-panel"><div class="section-head col-head"><h2>Мои брейнроты</h2><span class="muted" id="minesMineN"></span></div><div id="minesInv"></div></div>
+          <div class="up-col mines-shop-panel"><div class="section-head col-head"><h2>Брейнроты</h2><span class="muted">купить за баланс</span></div><div class="seg up-rseg"><button class="on" disabled>🛒 Магазин</button></div>
+            <input class="up-search" id="minesShopSearch" placeholder="Поиск брейнрота" autocomplete="off"><div id="minesShop"></div></div>
+        </div></section>`;
+      $$('[data-mines-tab]').forEach(button=>button.onclick=()=>{
+        minesUI.tab=button.dataset.minesTab;drawMinesPanels();tick();
+      });
+      $('#minesShopSearch').oninput=()=>{minesUI.shopQuery=$('#minesShopSearch').value;drawMinesShop();};
       $$('#minesBoard [data-tile]').forEach(button=>button.onclick=()=>{
         if (!minesUI.game || minesUI.game.status!=='active' || minesUI.busy) return;
         minesMove('/api/mines/reveal',{gameId:minesUI.game.id,tile:Number(button.dataset.tile)});
@@ -3018,19 +3029,70 @@
         if(!item||!Number.isInteger(n)||n<1||n>24)return;
         minesMove('/api/mines/start',{ids:[item.id],mines:n});
       };
-      drawMinesInventory();drawMinesBoard();drawMinesSummary();
+      drawMinesInventory();drawMinesShop();drawMinesPanels();drawMinesBoard();drawMinesSummary();
     } catch(e){if(!stale(t)){view.innerHTML='<div class="empty">Не удалось открыть мины</div>';fail(e);}}
   }
 
   function drawMinesInventory(){
     const box=$('#minesInv');if(!box)return;
-    box.innerHTML=minesUI.inv.length?minesUI.inv.map(i=>`<button class="item rar-${esc(i.item.rarity)} ${minesUI.selected===i.id?'sel':''}" data-mine-item="${i.id}" ${minesUI.game?.status==='active'||minesUI.busy?'disabled':''}>${ogTag(i.item)}<img src="${itemImg(i.item.image)}" alt=""><div class="n">${esc(i.item.name)}</div>${price(i.item.price)}</button>`).join(''):'<div class="empty">Нет брейнротов для ставки. Открой кейс или выдай предмет в админке</div>';
-    $$('[data-mine-item]',box).forEach(button=>button.onclick=()=>{
-      if(minesUI.busy||minesUI.game?.status==='active')return;
-      minesUI.selected=Number(button.dataset.mineItem);
-      drawMinesInventory();drawMinesSummary();
+    $('#minesMineN').textContent=minesUI.inv.length?`${minesUI.inv.length} шт.`:'';
+    const disabled=minesUI.game?.status==='active'||minesUI.busy;
+    const signature=minesUI.inv.map(i=>i.id).join(',');
+    if(box.dataset.sig!==signature||!box.firstChild){
+      box.dataset.sig=signature;
+      box.innerHTML=minesUI.inv.length?`<div class="items">${minesUI.inv.map(i=>`<button class="item rar-${esc(i.item.rarity)}" data-mine-item="${i.id}">${ogTag(i.item)}${boughtTag(i)}<img loading="lazy" decoding="async" src="${itemImg(i.item.image)}" alt=""><div class="n">${esc(i.item.name)}</div>${price(i.item.price)}</button>`).join('')}</div>`:'<div class="empty">Пока нечего поставить. Открой кейс или купи брейнрота справа<a class="btn" href="#/">К кейсам</a></div>';
+      box.onclick=event=>{
+        const button=event.target.closest('[data-mine-item]');if(!button)return;
+        if(minesUI.busy||minesUI.game?.status==='active')return;
+        const id=Number(button.dataset.mineItem);minesUI.selected=minesUI.selected===id?null:id;
+        tick();drawMinesInventory();drawMinesSummary();
+      };
+    }
+    $$('[data-mine-item]',box).forEach(button=>{
+      button.disabled=disabled;
+      button.classList.toggle('sel',minesUI.selected===Number(button.dataset.mineItem));
     });
   }
+
+  function drawMinesPanels(){
+    const panels=$('#minesBetPanels');if(!panels)return;
+    panels.dataset.tab=minesUI.tab;
+    $$('[data-mines-tab]',panels).forEach(button=>button.classList.toggle('on',button.dataset.minesTab===minesUI.tab));
+  }
+
+  function drawMinesShop(){
+    const box=$('#minesShop');if(!box)return;
+    const query=minesUI.shopQuery.trim().toLowerCase();
+    const list=minesUI.pool.filter(i=>i.name.toLowerCase().includes(query)).sort((a,b)=>a.price-b.price||a.id-b.id);
+    const signature=query+'|'+list.map(i=>`${i.id}:${i.price}`).join(',');
+    if(box.dataset.sig!==signature||!box.firstChild){
+      box.dataset.sig=signature;
+      box.innerHTML=`<div class="shop-warn">⚠️ <b>Брейнротов из магазина нельзя вывести.</b> Купленного можно поставить в апгрейд, сыграть в мистери или продать за ту же цену. А то, что выиграешь в апгрейде, выводится как обычно.</div><div class="items">${list.map(it=>`<button class="item rar-${esc(it.rarity)}" data-mine-buy="${it.id}">${ogTag(it)}<img loading="lazy" decoding="async" src="${itemImg(it.image)}" alt=""><div class="n">${esc(it.name)}</div>${price(it.price)}<small class="buy-lbl">Купить</small></button>`).join('')||'<div class="empty">Ничего не нашлось</div>'}</div>`;
+    }
+    $$('[data-mine-buy]',box).forEach(button=>button.disabled=minesUI.busy||minesUI.game?.status==='active');
+    box.onclick=event=>{
+      const button=event.target.closest('[data-mine-buy]');if(!button)return;
+      buyMinesShop(minesUI.pool.find(i=>i.id===Number(button.dataset.mineBuy)));
+    };
+  }
+
+  async function buyMinesShop(it){
+    if(!it||minesUI.busy||minesUI.game?.status==='active')return;
+    if(state.me.balance<it.price){toast('Недостаточно BG на балансе','err');return openDeposit();}
+    const ok=await confirmBox(`Купить «${it.name}» за ${fmt(it.price)} BG?\n\nКупленного брейнрота вывести нельзя — его можно поставить в мины, апгрейд, сыграть в мистери или продать за ту же цену.`,{ok:'Купить'});
+    if(!ok||minesUI.busy||minesUI.game?.status==='active')return;
+    const t=state.render;minesUI.busy=true;drawMinesBoard();drawMinesSummary();drawMinesInventory();drawMinesShop();
+    try{
+      const r=await api('/api/shop/buy',{method:'POST',body:{itemId:it.id,key:newKey()}});
+      setBalance(r.balance);haptic('success');
+      minesUI.inv=(await api('/api/inventory')).filter(i=>i.status==='owned'&&!i.test);
+      minesUI.selected=r.inventoryId;minesUI.tab='mine';
+      toast(`${r.item?.name||it.name} в инвентаре — выбран для ставки`);
+    }catch(e){fail(e);}
+    finally{minesUI.busy=false;if(!stale(t)){drawMinesBoard();drawMinesSummary();drawMinesInventory();drawMinesShop();drawMinesPanels();}}
+  }
+
+  /* Inventory and shop use the same item cards and purchase API as the upgrader. */
 
   function drawMinesBoard(){
     const game=minesUI.game;const active=game?.status==='active';
@@ -3066,7 +3128,7 @@
 
   async function minesMove(path,body){
     if(minesUI.busy)return;
-    const t=state.render;minesFx.clear();minesUI.busy=true;drawMinesBoard();drawMinesSummary();drawMinesInventory();
+    const t=state.render;minesFx.clear();minesUI.busy=true;drawMinesBoard();drawMinesSummary();drawMinesInventory();drawMinesShop();
     try{
       const r=await api(path,{method:'POST',body:{...body,key:newKey()}});
       minesUI.game=r.game;minesUI.selected=null;
@@ -3087,7 +3149,7 @@
       }else if(!stale(t))tick();
       minesUI.inv=(await api('/api/inventory')).filter(i=>i.status==='owned'&&!i.test);
     }catch(e){fail(e);try{minesUI.game=(await api('/api/mines/current')).game;}catch{}}
-    finally{minesUI.busy=false;if(!stale(t)){drawMinesBoard();drawMinesSummary();drawMinesInventory();}}
+    finally{minesUI.busy=false;if(!stale(t)){drawMinesBoard();drawMinesSummary();drawMinesInventory();drawMinesShop();}}
   }
 
   const dice = { color: 0, sel: [], inv: [], busy: false };
