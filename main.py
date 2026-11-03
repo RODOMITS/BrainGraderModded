@@ -19,6 +19,9 @@ from urllib.error import HTTPError, URLError
 from flask import Flask, Response, g, jsonify, redirect, request, send_from_directory
 
 ROOT = Path(__file__).resolve().parent
+STREAK_SOURCE=(ROOT/'source_streak.json').read_bytes()
+DEFAULT_STREAK=json.loads(STREAK_SOURCE)['track']
+STREAK_VERSION=hashlib.sha256(STREAK_SOURCE).hexdigest()[:12]
 FRONTEND_BUILD = hashlib.sha256(b''.join(
     (ROOT/'public'/name).read_bytes() for name in ('index.html','app.js','styles.css','sandbox.js','admin.html','admin.js','admin.css','admin-visual.js','ui-audio.js','telegram-web-app.js')
     if (ROOT/'public'/name).is_file()
@@ -451,7 +454,13 @@ def take_next_result(game):
 
 def streak_config():
     row=db().execute('SELECT value FROM settings WHERE key=?',('streak:'+g.uid,)).fetchone()
-    return json.loads(row[0]) if row else dict(enabled=True,resetOnMiss=True,rewards=[dict(kind='coins',amount=n) for n in (100,150,200,250,300,400,500)])
+    return json.loads(row[0]) if row else dict(enabled=True,resetOnMiss=True,rewards=DEFAULT_STREAK,version=STREAK_VERSION)
+
+
+def configured_streak_reward(cfg,day):
+    reward=streak_reward(cfg['rewards'][(day-1)%len(cfg['rewards'])],day)
+    if cfg.get('version'): reward['scheduleVersion']=cfg['version']
+    return reward
 
 
 def streak_reward(spec,day):
@@ -477,11 +486,15 @@ def streak_view(checkin=False):
         broken=bool(row and row['last_day'] is not None and today-row['last_day']>1 and cfg['resetOnMiss'])
         count=1 if broken else count+1;best=max(best,count);fresh=True
         c.execute('INSERT OR REPLACE INTO streak_progress VALUES (?,?,?,?)',(g.uid,today,count,best))
-        reward=streak_reward(cfg['rewards'][(count-1)%len(cfg['rewards'])],count)
+        reward=configured_streak_reward(cfg,count)
         c.execute('INSERT INTO streak_rewards VALUES (?,?,?,?,?,0)',(secrets.token_hex(16),g.uid,count,json.dumps(reward),(today+1)*86400-10800))
     pending=[]
     for r in c.execute('SELECT * FROM streak_rewards WHERE user_id=? AND claimed=0 AND expires>? ORDER BY rowid',(g.uid,time.time())):
-        reward=json.loads(r['reward']);reward.pop('pool',None);reward.pop('item',None)
+        reward=json.loads(r['reward'])
+        if checkin and cfg.get('version') and reward.get('scheduleVersion')!=cfg['version']:
+            reward=configured_streak_reward(cfg,r['day'])
+            c.execute('UPDATE streak_rewards SET reward=? WHERE id=?',(json.dumps(reward),r['id']))
+        reward.pop('pool',None);reward.pop('item',None)
         pending.append(dict(reward,id=r['id'],expiresAt=iso(r['expires']),claimed=False,canClaim=True,deposited=0))
     days=max(len(cfg['rewards']),count+6)
     templates=[streak_reward(spec,0) for spec in cfg['rewards']]
@@ -699,7 +712,10 @@ def dispatch(path, body):
         if not streak_config()['enabled']: raise Problem('Серия заходов выключена')
         row=c.execute('SELECT * FROM streak_rewards WHERE id=? AND user_id=?',(str(body.get('id','')),g.uid)).fetchone()
         if not row or row['claimed'] or row['expires']<=time.time(): raise Problem('Награда уже получена или истекла')
-        reward=json.loads(row['reward']);c.execute('UPDATE streak_rewards SET claimed=1 WHERE id=?',(row['id'],))
+        reward=json.loads(row['reward']);cfg=streak_config()
+        if cfg.get('version') and reward.get('scheduleVersion')!=cfg['version']:
+            reward=configured_streak_reward(cfg,row['day'])
+        c.execute('UPDATE streak_rewards SET claimed=1 WHERE id=?',(row['id'],))
         if reward['kind']=='coins':
             c.execute('UPDATE users SET balance=balance+? WHERE id=?',(reward['amount'],g.uid))
             return dict(kind='coins',amount=reward['amount'],balance=user()['balance'])
@@ -708,6 +724,9 @@ def dispatch(path, body):
         item={k:v for k,v in item.items() if k!='weight'}
         return dict(kind='item',item=item,inventoryId=add_item(item,'streak'),balance=user()['balance'],fromCase=reward['kind']=='case')
     if path=='admin/streak' and not post: return dict(config=streak_config(),progress=streak_view())
+    if path=='admin/streak/reset' and post:
+        c.execute('DELETE FROM settings WHERE key=?',('streak:'+g.uid,))
+        return dict(ok=True)
     if path=='admin/streak' and post:
         specs=body.get('rewards')
         if not isinstance(specs,list) or not 1<=len(specs)<=60: raise Problem('Нужно от 1 до 60 дней наград')
