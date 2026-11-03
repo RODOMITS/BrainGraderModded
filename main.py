@@ -17,6 +17,10 @@ from urllib.parse import parse_qsl
 from flask import Flask, Response, g, jsonify, redirect, request, send_from_directory
 
 ROOT = Path(__file__).resolve().parent
+FRONTEND_BUILD = hashlib.sha256(b''.join(
+    (ROOT/'public'/name).read_bytes() for name in ('index.html','app.js','styles.css','sandbox.js')
+    if (ROOT/'public'/name).is_file()
+)).hexdigest()[:12]
 app = Flask(__name__, static_folder=None)
 app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024
 DB_PATH = Path(os.getenv('DATABASE_PATH', str(ROOT / 'data' / 'brainrot.db')))
@@ -347,7 +351,7 @@ def case(i):
 
 
 def config():
-    return dict(build='',theme='halloween',caseAnim='classic',sandbox=True,depositEnabled=False,withdrawEnabled=False,
+    return dict(build=FRONTEND_BUILD,theme='halloween',caseAnim='classic',sandbox=True,depositEnabled=False,withdrawEnabled=False,
                 starsRate=1,starsMin=1,starsMax=10000,refBonusPercent=0,withdrawMin=1,withdrawWindow='отключён',
                 upgrade=dict(maxItems=5,minChance=1,maxChance=90,presets=[dict(label=f'×{n}',mult=n) for n in [1.25,2,3,5,10]]),
                 mystery=dict(enabled=True,mult=3,minInput=1,maxInput=1e9,floor=1,cap=1e9),
@@ -824,7 +828,9 @@ def font(name):
 
 
 @app.get('/')
-def index(): return send_from_directory(ROOT/'public','index.html')
+def index():
+    html=(ROOT/'public'/'index.html').read_text(encoding='utf-8').replace('__BG_BUILD__',FRONTEND_BUILD)
+    return Response(html,mimetype='text/html',headers={'Cache-Control':'no-store'})
 
 
 @app.get('/admin')
