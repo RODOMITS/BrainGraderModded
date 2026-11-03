@@ -1279,6 +1279,7 @@
       lockedNotice();
       return;
     }
+    minesFx.clear();
     state.currentHash = location.hash || '#/';
     const hash = location.hash.slice(1) || '/';
     const [path, qs] = hash.split('?');
@@ -2919,6 +2920,65 @@
     ? '<svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="14" cy="19" r="9" fill="currentColor"/><path d="m20 12 4-4m-2-3 4 4m-1-8 1 3m3 2 3-1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="m9 17 2-3" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>'
     : '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M8 5h16l6 9-14 15L2 14z" fill="currentColor"/><path d="M2 14h28M8 5l8 24L24 5" fill="none" stroke="#103d2c" stroke-width="1.5"/></svg>';
 
+  const minesFx = (() => {
+    let canvas=null, frame=0, timer=0, board=null;
+    function clear(){
+      cancelAnimationFrame(frame);frame=0;clearTimeout(timer);timer=0;
+      canvas?.remove();canvas=null;
+      board?.classList.remove('mines-loss-burst','mines-win-burst');board=null;
+    }
+    function play(kind,anchor){
+      clear();
+      board=$('#minesBoard');
+      board?.classList.add(kind==='loss'?'mines-loss-burst':'mines-win-burst');
+      if(reduced){timer=setTimeout(clear,650);return;}
+      canvas=document.createElement('canvas');canvas.className='mines-fx';canvas.setAttribute('aria-hidden','true');
+      const W=innerWidth,H=innerHeight,dpr=Math.min(devicePixelRatio||1,1.5);
+      canvas.width=Math.round(W*dpr);canvas.height=Math.round(H*dpr);
+      document.body.append(canvas);
+      const ctx=canvas.getContext('2d');
+      if(!ctx){clear();return;}
+      ctx.setTransform(dpr,0,0,dpr,0,0);
+      const rect=anchor?.getBoundingClientRect();
+      const cx=rect?rect.left+rect.width/2:W/2;
+      const cy=Math.max(36,Math.min(H-36,rect?rect.top+rect.height/2:H*.4));
+      const loss=kind==='loss',duration=loss?1250:2400;
+      const colors=loss?['#ffc66f','#ff824b','#f24d43','#a9a4a0']:['#8ef5c0','#34e08a','#e9b43a','#f6e8b9','#e6efe9'];
+      const count=W<700?55:110;
+      const particles=Array.from({length:count},(_,i)=>{
+        const angle=loss?Math.random()*Math.PI*2:(i%2?-Math.PI*.72:-Math.PI*.28)+(Math.random()-.5)*.7;
+        const speed=loss?150+Math.random()*420:380+Math.random()*390;
+        return {x:loss?cx:(i%2?W*.82:W*.18),y:loss?cy:Math.min(H*.72,cy),vx:Math.cos(angle)*speed,
+          vy:Math.sin(angle)*speed,size:loss?3+Math.random()*6:4+Math.random()*7,
+          rotation:Math.random()*Math.PI,spin:(Math.random()-.5)*12,color:colors[i%colors.length]};
+      });
+      const started=performance.now();let previous=started;
+      function step(now){
+        if(!canvas?.isConnected){clear();return;}
+        const age=now-started,dt=Math.min(.04,(now-previous)/1000);previous=now;
+        ctx.clearRect(0,0,W,H);
+        if(loss){
+          const p=Math.min(1,age/450);
+          ctx.globalAlpha=(1-p)*.28;ctx.fillStyle='#ff663d';ctx.fillRect(0,0,W,H);
+          ctx.globalAlpha=(1-p)*.8;ctx.strokeStyle='#ffc679';ctx.lineWidth=3*(1-p)+1;
+          ctx.beginPath();ctx.arc(cx,cy,12+p*180,0,Math.PI*2);ctx.stroke();
+          ctx.globalAlpha=(1-p)*.35;ctx.fillStyle='#ffba71';ctx.beginPath();ctx.arc(cx,cy,8+p*70,0,Math.PI*2);ctx.fill();
+        }
+        for(const particle of particles){
+          particle.vx*=Math.pow(.985,dt*60);particle.vy+=(loss?650:500)*dt;
+          particle.x+=particle.vx*dt;particle.y+=particle.vy*dt;particle.rotation+=particle.spin*dt;
+          ctx.globalAlpha=Math.min(1,Math.max(0,(duration-age)/(loss?550:750)));
+          ctx.save();ctx.translate(particle.x,particle.y);ctx.rotate(particle.rotation);ctx.fillStyle=particle.color;
+          ctx.fillRect(-particle.size/2,-particle.size/2,particle.size,loss?particle.size:Math.max(2,particle.size*.42));ctx.restore();
+        }
+        ctx.globalAlpha=1;
+        if(age<duration)frame=requestAnimationFrame(step);else clear();
+      }
+      frame=requestAnimationFrame(step);
+    }
+    return {clear,loss:anchor=>play('loss',anchor),win:anchor=>play('win',anchor)};
+  })();
+
   async function renderMines() {
     if (!(prefs.modded && prefs.minesEnabled)) {
       view.innerHTML='<div class="empty">Включи «Мины» в настройках раздела «Моддед»</div>';
@@ -3006,15 +3066,26 @@
 
   async function minesMove(path,body){
     if(minesUI.busy)return;
-    const t=state.render;minesUI.busy=true;drawMinesBoard();drawMinesSummary();drawMinesInventory();
+    const t=state.render;minesFx.clear();minesUI.busy=true;drawMinesBoard();drawMinesSummary();drawMinesInventory();
     try{
       const r=await api(path,{method:'POST',body:{...body,key:newKey()}});
       minesUI.game=r.game;minesUI.selected=null;
       if(r.balance!==undefined)setBalance(r.balance);
+      if(!stale(t)){drawMinesBoard();drawMinesSummary();}
+      if(!stale(t)&&r.game.status==='lost'){
+        await sleep(reduced?0:240);
+        if(!stale(t)){haptic('error');sfx.upLose();minesFx.loss($(`#minesBoard [data-tile="${r.game.payout.bomb}"]`));}
+      }else if(!stale(t)&&r.game.status==='cashed'){
+        haptic('success');
+        const anchor=$('#minesBoard');
+        if(r.game.payout.item?.rarity==='og'){
+          lockNav(true);
+          try{ogFx.build(reduced ? 0 : (prefs.fast ? 0.65 : 1.2),anchor);await sleep(reduced?0:prefs.fast?650:1200);await ogFx.boom(anchor);}
+          finally{lockNav(false);}
+        }else{sfx.upWin();}
+        if(!stale(t)){minesFx.win(anchor);toast('Получено '+fmt(r.game.payout.total)+' BG предметом и доплатой');}
+      }else if(!stale(t))tick();
       minesUI.inv=(await api('/api/inventory')).filter(i=>i.status==='owned'&&!i.test);
-      if(r.game.status==='lost'){haptic('error');sfx.upLose();}
-      else if(r.game.status==='cashed'){haptic('success');sfx.upWin();toast('Получено '+fmt(r.game.payout.total)+' BG предметом и доплатой');}
-      else tick();
     }catch(e){fail(e);try{minesUI.game=(await api('/api/mines/current')).game;}catch{}}
     finally{minesUI.busy=false;if(!stale(t)){drawMinesBoard();drawMinesSummary();drawMinesInventory();}}
   }
