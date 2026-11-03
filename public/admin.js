@@ -8,7 +8,7 @@ function setAdminTelegramColors(){
 try{adminTG?.ready();adminTG?.expand();adminTG?.onEvent?.('themeChanged',setAdminTelegramColors);}catch{}
 setAdminTelegramColors();
 const $=id=>document.getElementById(id);
-function notice(text,error=false){$('message').style.display='block';$('message').style.background=error?'#632f2f':'#24372b';$('message').textContent=text;}
+function notice(text,error=false){$('message').style.display='block';$('message').style.background=error?'#632f2f':'#24372b';$('message').textContent=text;window.dispatchEvent(new CustomEvent('admin:notice',{detail:{error}}));}
 async function api(path,body){const headers={'X-Play-Session':window.playSession};const init=adminTG?.initData;if(init)headers.authorization='tma '+init;if(body)headers['Content-Type']='application/json';const r=await fetch('/api/'+path,{method:body?'POST':'GET',headers,body:body?JSON.stringify({...body,key:crypto.randomUUID()}):undefined});const d=await r.json();if(!r.ok)throw new Error(d.message||'Ошибка');return d;}
 function option(value,text){const o=document.createElement('option');o.value=value;o.textContent=text;return o;}
 let adminCatalog=[],liveDraft=null;

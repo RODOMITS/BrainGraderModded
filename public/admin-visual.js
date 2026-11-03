@@ -50,3 +50,44 @@ window.addEventListener('admin:data',()=>{
   $('promos').replaceChildren(...data.promos.map(p=>{const row=document.createElement('span');row.className='promo-entry';row.innerHTML='<b>'+safeAdmin(p.code)+'</b><span>'+fmtAdmin(p.reward)+' BG</span><small>Осталось '+p.uses+'</small>';return row;}));
 });
 if(adminCatalog.length)window.dispatchEvent(new Event('admin:data'));
+
+// The embedded panel uses the game's actual audio engine and current volume.
+const adminFeedback=(()=>{
+  if(window.parent!==window&&window.parent.BGAdminFeedback)return window.parent.BGAdminFeedback;
+  const read=()=>{try{return JSON.parse(localStorage.getItem('bg_prefs')||'{}');}catch{return {};}};
+  const audio=window.BGCreateAudio({get sound(){return read().sound!==false;},get volume(){const v=Number(read().volume??60);return Number.isFinite(v)?Math.max(0,Math.min(100,v)):60;}});
+  window.addEventListener('storage',event=>{if(event.key==='bg_prefs')audio.setVolume();});
+  return {unlock:()=>audio.unlock(),click:p=>audio.click(p),select:()=>audio.click(1.25),success:()=>audio.chime(.7),error:()=>audio.upLose()};
+})();
+document.addEventListener('pointerdown',()=>adminFeedback.unlock(),{capture:true});
+document.addEventListener('click',event=>{
+  const button=event.target.closest('button,a[href],summary,select');
+  if(!button||button.disabled)return;
+  adminFeedback.click(button.matches('.brain-card,.choice-strip button')?1.25:1);
+  try{adminTG?.HapticFeedback?.selectionChanged();}catch{}
+  if(!matchMedia('(prefers-reduced-motion: reduce)').matches&&button.matches('button'))
+    button.animate([{transform:'scale(.97)'},{transform:'scale(1)'}],{duration:180,easing:'cubic-bezier(.2,.8,.2,1)'});
+},{capture:true});
+const motionOff=()=>matchMedia('(prefers-reduced-motion: reduce)').matches;
+function enterAdmin(element,delay=0){if(!element||motionOff())return;element.animate([{opacity:0,translate:'0 10px'},{opacity:1,translate:'0 0'}],{duration:220,delay,easing:'cubic-bezier(.2,.8,.2,1)',fill:'backwards'});}
+new MutationObserver(records=>{
+  for(const record of records){
+    const element=record.target;
+    if(record.attributeName==='hidden'&&element.classList.contains('admin-panel')&&!element.hidden)
+      [...element.children].forEach((section,index)=>enterAdmin(section,index*40));
+    if(record.attributeName==='open'&&element.tagName==='DIALOG'&&element.open&&!motionOff())
+      element.animate([{opacity:0,transform:'translateY(16px) scale(.97)'},{opacity:1,transform:'translateY(0) scale(1)'}],{duration:240,easing:'cubic-bezier(.2,.8,.2,1)'});
+  }
+}).observe(document.body,{subtree:true,attributes:true,attributeFilter:['hidden','open']});
+// Only animate newly displayed cards; sound is reserved for deliberate actions.
+for(const gallery of [picker.querySelector('.item-gallery'),catalogGrid,$('liveRows')])
+  new MutationObserver(records=>{const fresh=records.flatMap(r=>[...r.addedNodes]).filter(n=>n.nodeType===1);fresh.slice(0,24).forEach((card,index)=>enterAdmin(card,Math.min(index,8)*18));}).observe(gallery,{childList:true});
+let noticeTimer=null;
+window.addEventListener('admin:notice',event=>{
+  const error=!!event.detail?.error;
+  adminFeedback[error?'error':'success']();
+  try{adminTG?.HapticFeedback?.notificationOccurred(error?'error':'success');}catch{}
+  const toast=$('message');clearTimeout(noticeTimer);enterAdmin(toast);
+  noticeTimer=setTimeout(()=>{toast.style.display='none';},error?6000:3600);
+});
+document.querySelectorAll('.admin-panel:not([hidden])>section').forEach((section,index)=>enterAdmin(section,index*40));
