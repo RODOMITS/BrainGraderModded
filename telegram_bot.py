@@ -18,7 +18,7 @@ from urllib.request import Request, urlopen
 
 log = logging.getLogger('brainrot.telegram')
 DEFAULT_APP_URL = 'https://bot-1793525010-3877-rodomits.bothost.tech/'
-CHANNEL_URL = 'https://t.me/brainrotgrader'
+CHANNEL_URL = 'https://t.me/brainrotmoddedgrader'
 
 
 class TelegramError(Exception):
@@ -73,15 +73,13 @@ def welcome(token, app_url, message):
     command = text.split(maxsplit=1)[0].split('@', 1)[0] if text else ''
     if command != '/start':
         return
-    sender = message.get('from', {})
-    name = escape(str(sender.get('username') or sender.get('first_name') or 'друг'))
     payload = {
         'chat_id': message['chat']['id'],
         'parse_mode': 'HTML',
         'text': (
-            f'Добро пожаловать в <b>Brainrot Grader</b>, {name}! 👋\n\n'
+            'Добро пожаловать в <b>Brainrot Grader ‼️MODDED‼️</b>, RODOMITS! 👋\n\n'
             'Кейсы, апгрейдер и мистери с брейнротами из Steal a Brainrot.\n'
-            'Пополняй звёздами или брейнротами, открывай кейсы и выводи выигрыш в игру.'
+            'Sandbox версия @brainrotgrader'
         ),
         'reply_markup': {
             'inline_keyboard': [
