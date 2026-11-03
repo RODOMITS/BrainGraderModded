@@ -4510,7 +4510,6 @@
     }
     adminModeStrip();
     halloween(state.cfg.theme === 'halloween');
-    streakCheckin();
     setInterval(()=>{if(!document.hidden&&!state.locked&&state.streak?.nextAt&&Date.now()>=new Date(state.streak.nextAt))streakCheckin();},60000);
     document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!state.locked)streakCheckin();});
     // «я тут» для счётчика онлайна в админке — раз в минуту, пока приложение на экране
@@ -4524,6 +4523,39 @@
     route();
     // Keep the admin document ready so opening it does not navigate away or reload its catalogue.
     if(prefs.modded&&prefs.showAdmin)setTimeout(prepareAdmin,1500);
+    await showModdedWelcome();
+    streakCheckin();
+  }
+
+  function showModdedWelcome(){
+    return new Promise(resolve=>{
+      const dialog=h(`<dialog class="modded-welcome" aria-labelledby="moddedWelcomeTitle"><div class="mw-content"><h2 id="moddedWelcomeTitle">Привет, спасибо что зашёл в мой Моддед!</h2><p>Я старался чтобы сделать этот проект, поддержи меня подписавшись на <a href="https://t.me/brainrotmoddedgrader" id="mwChannel">@brainrotmoddedgrader</a>🙏</p><button class="btn" id="mwConfirm" disabled>Ясно, спасибо (5)</button></div></dialog>`);
+      const button=$('#mwConfirm',dialog),previousLocked=state.locked;
+      state.locked=true;
+      try{TG?.BackButton?.hide();}catch{}
+      dialog.addEventListener('cancel',event=>event.preventDefault());
+      document.body.append(dialog);dialog.showModal();
+      const deadline=performance.now()+5000;
+      const tickWelcome=()=>{
+        const left=Math.max(0,Math.ceil((deadline-performance.now())/1000));
+        button.textContent=left?`Ясно, спасибо (${left})`:'Ясно, спасибо';
+        button.disabled=left>0;
+        if(!left)clearInterval(timer);
+      };
+      const timer=setInterval(tickWelcome,100);
+      button.onclick=()=>{
+        if(button.disabled||performance.now()<deadline)return;
+        clearInterval(timer);state.locked=previousLocked;dialog.close();dialog.remove();
+        try{if((location.hash||'#/')!=='#/')TG?.BackButton?.show();}catch{}
+        resolve();
+      };
+      $('#mwChannel',dialog).onclick=event=>{
+        event.preventDefault();
+        const url='https://t.me/brainrotmoddedgrader';
+        if(TG?.initData&&TG?.openTelegramLink){TG.openTelegramLink(url);TG.close();}
+        else window.open(url,'_blank','noopener,noreferrer');
+      };
+    });
   }
 
   boot();
