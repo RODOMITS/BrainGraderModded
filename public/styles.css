@@ -1712,7 +1712,7 @@ html.halloween h2::after { content: ' 🎃'; font-size: .8em; }
   .hw-hang, .hw-hang b, .hw-fog, .hw-pk, .hw-pumpkin { animation: none !important; }
 }
 /* Modded master: no reserved navigation slot when disabled. */
-html.admin-concealed a[href="/admin"] { display: none; }
+html.admin-concealed a[href="/admin"], html.admin-concealed a[href="#/admin"] { display: none; }
 .modded-settings { position: relative; }
 .modded-settings.modded-off { height: 0; min-height: 0; padding: 0 !important; margin: 0 !important; border: 0 !important; overflow: visible; }
 .modded-off .modded-sub { display: none; }
@@ -1767,3 +1767,6 @@ html.admin-concealed a[href="/admin"] { display: none; }
 .mines-bet-panels .item.sel { border-color: var(--crystal); background: var(--crystal-dim); }
 @media(min-width:900px){.mines-bet-panels{grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}.mines-bet-tabs{display:none}}
 @media(max-width:899px){.mines-bet-panels[data-tab='mine'] .mines-shop-panel,.mines-bet-panels[data-tab='shop'] .mines-mine-panel{display:none}.mines-bet-panels .items{grid-template-columns:repeat(3,minmax(0,1fr))}}
+
+#view[hidden],#adminHost[hidden]{display:none!important}
+#adminHost{padding-top:16px;padding-bottom:0}.admin-frame{display:block;width:100%;height:calc(100dvh - var(--hdr,66px) - 16px);border:0;background:var(--cave);color-scheme:dark}

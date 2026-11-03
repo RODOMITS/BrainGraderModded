@@ -1023,7 +1023,7 @@
     {
       group: null,
       items: [
-        { id: 'admin', label: 'Админка', href: '/admin', icon: 'settings' },
+        { id: 'admin', label: 'Админка', href: '#/admin', icon: 'settings' },
         { id: 'referrals', label: 'Рефералы', href: '#/referrals', icon: 'friends' },
         { id: 'faq', label: 'Вопросы', href: '#/faq', icon: 'faq', small: true },
         { id: 'settings', label: 'Настройки', icon: 'settings', action: () => openSettings() },
@@ -1034,6 +1034,7 @@
   // Какой пункт меню подсвечен на текущей странице
   function currentSection() {
     const path = (location.hash.slice(1) || '/').split('?')[0];
+    if (path.startsWith('/admin')) return 'admin';
     if (path.startsWith('/upgrade')) return 'upgrade';
     if (path.startsWith('/mystery')) return 'mystery';
     if (path.startsWith('/dice')) return 'dice';
@@ -1281,6 +1282,17 @@
   }
 
   // ---------- Маршруты ----------
+  let adminHost=null;
+  function prepareAdmin(){
+    if(adminHost)return;
+    adminHost=document.createElement('main');adminHost.id='adminHost';adminHost.hidden=true;
+    const frame=document.createElement('iframe');frame.title='Управление моддедом';
+    frame.src='/admin?embed=1';frame.className='admin-frame';adminHost.append(frame);view.after(adminHost);
+  }
+  window.addEventListener('message',event=>{
+    if(event.origin!==location.origin||event.source!==adminHost?.querySelector('iframe')?.contentWindow)return;
+    if(event.data?.type==='bg-admin-balance'&&Number.isFinite(event.data.balance))setBalance(event.data.balance);
+  });
   function route() {
     if (state.locked) {
       history.replaceState(null, '', state.currentHash || '#/');
@@ -1291,6 +1303,10 @@
     state.currentHash = location.hash || '#/';
     const hash = location.hash.slice(1) || '/';
     const [path, qs] = hash.split('?');
+    const isAdmin=path==='/admin';
+    if(isAdmin)prepareAdmin();
+    if(adminHost)adminHost.hidden=!isAdmin;
+    view.hidden=isAdmin;
     closeSheet();
     closeMenu();
     stopTimers();
@@ -1305,6 +1321,7 @@
       else TG?.BackButton?.hide();
     } catch {}
     window.scrollTo(0, 0);
+    if(isAdmin){adminHost.querySelector('iframe').contentWindow?.postMessage({type:'bg-admin-open'},location.origin);try{TG?.BackButton?.show();}catch{}return;}
     if (m) return renderCase(Number(m[1]));
     if (tab === 'upgrade') return renderUpgrade(new URLSearchParams(qs || ''));
     if (tab === 'mystery') return renderMystery(new URLSearchParams(qs || ''));
@@ -5022,6 +5039,8 @@
     setupDesktop();
     addEventListener('hashchange', route);
     route();
+    // Keep the admin document ready so opening it does not navigate away or reload its catalogue.
+    if(prefs.modded&&prefs.showAdmin)setTimeout(prepareAdmin,1500);
   }
 
   boot();

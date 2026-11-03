@@ -20,7 +20,7 @@ from flask import Flask, Response, g, jsonify, redirect, request, send_from_dire
 
 ROOT = Path(__file__).resolve().parent
 FRONTEND_BUILD = hashlib.sha256(b''.join(
-    (ROOT/'public'/name).read_bytes() for name in ('index.html','app.js','styles.css','sandbox.js','admin.html','admin.js','telegram-web-app.js')
+    (ROOT/'public'/name).read_bytes() for name in ('index.html','app.js','styles.css','sandbox.js','admin.html','admin.js','admin.css','admin-visual.js','telegram-web-app.js')
     if (ROOT/'public'/name).is_file()
 )).hexdigest()[:12]
 app = Flask(__name__, static_folder=None)
@@ -925,6 +925,8 @@ def index():
 @app.get('/admin')
 def admin():
     html=(ROOT/'public'/'admin.html').read_text(encoding='utf-8').replace('__BG_BUILD__',FRONTEND_BUILD)
+    if request.args.get('embed')=='1':
+        html=html.replace(f'<script defer src="/telegram-web-app.js?v={FRONTEND_BUILD}"></script>','')
     return Response(html,mimetype='text/html',headers={'Cache-Control':'no-store'})
 
 
@@ -934,7 +936,7 @@ def static(name): return send_from_directory(ROOT/'public',name)
 
 init_db()
 if __name__=='__main__':
-    required = ['index.html', 'admin.html', 'admin.js', 'app.js', 'styles.css', 'sandbox.js', 'og-sound.js', 'telegram-web-app.js']
+    required = ['index.html', 'admin.html', 'admin.js', 'admin-visual.js', 'admin.css', 'app.js', 'styles.css', 'sandbox.js', 'og-sound.js', 'telegram-web-app.js']
     missing = [name for name in required if not (ROOT / 'public' / name).is_file()]
     if missing:
         raise SystemExit('Missing frontend files in /app/public: ' + ', '.join(missing)
