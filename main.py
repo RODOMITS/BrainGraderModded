@@ -437,7 +437,12 @@ def take_next_result(game):
     result=json.loads(row[0])
     if result.get('item') and not visible_item(result['item']):
         return None
-    db().execute('DELETE FROM next_results WHERE user_id=? AND game=?', (g.uid,game))
+    remaining=result.get('remaining',1)-1
+    if remaining>0:
+        updated=dict(result,remaining=remaining)
+        db().execute('UPDATE next_results SET value=? WHERE user_id=? AND game=?',(json.dumps(updated),g.uid,game))
+    else:
+        db().execute('DELETE FROM next_results WHERE user_id=? AND game=?', (g.uid,game))
     return result
 
 
@@ -703,6 +708,14 @@ def dispatch(path, body):
             value['hits']=0 if mode in ('lose','bonus') else integer(body.get('hits',1),1,4)
             if mode not in ('lose','bonus') and value['hits'] not in (1,4):
                 raise Problem('Выигрыш: 1 или 4 совпадения')
+        count=integer(body.get('count',1),1,1000)
+        previous=c.execute('SELECT value FROM next_results WHERE user_id=? AND game=?',(g.uid,game)).fetchone()
+        if previous:
+            existing=json.loads(previous[0])
+            if {k:v for k,v in existing.items() if k!='remaining'}==value:
+                count+=existing.get('remaining',1)
+        if count>1000: raise Problem('Можно назначить максимум 1000 повторов; сначала отмени текущий Rig')
+        value['remaining']=count
         c.execute('INSERT OR REPLACE INTO next_results VALUES (?,?,?)',(g.uid,game,json.dumps(value)))
         return dict(ok=True)
     if path=='admin/giveaway-progress' and post:

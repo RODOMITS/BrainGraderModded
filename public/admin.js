@@ -28,7 +28,7 @@ bind('giveawayForm',()=>api('admin/giveaway-progress',{amount:Number($('giveaway
 bind('promoForm',()=>api('admin/promo',{code:$('code').value,reward:Number($('reward').value),uses:Number($('uses').value)}));
 function updateRigFields(){const game=$('rigGame').value;const allowed={case:['item'],mystery:['item'],upgrade:['item','win','lose'],dice:['item','win','lose','bonus'],mines:['safe','bomb']}[game];for(const o of $('rigMode').options)o.disabled=!allowed.includes(o.value);if(!allowed.includes($('rigMode').value))$('rigMode').value=allowed[0];$('rigItemField').hidden=$('rigMode').value!=='item';$('rigHitsField').hidden=game!=='dice'||['lose','bonus'].includes($('rigMode').value);}
 $('rigGame').onchange=updateRigFields;$('rigMode').onchange=updateRigFields;updateRigFields();
-bind('rigForm',()=>api('admin/next-result',{game:$('rigGame').value,mode:$('rigMode').value,itemId:Number($('rigItem').value),hits:Number($('rigHits').value)}));
+bind('rigForm',()=>api('admin/next-result',{game:$('rigGame').value,mode:$('rigMode').value,itemId:Number($('rigItem').value),hits:Number($('rigHits').value),count:Number($('rigCount').value)}));
 $('rigCancel').onclick=async()=>{try{await api('admin/next-result/cancel',{game:$('rigGame').value});await load(false);notice('Отменено');}catch(e){notice(e.message,true);}};
 $('importFile').onchange=async e=>{try{$('catalog').value=JSON.stringify(JSON.parse(await e.target.files[0].text()),null,2);notice('Файл загружен. Нажми «Сохранить каталог».');}catch(err){notice(err.message,true);}};
 $('resetCatalog').onclick=async()=>{try{await api('admin/catalog/reset',{});await load();notice('Личные правки сброшены');}catch(e){notice(e.message,true);}};
@@ -57,3 +57,5 @@ $('addLive').onclick=()=>{if(!liveDraft)return;if(liveDraft.drops.length>=30)ret
 $('clearLive').onclick=()=>{liveDraft.drops=[];liveDraft.topId=null;drawLiveEditor();notice('Черновик очищен. Сохрани, чтобы применить.');};
 const initial=sessionStorage.getItem('bg_admin_tab')||'quick';(nav.querySelector(`[data-panel="${CSS.escape(initial)}"]`)||nav.firstChild).click();
 window.sandboxReady.then(()=>load()).catch(e=>notice(e.message,true));
+
+$('rigCountPresets').onclick=e=>{const button=e.target.closest('[data-count]');if(button)$('rigCount').value=button.dataset.count;};

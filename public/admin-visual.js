@@ -43,7 +43,7 @@ window.addEventListener('admin:data',()=>{
   const modes={win:'Победа',lose:'Проигрыш',bonus:'Бонус ×10',safe:'Алмаз',bomb:'Бомба'};
   for(const [game,result] of Object.entries(data.nextResults||{})){
     const card=document.createElement('span');card.className='queued-rig';
-    card.innerHTML=(result.item?artAdmin(result.item):'')+'<span><b>'+safeAdmin(names[game])+'</b><small>'+safeAdmin(result.item?.name||modes[result.mode])+'</small></span>';
+    card.innerHTML=(result.item?artAdmin(result.item):'')+'<span><b>'+safeAdmin(names[game])+'</b><small>'+safeAdmin(result.item?.name||modes[result.mode])+' · осталось '+(result.remaining??1)+'</small></span>';
     const cancel=document.createElement('button');cancel.type='button';cancel.className='secondary';cancel.textContent='×';cancel.setAttribute('aria-label','Отменить Rig: '+names[game]);cancel.onclick=async()=>{cancel.disabled=true;try{await api('admin/next-result/cancel',{game});await load(false);}catch(e){notice(e.message,true);cancel.disabled=false;}};card.append(cancel);status.append(card);
   }
   if(!status.children.length)status.textContent='Нет заданных результатов';
