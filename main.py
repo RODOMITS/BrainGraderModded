@@ -121,6 +121,9 @@ def init_db():
           cases INTEGER NOT NULL DEFAULT 0, upgrades INTEGER NOT NULL DEFAULT 0);
         CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS user_live(user_id TEXT PRIMARY KEY, value TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS streak_progress(user_id TEXT PRIMARY KEY,last_day INTEGER,count INTEGER NOT NULL,best INTEGER NOT NULL);
+        CREATE TABLE IF NOT EXISTS streak_rewards(id TEXT PRIMARY KEY,user_id TEXT NOT NULL,day INTEGER NOT NULL,reward TEXT NOT NULL,expires REAL NOT NULL,claimed INTEGER NOT NULL DEFAULT 0);
+        CREATE INDEX IF NOT EXISTS streak_rewards_user ON streak_rewards(user_id,claimed,expires);
         CREATE TABLE IF NOT EXISTS user_catalogs(user_id TEXT PRIMARY KEY REFERENCES users(id), value TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS next_results(user_id TEXT NOT NULL REFERENCES users(id), game TEXT NOT NULL,
           value TEXT NOT NULL, PRIMARY KEY(user_id,game));
@@ -446,6 +449,49 @@ def take_next_result(game):
     return result
 
 
+def streak_config():
+    row=db().execute('SELECT value FROM settings WHERE key=?',('streak:'+g.uid,)).fetchone()
+    return json.loads(row[0]) if row else dict(enabled=True,resetOnMiss=True,rewards=[dict(kind='coins',amount=n) for n in (100,150,200,250,300,400,500)])
+
+
+def streak_reward(spec,day):
+    if spec['kind']=='coins': return dict(kind='coins',amount=spec['amount'],day=day,need=0)
+    cat=catalog()
+    if spec['kind']=='item':
+        item=next((i for i in cat['items'] if i['id']==spec['itemId'] and not i.get('customSession')),None)
+        if not item: return dict(kind='coins',amount=100,day=day,need=0)
+        return dict(item,kind='item',item=item,day=day,need=0)
+    case=next((c for c in cat['cases'] if c['id']==spec['caseId']),None)
+    if not case: return dict(kind='coins',amount=100,day=day,need=0)
+    items={i['id']:i for i in cat['items'] if not i.get('customSession')}
+    pool=[dict(items[e['itemId']],weight=e['weight']) for e in case['items'] if e['itemId'] in items]
+    if not pool: return dict(kind='coins',amount=100,day=day,need=0)
+    return dict(kind='case',name=case['name'],image=case['image'],price=case['price'],pool=pool,day=day,need=0)
+
+
+def streak_view(checkin=False):
+    c=db();cfg=streak_config();today=math.floor((time.time()+10800)/86400)
+    row=c.execute('SELECT * FROM streak_progress WHERE user_id=?',(g.uid,)).fetchone()
+    count=row['count'] if row else 0;best=row['best'] if row else 0;fresh=False;broken=False
+    if checkin and cfg['enabled'] and (not row or row['last_day']!=today):
+        broken=bool(row and row['last_day'] is not None and today-row['last_day']>1 and cfg['resetOnMiss'])
+        count=1 if broken else count+1;best=max(best,count);fresh=True
+        c.execute('INSERT OR REPLACE INTO streak_progress VALUES (?,?,?,?)',(g.uid,today,count,best))
+        reward=streak_reward(cfg['rewards'][(count-1)%len(cfg['rewards'])],count)
+        c.execute('INSERT INTO streak_rewards VALUES (?,?,?,?,?,0)',(secrets.token_hex(16),g.uid,count,json.dumps(reward),(today+1)*86400-10800))
+    pending=[]
+    for r in c.execute('SELECT * FROM streak_rewards WHERE user_id=? AND claimed=0 AND expires>? ORDER BY rowid',(g.uid,time.time())):
+        reward=json.loads(r['reward']);reward.pop('pool',None);reward.pop('item',None)
+        pending.append(dict(reward,id=r['id'],expiresAt=iso(r['expires']),claimed=False,canClaim=True,deposited=0))
+    days=max(len(cfg['rewards']),count+6)
+    templates=[streak_reward(spec,0) for spec in cfg['rewards']]
+    track=[]
+    for day in range(1,days+1):
+        reward=dict(templates[(day-1)%len(templates)],day=day)
+        reward.pop('pool',None);reward.pop('item',None);track.append(reward)
+    return dict(enabled=cfg['enabled'],count=count,best=best,days=days,track=track,pending=pending,fresh=fresh,broken=broken,resetOnMiss=cfg['resetOnMiss'],nextAt=iso((today+1)*86400-10800))
+
+
 def mines_multiplier(count, opened):
     if not opened:
         return 1.0
@@ -648,7 +694,47 @@ def dispatch(path, body):
         num=view['participants']+1
         c.execute('INSERT INTO giveaway_entries VALUES (?,?,?)',(row['id'],g.uid,num))
         return dict(num=num)
-    if path=='streak/checkin' and post: return dict(enabled=False,count=0,pending=[],fresh=False)
+    if path=='streak/checkin' and post: return streak_view(True)
+    if path=='streak/claim' and post:
+        if not streak_config()['enabled']: raise Problem('Серия заходов выключена')
+        row=c.execute('SELECT * FROM streak_rewards WHERE id=? AND user_id=?',(str(body.get('id','')),g.uid)).fetchone()
+        if not row or row['claimed'] or row['expires']<=time.time(): raise Problem('Награда уже получена или истекла')
+        reward=json.loads(row['reward']);c.execute('UPDATE streak_rewards SET claimed=1 WHERE id=?',(row['id'],))
+        if reward['kind']=='coins':
+            c.execute('UPDATE users SET balance=balance+? WHERE id=?',(reward['amount'],g.uid))
+            return dict(kind='coins',amount=reward['amount'],balance=user()['balance'])
+        item=reward.get('item')
+        if reward['kind']=='case': item=RNG.choices(reward['pool'],weights=[i['weight'] for i in reward['pool']])[0]
+        item={k:v for k,v in item.items() if k!='weight'}
+        return dict(kind='item',item=item,inventoryId=add_item(item,'streak'),balance=user()['balance'],fromCase=reward['kind']=='case')
+    if path=='admin/streak' and not post: return dict(config=streak_config(),progress=streak_view())
+    if path=='admin/streak' and post:
+        specs=body.get('rewards')
+        if not isinstance(specs,list) or not 1<=len(specs)<=60: raise Problem('Нужно от 1 до 60 дней наград')
+        rewards=[];cat=catalog()
+        for spec in specs:
+            if not isinstance(spec,dict): raise Problem('Неверная награда')
+            kind=spec.get('kind')
+            if kind=='coins': rewards.append(dict(kind=kind,amount=number(spec.get('amount'),1)))
+            elif kind=='item':
+                item=find_item(spec.get('itemId'))
+                if not item or item.get('customSession'): raise Problem('Выбери обычного брейнрота')
+                rewards.append(dict(kind=kind,itemId=item['id']))
+            elif kind=='case':
+                cid=integer(spec.get('caseId'))
+                if not any(cs['id']==cid for cs in cat['cases']): raise Problem('Кейс не найден')
+                rewards.append(dict(kind=kind,caseId=cid))
+            else: raise Problem('Выбери тип награды')
+        cfg=dict(enabled=body.get('enabled') is True,resetOnMiss=body.get('resetOnMiss') is True,rewards=rewards)
+        c.execute('INSERT OR REPLACE INTO settings VALUES (?,?)',('streak:'+g.uid,json.dumps(cfg)))
+        return dict(ok=True)
+    if path=='admin/streak/progress' and post:
+        count=integer(body.get('count',0),0,10000)
+        old=c.execute('SELECT best FROM streak_progress WHERE user_id=?',(g.uid,)).fetchone()
+        today=math.floor((time.time()+10800)/86400)
+        c.execute('INSERT OR REPLACE INTO streak_progress VALUES (?,?,?,?)',(g.uid,today if count else None,count,max(count,old[0] if old else 0)))
+        c.execute('DELETE FROM streak_rewards WHERE user_id=? AND claimed=0',(g.uid,))
+        return dict(ok=True)
     if path=='referrals' and not post:
         return dict(code='SANDBOX',link='',bonusPercent=0,percent=0,preliminary=0,refBalance=0,count=0,earned=0,
                     referrals=[],history=[],nextPayoutAt=iso(time.time()+604800),tz='Europe/Moscow',tzLabel='МСК',isPartner=False)

@@ -771,6 +771,7 @@
   }
   window.addEventListener('message',event=>{
     if(event.origin!==location.origin||event.source!==adminHost?.querySelector('iframe')?.contentWindow)return;
+    if(event.data?.type==='bg-admin-streak')streakCheckin();
     if(event.data?.type==='bg-admin-balance'&&Number.isFinite(event.data.balance))setBalance(event.data.balance);
   });
   function route() {
@@ -3578,7 +3579,7 @@
       const r = await api('/api/streak/checkin', { method: 'POST', body: {} });
       state.streak = r;
       drawStreakPill();
-      if (r.enabled && r.fresh && r.pending.some((p) => !p.claimed)) openStreak();
+      if (!state.locked && r.enabled && r.fresh && r.pending.some((p) => !p.claimed)) openStreak();
     } catch {}
   }
   function drawStreakPill() {
@@ -3589,7 +3590,7 @@
     el.classList.remove('hidden');
     el.classList.toggle('has-reward', r.pending.some((p) => !p.claimed));
     el.innerHTML = `${streakFlame(16, { off: !r.count, bg: false })}<b>${r.count}</b>`;
-    el.onclick = () => openStreak();
+    el.onclick = async () => { await streakCheckin(); openStreak(); };
   }
 
   function streakRewardIcon(t) {
@@ -3604,18 +3605,18 @@
     const n = r.count;
     const from = Math.max(1, Math.min(n - 3, r.days - 6));
     const win = r.track.slice(from - 1, from + 6);
-    const big = r.track.filter((t) => t.kind !== 'coins');
+    const big = r.track.filter((t) => t.kind !== 'coins' && t.day >= Math.max(1,n-6) && t.day <= n+60);
     const today = r.pending.find((p) => p.day === n && !p.claimed) || null;
     const body = h(`<div class="streak-sheet">
       <div class="s-head">${streakFlame(78)}<div class="s-num">${n}</div><div class="s-lbl">${plural(n, 'день', 'дня', 'дней')} подряд</div>
-        ${r.broken ? '<p class="s-sub warn-t">Серия прервалась — пропустил день. Начинаем заново</p>' : `<p class="s-sub">Заходи каждый день — награды растут. Пропустишь день — серия начнётся сначала. Рекорд: ${r.best}</p>`}</div>
+        ${r.broken ? '<p class="s-sub warn-t">Серия прервалась — пропустил день. Начинаем заново</p>' : `<p class="s-sub">Заходи каждый день и забирай награды. ${r.resetOnMiss ? 'Пропустишь день — серия начнётся сначала.' : 'При пропуске дня прогресс сохраняется.'} Рекорд: ${r.best}</p>`}</div>
       <div class="s-week">${win.map((t) => `<div class="s-day ${t.day < n ? 'done' : t.day === n ? 'today' : ''} ${t.kind !== 'coins' ? 'big' : ''}">
         ${t.day === n ? '<span class="s-tag">СЕГОДНЯ</span>' : ''}<span class="s-dn">День ${t.day}</span>
         <div class="s-ic">${t.day < n ? '✓' : streakRewardIcon(t)}</div><div class="s-rw">${COIN}${fmt(t.kind === 'coins' ? t.amount : t.price)}</div></div>`).join('')}</div>
       <div id="sClaim"></div>
-      <h3 class="s-h">Большие награды</h3>
-      <div class="s-big">${big.map((t) => `<div class="s-bigrow ${t.day <= n ? 'past' : ''}"><span class="s-bd">День ${t.day}</span>${streakRewardIcon(t)}<div class="grow"><b>${t.kind === 'case' ? 'Кейс «' + esc(t.name) + '»' : esc(t.name)}</b><span class="muted">${price(t.price)} · забрать — если пополнил от ${fmt(t.need)} BG</span></div></div>`).join('')}</div>
-      <p class="hint">Брейнротов из серии (и из наградных кейсов) вывести нельзя — их можно продать, поставить в апгрейд или сыграть в мистери. Выигрыш выводится как обычно.</p>
+      ${big.length ? '<h3 class="s-h">Большие награды</h3>' : ''}
+      <div class="s-big">${big.map((t) => `<div class="s-bigrow ${t.day <= n ? 'past' : ''}"><span class="s-bd">День ${t.day}</span>${streakRewardIcon(t)}<div class="grow"><b>${t.kind === 'case' ? 'Кейс «' + esc(t.name) + '»' : esc(t.name)}</b><span class="muted">${price(t.price)} · награда за вход</span></div></div>`).join('')}</div>
+      <p class="hint">Новый день начинается в 00:00 по Москве. Забери награду до конца дня. После последнего дня список наград повторяется, а серия продолжает расти.</p>
     </div>`);
     const s = openSheet('Серия заходов', body);
     drawStreakClaim(today, s);
@@ -3631,9 +3632,9 @@
     const left = Math.max(0, new Date(p.expiresAt) - Date.now());
     const what = p.kind === 'coins' ? `${fmt(p.amount)} BG` : p.kind === 'case' ? `кейс «${esc(p.name)}»` : `«${esc(p.name)}»`;
     if (p.canClaim) {
-      box.innerHTML = `<button class="btn s-btn" id="sGo">Забрать ${what}</button><p class="hint center">Сгорит через ${hms(left)}</p>`;
+      box.innerHTML = `<button class="btn s-btn" id="sGo">Забрать ${what}</button><p class="hint center">До 00:00 МСК · осталось ${hms(left)}</p>`;
     } else {
-      box.innerHTML = `<div class="s-need">Чтобы забрать ${what}, пополни баланс от <b>${fmt(p.need)} BG</b> — пополнено ${fmt(p.deposited)} BG. Сгорит через ${hms(left)}</div>
+      box.innerHTML = `<div class="s-need">Чтобы забрать ${what}, пополни баланс от <b>${fmt(p.need)} BG</b> — пополнено ${fmt(p.deposited)} BG. До 00:00 МСК · осталось ${hms(left)}</div>
         <div class="btn-row"><button class="btn s-btn" id="sDep">Пополнить</button><button class="btn ghost" id="sRe">Я пополнил — проверить</button></div>`;
       $('#sDep', box).onclick = () => { sheet.close(); openDeposit(); };
       $('#sRe', box).onclick = async () => { await streakCheckin(); sheet.close(); openStreak(); };
@@ -4510,6 +4511,8 @@
     adminModeStrip();
     halloween(state.cfg.theme === 'halloween');
     streakCheckin();
+    setInterval(()=>{if(!document.hidden&&!state.locked&&state.streak?.nextAt&&Date.now()>=new Date(state.streak.nextAt))streakCheckin();},60000);
+    document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!state.locked)streakCheckin();});
     // «я тут» для счётчика онлайна в админке — раз в минуту, пока приложение на экране
     setInterval(() => { if (!document.hidden) api('/api/ping').catch(() => {}); }, 60000);
     setBalance(state.me.balance);
