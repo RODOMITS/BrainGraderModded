@@ -40,7 +40,7 @@ def call(token, method, payload, photo=None):
             chunks.append((f'--{boundary}\r\nContent-Disposition: form-data; name="{key}"\r\n\r\n'
                            f'{value}\r\n').encode('utf-8'))
         chunks.append((f'--{boundary}\r\nContent-Disposition: form-data; name="photo"; '
-                       'filename="welcome.jpg"\r\nContent-Type: image/jpeg\r\n\r\n').encode('utf-8'))
+                       'filename="welcome.png"\r\nContent-Type: image/png\r\n\r\n').encode('utf-8'))
         chunks.extend([photo, f'\r\n--{boundary}--\r\n'.encode('utf-8')])
         data = b''.join(chunks)
         content_type = f'multipart/form-data; boundary={boundary}'
