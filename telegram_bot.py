@@ -88,7 +88,7 @@ def welcome(token, app_url, message):
             ],
         },
     }
-    photo_path = Path(__file__).resolve().parent / 'assets' / 'welcome.jpg'
+    photo_path = Path(__file__).resolve().parent / 'assets' / 'welcome-modded.png'
     if photo_path.is_file():
         payload['caption'] = payload.pop('text')
         call(token, 'sendPhoto', payload, photo=photo_path.read_bytes())
