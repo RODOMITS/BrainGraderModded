@@ -18,7 +18,8 @@ from urllib.request import Request, urlopen
 
 log = logging.getLogger('brainrot.telegram')
 DEFAULT_APP_URL = 'https://bot-1793525010-3877-rodomits.bothost.tech/'
-CHANNEL_URL = 'https://t.me/brainrotmoddedgrader'
+CHANNEL_USERNAME = '@brainrotmoddedgrader'
+CHANNEL_URL = 'https://t.me/' + CHANNEL_USERNAME[1:]
 
 
 class TelegramError(Exception):
@@ -27,7 +28,7 @@ class TelegramError(Exception):
         self.retry_after = retry_after
 
 
-def call(token, method, payload, photo=None):
+def call(token, method, payload, photo=None, *, timeout=40):
     if photo is None:
         data = json.dumps(payload).encode('utf-8')
         content_type = 'application/json'
@@ -50,7 +51,7 @@ def call(token, method, payload, photo=None):
         headers={'Content-Type': content_type},
     )
     try:
-        with urlopen(req, timeout=40) as response:
+        with urlopen(req, timeout=timeout) as response:
             result = json.load(response)
     except HTTPError as error:
         try:
@@ -64,6 +65,17 @@ def call(token, method, payload, photo=None):
         raise TelegramError(result.get('error_code', 'unknown'),
                             result.get('parameters', {}).get('retry_after', 5))
     return result['result']
+
+
+def is_channel_subscriber(token, user_id):
+    member = call(token, 'getChatMember', {
+        'chat_id': CHANNEL_USERNAME,
+        'user_id': user_id,
+    }, timeout=3)
+    status = member['status']
+    if status == 'restricted':
+        return member.get('is_member') is True
+    return status in ('creator', 'administrator', 'member')
 
 
 def welcome(token, app_url, message):

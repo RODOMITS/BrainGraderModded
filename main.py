@@ -937,6 +937,20 @@ def validate_image(value):
         raise Problem('Картинка: /img/... или https://brainrotgrader.com/img/...')
 
 
+@app.get('/api/welcome')
+def welcome_status():
+    if not g.uid.startswith('tg:'):
+        return jsonify(show=True)
+
+    from telegram_bot import TelegramError, is_channel_subscriber
+
+    try:
+        subscribed = is_channel_subscriber(os.environ['BOT_TOKEN'].strip(), int(g.uid[3:]))
+    except TelegramError:
+        return jsonify(show=False)
+    return jsonify(show=not subscribed)
+
+
 @app.route('/api/<path:path>',methods=['GET','POST'])
 def api(path):
     body=request.get_json(silent=True) if request.method=='POST' else {}

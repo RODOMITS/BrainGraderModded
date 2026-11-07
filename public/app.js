@@ -4499,8 +4499,13 @@
       view.innerHTML = '<div class="empty">Открой Brainrot Grader через бота в Telegram</div>';
       return;
     }
+    let showWelcome;
     try {
-      [state.me, state.cfg] = await Promise.all([api('/api/me'), api('/api/config')]);
+      [state.me, state.cfg, showWelcome] = await Promise.all([
+        api('/api/me'),
+        api('/api/config'),
+        TG?.initData ? api('/api/welcome').then(result => result.show).catch(() => false) : true
+      ]);
       // Старая версия страницы из кэша Telegram — перезагружаем на свежую (один раз на версию)
       const mine = document.querySelector('meta[name="bg-build"]')?.content || '';
       if (state.cfg.build && mine !== state.cfg.build) {
@@ -4533,7 +4538,7 @@
     route();
     // Keep the admin document ready so opening it does not navigate away or reload its catalogue.
     if(prefs.modded&&prefs.showAdmin)setTimeout(prepareAdmin,1500);
-    await showModdedWelcome();
+    if (showWelcome) await showModdedWelcome();
     streakCheckin();
   }
 
