@@ -15,8 +15,17 @@ let adminCatalog=[],liveDraft=null;
 async function load(catalog=true){const d=await api('admin/state'+(catalog?'':'?catalog=0'));$('balanceNow').textContent=Number(d.me.balance).toLocaleString('ru-RU')+' BG';if(catalog)$('balance').value=d.me.balance;
 if(catalog){adminCatalog=[...d.catalog.items].sort((a,b)=>a.price-b.price||a.id-b.id);$('catalog').value=JSON.stringify(d.catalog,null,2);for(const id of ['item','rigItem','liveItem'])fillItems(id);if(!liveDraft){liveDraft=d.live;drawLiveEditor();}}
 const names={case:'Кейсы',upgrade:'Апгрейдер',mystery:'Мистери',dice:'Колор Дайс',mines:'Мины'};const modes={win:'победа',lose:'проигрыш',bonus:'бонус ×10',safe:'следующий клик — алмаз',bomb:'следующий клик — бомба'};$('rigStatus').textContent=Object.entries(d.nextResults||{}).map(([game,r])=>names[game]+': '+(r.item?r.item.name:modes[r.mode])+(game==='dice'&&['item','win'].includes(r.mode)?' · '+r.hits+' из 4':'')).join(' | ')||'Следующие результаты не заданы';
-$('promos').textContent=d.promos.map(p=>p.code+': '+p.reward+' BG, осталось '+p.uses).join(' | ');window.adminSnapshot=d;window.dispatchEvent(new Event('admin:data'));if(window.parent!==window)window.parent.postMessage({type:'bg-admin-balance',balance:Number(d.me.balance)},location.origin);}
+$('promos').textContent=d.promos.map(p=>p.code+': '+p.reward+' BG, осталось '+p.uses).join(' | ');for (const game of ['upgrade', 'case']) {
+  $(game + 'ButtonMode').value = d.buttonModes?.[game] ? 'on' : 'off';
+}
+window.adminSnapshot=d;window.dispatchEvent(new Event('admin:data'));if(window.parent!==window)window.parent.postMessage({type:'bg-admin-balance',balance:Number(d.me.balance)},location.origin);}
 function bind(form,action){$(form).onsubmit=async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;try{await action();notice('Сохранено');await load(false);}catch(err){notice(err.message,true);}finally{b.disabled=false;}};}
+for (const game of ['upgrade', 'case']) {
+  bind(game + 'ButtonModeForm', () => api('admin/button-modes', {
+    game,
+    enabled: $(game + 'ButtonMode').value === 'on'
+  }));
+}
 let previewUrl=null;
 $('customImage').onchange=()=>{if(previewUrl)URL.revokeObjectURL(previewUrl);const file=$('customImage').files[0];$('customPreview').hidden=!file;if(file){previewUrl=URL.createObjectURL(file);$('customPreview').src=previewUrl;}};
 const imageData=file=>new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=()=>reject(new Error('Не удалось прочитать картинку'));r.readAsDataURL(file);});
@@ -35,7 +44,7 @@ $('resetCatalog').onclick=async()=>{try{await api('admin/catalog/reset',{});awai
 function fillItems(id,query=''){const select=$(id),old=select.value;select.replaceChildren(...adminCatalog.filter(i=>(id!=='liveItem'||!i.customSession)&&i.name.toLowerCase().includes(query.toLowerCase())).map(i=>option(i.id,i.name+' · '+i.price+' BG')));if([...select.options].some(o=>o.value===old))select.value=old;}
 // Group existing forms into compact, keyboard-accessible tabs without duplicating them.
 const sections=[...document.querySelectorAll('body > section,body > .grid > section')];
-const groups=[['quick','Быстрые действия',[0,1,3]],['live','Лайв-дропы',[]],['custom','Свои предметы',[2]],['catalog','Каталог',[5]],['other','Розыгрыш и промо',[4,6]]];
+const groups=[['quick','Быстрые действия',[0,1,3]],['live','Лайв-дропы',[]],['custom','Свои предметы',[2]],['catalog','Каталог',[5]],['other','Розыгрыш и промо',[4,6]],['buttons','Управление кнопками',[7,8]]];
 const nav=document.createElement('nav');nav.className='admin-tabs';nav.setAttribute('aria-label','Разделы админки');
 const host=document.createElement('main');host.className='admin-panels';
 document.querySelector('body > .grid').before(nav,host);

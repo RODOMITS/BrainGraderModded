@@ -436,6 +436,18 @@ def targets(body):
     return dict(inputValue=value,targets=options,presets=presets)
 
 
+def button_modes():
+    row = db().execute('SELECT value FROM settings WHERE key=?', ('button-modes:' + g.uid,)).fetchone()
+    return json.loads(row[0]) if row else {}
+
+
+def controlled_side(game, body):
+    side = body.get('buttonSide')
+    if side in ('left', 'right') and button_modes().get(game) is True:
+        return side
+    return None
+
+
 def take_next_result(game):
     row = db().execute('SELECT value FROM next_results WHERE user_id=? AND game=?', (g.uid,game)).fetchone()
     if not row:
@@ -617,10 +629,20 @@ def dispatch(path, body):
         field='testBalance' if test else 'balance'; cost=cs['price']*n
         if user()[field]<cost: raise Problem('Недостаточно BG. Добавь баланс в админке.', 'insufficient_balance')
         c.execute(f'UPDATE users SET {field}={field}-?, cases=cases+? WHERE id=?',(cost,0 if test else n,g.uid))
-        rig = None if test else take_next_result('case')
+        side = controlled_side('case', body)
+        forced_item = None
+        if side:
+            choose = max if side == 'right' else min
+            forced_item = choose(cs['items'], key=lambda item: item['price'])
+        rig = None if test or side else take_next_result('case')
         drops=[]
         for index in range(n):
-            item=dict(rig['item']) if rig and index==0 else dict(RNG.choices(cs['items'],weights=[x['weight'] for x in cs['items']])[0])
+            if forced_item is not None:
+                item = dict(forced_item)
+            elif rig and index == 0:
+                item = dict(rig['item'])
+            else:
+                item = dict(RNG.choices(cs['items'], weights=[x['weight'] for x in cs['items']])[0])
             item.pop('weight',None)
             iid=add_item(item,dict(kind='case',caseId=cs['id'],caseName=cs['name'],caseImage=cs['image']),test)
             drops.append(dict(item=item,inventoryId=iid))
@@ -645,13 +667,15 @@ def dispatch(path, body):
         options=targets(body); target=next((x for x in options['targets'] if x['id']==integer(body.get('targetId'))),None)
         if not target: raise Problem('Недопустимая цель')
         rows=selected(body)
-        rig=take_next_result('upgrade')
+        side = controlled_side('upgrade', body)
+        rig = None if side else take_next_result('upgrade')
         if rig and rig.get('item'):
             target=dict(rig['item'],chance=target['chance'])
         chance=target['chance']
         roll=RNG.random()*100
-        if rig:
-            roll=RNG.random()*chance if rig['mode']!='lose' else chance+RNG.random()*(100-chance)
+        if side or rig:
+            force_win = side == 'right' if side else rig['mode'] != 'lose'
+            roll = RNG.random()*chance if force_win else chance+RNG.random()*(100-chance)
         won=roll<chance
         consume(rows,'upgraded')
         c.execute('UPDATE users SET upgrades=upgrades+1 WHERE id=?',(g.uid,))
@@ -766,6 +790,7 @@ def dispatch(path, body):
         return dict(type='coins',kind='coins',reward=r['reward'],balance=user()['balance'])
     if path=='admin/state' and not post:
         result=dict(me=me(),promos=[dict(r) for r in c.execute('SELECT * FROM promos')],nextResults={},live=live_settings())
+        result['buttonModes'] = button_modes()
         if request.args.get('catalog','1')!='0':
             result['catalog']=catalog()
         for r in c.execute('SELECT game,value FROM next_results WHERE user_id=?',(g.uid,)):
@@ -773,6 +798,14 @@ def dispatch(path, body):
             if not value.get('item') or visible_item(value['item']):
                 result['nextResults'][r['game']]=value
         return result
+    if path=='admin/button-modes' and post:
+        game, enabled = body.get('game'), body.get('enabled')
+        if game not in ('case', 'upgrade') or type(enabled) is not bool:
+            raise Problem('Выбери игру и режим кнопки')
+        modes = button_modes()
+        modes[game] = enabled
+        c.execute('INSERT OR REPLACE INTO settings VALUES (?,?)', ('button-modes:' + g.uid, json.dumps(modes)))
+        return dict(ok=True)
     if path=='admin/live' and post:
         mode=body.get('mode')
         if mode not in ('local','editor','real'): raise Problem('Выбери источник ленты')

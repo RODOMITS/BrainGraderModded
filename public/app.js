@@ -1604,7 +1604,7 @@
         $('#freeBox')?.classList.add('hidden');
         btn.disabled = state.busy || !enough;
         btn.innerHTML = enough ? `Открыть${n > 1 ? ` ${n} шт.` : ''} за ${price(cs.price * n)}` : 'Недостаточно BG';
-        btn.onclick = () => openFlow(cs, update, null, true);
+        btn.onclick = (event) => openFlow(cs, update, null, true, pressedButtonSide(event));
         return;
       }
       if (cs.freeKind) {
@@ -1625,11 +1625,11 @@
           return;
         }
         btn.textContent = 'Открыть бесплатно';
-        btn.onclick = () => openFlow(cs, update);
+        btn.onclick = (event) => openFlow(cs, update, null, false, pressedButtonSide(event));
         return;
       }
       btn.innerHTML = enough ? `Открыть${n > 1 ? ` ${n} шт.` : ''} за ${price(cs.price * n)}` : 'Пополнить баланс';
-      btn.onclick = enough ? () => openFlow(cs, update) : () => openDeposit();
+      btn.onclick = enough ? (event) => openFlow(cs, update, null, false, pressedButtonSide(event)) : () => openDeposit();
     };
     $$('#countSeg button').forEach((b) => (b.onclick = () => {
       if (state.busy) return;
@@ -1692,7 +1692,14 @@
     inp.onkeydown = (e) => { if (e.key === 'Enter') go(); };
   }
 
-  async function openFlow(cs, update, promo = null, test = false) {
+  function pressedButtonSide(event) {
+    // Keyboard activation has no pointer position.
+    if (!event?.detail) return undefined;
+    const { left, width } = event.currentTarget.getBoundingClientRect();
+    return event.clientX < left + width / 2 ? 'left' : 'right';
+  }
+
+  async function openFlow(cs, update, promo = null, test = false, buttonSide) {
     if (state.busy) return;
     const n = promo ? 1 : openCount(cs);
     state.busy = true;
@@ -1701,8 +1708,8 @@
     try {
       const v2 = caseAnimV2();
       const r = test
-        ? await api(`/api/test/open/${cs.id}`, { method: 'POST', body: { count: n } })
-        : await api(`/api/cases/${cs.id}/open`, { method: 'POST', body: { key: newKey(), count: n, ...(promo ? { promo } : {}) } });
+        ? await api(`/api/test/open/${cs.id}`, { method: 'POST', body: { count: n, buttonSide } })
+        : await api(`/api/cases/${cs.id}/open`, { method: 'POST', body: { key: newKey(), count: n, buttonSide, ...(promo ? { promo } : {}) } });
       if (promo) toast('Промокод сработал — открываем бесплатно');
       if (test) state.me.testBalance = r.testBalance;
       else setBalance(r.balance);
@@ -2299,8 +2306,9 @@
     }
   }
 
-  async function runUpgrade() {
+  async function runUpgrade(event) {
     if (!up.target || up.spinning) return;
+    const buttonSide = pressedButtonSide(event);
     const t = state.render;
     up.spinning = true;
     drawUpgrade();
@@ -2311,7 +2319,7 @@
     lockNav(true);
     let r;
     try {
-      r = await api('/api/upgrade', { method: 'POST', body: { ids: up.selected, targetId: up.target.id, key: newKey() } });
+      r = await api('/api/upgrade', { method: 'POST', body: { ids: up.selected, targetId: up.target.id, key: newKey(), buttonSide } });
       if (r.target) {
         up.target = r.target;
         drawUpgrade({ lists: false });
