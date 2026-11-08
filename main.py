@@ -15,7 +15,6 @@ from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import parse_qsl
 from urllib.request import HTTPRedirectHandler, Request, build_opener
-from urllib.error import HTTPError, URLError
 
 from flask import Flask, Response, g, jsonify, redirect, request, send_from_directory
 
@@ -33,8 +32,7 @@ DB_PATH = Path(os.getenv('DATABASE_PATH', str(ROOT / 'data' / 'brainrot.db')))
 RNG = secrets.SystemRandom()
 CUSTOM_SESSIONS = {}
 CUSTOM_LOCK = threading.RLock()
-REAL_LIVE = {}
-REAL_LIVE_LOCK = threading.RLock()
+ORIGINAL_LOCK = threading.Lock()
 SHARED_ORIGINAL = {}
 
 
@@ -108,6 +106,12 @@ def refresh_original(entry, token, kind):
                 for group in ('active', 'finished')
             }
             value['expires'] = time.time() + 120
+        elif kind == 'live':
+            data = original_api('home', token)
+            value = dict(drops=[original_drop(drop) for drop in data['drops'][:30]],
+                         top=original_drop(data['top']) if data.get('top') else None,
+                         expires=time.time() + 120)
+            delay = 10
         else:
             raw = original_api('home', token).get('bonus')
             value = None
@@ -119,32 +123,29 @@ def refresh_original(entry, token, kind):
                     delay = min(60, max(1, expires - time.time()))
             if value is None:
                 delay = 15
-        with REAL_LIVE_LOCK:
+        with ORIGINAL_LOCK:
             entry[kind] = value
     except (OSError, ValueError, TypeError, KeyError, AttributeError, Problem):
         # A failed refresh must leave the last complete catalogue available.
         pass
     finally:
-        with REAL_LIVE_LOCK:
+        with ORIGINAL_LOCK:
             entry[kind + '_next'] = time.time() + delay
             entry[kind + '_loading'] = False
 
 
 def original_snapshot(kind):
+    token = os.getenv('ORIGINAL_INIT_DATA', '').strip()
+    if not token:
+        return None
     now = time.time()
-    with REAL_LIVE_LOCK:
-        personal = REAL_LIVE.get((g.uid, g.play_session), {})
-        sources = [
-            (personal, personal.get('token') if personal.get('expires', 0) > now else None),
-            (SHARED_ORIGINAL, os.getenv('ORIGINAL_INIT_DATA', '').strip()),
-        ]
-        for entry, token in sources:
-            if token and now >= entry.get(kind + '_next', 0) and not entry.get(kind + '_loading'):
-                entry[kind + '_loading'] = True
-                threading.Thread(target=refresh_original, args=(entry, token, kind), daemon=True).start()
-            value = entry.get(kind)
-            if value and (kind == 'catalog' or value['expires'] > now):
-                return value
+    with ORIGINAL_LOCK:
+        if now >= SHARED_ORIGINAL.get(kind + '_next', 0) and not SHARED_ORIGINAL.get(kind + '_loading'):
+            SHARED_ORIGINAL[kind + '_loading'] = True
+            threading.Thread(target=refresh_original, args=(SHARED_ORIGINAL, token, kind), daemon=True).start()
+        value = SHARED_ORIGINAL.get(kind)
+        if value and (kind == 'catalog' or value['expires'] > now):
+            return value
     return None
 
 
@@ -442,34 +443,26 @@ def home():
         return dict(drops=drops,top=top or max(drops,key=lambda d:d['price'],default=None),bonus=bonus,liveMode='editor')
     if config['mode']!='real':
         return dict(local_home(),liveMode='local',bonus=bonus)
-    key=(g.uid,g.play_session)
-    # Credentials and cached original responses remain in memory, never in SQLite/history.
-    with REAL_LIVE_LOCK:
-        entry=REAL_LIVE.get(key)
-        if not entry or entry['expires']<time.time():
-            REAL_LIVE.pop(key,None)
-            return dict(drops=[],top=None,bonus=bonus,liveMode='real',liveError='Подключи сессию оригинала в редакторе лайв-дропов')
-        if entry.get('next',0)>time.time():
-            return dict(entry['data'], bonus=bonus)
-        try:
-            data = original_api('home', entry['token'])
-            if not isinstance(data,dict) or not isinstance(data.get('drops'),list):
-                raise ValueError('format')
-            clean=[]
-            def clean_drop(d):
-                if not isinstance(d,dict): raise ValueError('drop')
-                image=str(d.get('image',''))
-                if not image.startswith('/img/'): image='/img/coin.webp'
-                return dict(id='real:'+str(d.get('id',''))[:100],name=str(d.get('name',''))[:120],
-                            image=image,price=number(d.get('price',0)),rarity=d.get('rarity') if d.get('rarity') in ('common','rare','epic','legendary','og') else 'common',
-                            source=d.get('source') if isinstance(d.get('source'),(str,dict)) else 'case',createdAt=d.get('createdAt'))
-            clean=[clean_drop(d) for d in data['drops'][:30]]
-            entry['data']=dict(drops=clean,top=clean_drop(data['top']) if data.get('top') else None,bonus=None,liveMode='real')
-        except (HTTPError,URLError,TimeoutError,ValueError,TypeError,OSError,Problem) as error:
-            message='Оригинал отклонил сессию. Открой его заново и переподключись.' if isinstance(error,HTTPError) and error.code in (401,403) else 'Лента оригинала временно недоступна'
-            entry['data']=dict(entry.get('data') or dict(drops=[],top=None,bonus=None),liveMode='real',liveError=message)
-        entry['next']=time.time()+10
-        return dict(entry['data'], bonus=bonus)
+    live = original_snapshot('live')
+    if live is None:
+        return dict(drops=[], top=None, bonus=bonus, liveMode='real',
+                    liveError='Лента оригинала пока недоступна')
+    return dict(drops=live['drops'], top=live['top'], bonus=bonus, liveMode='real')
+
+
+def original_drop(drop):
+    image = str(drop.get('image', ''))
+    rarity = drop.get('rarity')
+    source = drop.get('source')
+    return dict(
+        id='real:' + str(drop.get('id', ''))[:100],
+        name=str(drop.get('name', ''))[:120],
+        image=image if image.startswith('/img/') else '/img/coin.webp',
+        price=number(drop.get('price', 0)),
+        rarity=rarity if rarity in ('common', 'rare', 'epic', 'legendary', 'og') else 'common',
+        source=source if isinstance(source, (str, dict)) else 'case',
+        createdAt=drop.get('createdAt'),
+    )
 
 
 def settle_giveaways():
@@ -1236,27 +1229,6 @@ def api(path):
     except Exception:
         c.rollback()
         raise
-
-
-@app.post('/api/admin/live-connect')
-def connect_real_live():
-    body=request.get_json(silent=True) or {}
-    if not isinstance(body,dict): raise Problem('Нужен JSON-объект')
-    if not g.play_session: raise Problem('Переоткрой приложение для подключения сессии')
-    token=body.get('initData','')
-    if not isinstance(token,str) or not 20<len(token)<16000 or '\n' in token or '\r' in token:
-        raise Problem('Вставь Telegram.WebApp.initData из оригинального приложения')
-    with REAL_LIVE_LOCK:
-        now=time.time()
-        for key in list(REAL_LIVE):
-            if REAL_LIVE[key]['expires']<now: del REAL_LIVE[key]
-        if len(REAL_LIVE)>=100 and (g.uid,g.play_session) not in REAL_LIVE:
-            raise Problem('Слишком много подключений. Попробуй позже')
-        REAL_LIVE[(g.uid,g.play_session)]=dict(token=token,expires=now+3600)
-    original_snapshot('catalog')
-    original_snapshot('bonus')
-    original_snapshot('giveaways')
-    return jsonify(dict(ok=True))
 
 
 @app.post('/api/admin/custom-item')
