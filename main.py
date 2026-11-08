@@ -14,6 +14,7 @@ import threading
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import parse_qsl
+from urllib.error import HTTPError
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from flask import Flask, Response, g, jsonify, redirect, request, send_from_directory
@@ -94,6 +95,7 @@ def fetch_original_catalog(token):
 
 def refresh_original(entry, token, kind):
     delay = 60
+    status = 'ready'
     try:
         if kind == 'catalog':
             value = fetch_original_catalog(token)
@@ -125,11 +127,16 @@ def refresh_original(entry, token, kind):
                 delay = 15
         with ORIGINAL_LOCK:
             entry[kind] = value
-    except (OSError, ValueError, TypeError, KeyError, AttributeError, Problem):
+    except HTTPError as error:
+        status = 'auth_rejected' if error.code in (401, 403) else f'http_{error.code}'
+    except OSError:
+        status = 'network_error'
+    except (ValueError, TypeError, KeyError, AttributeError, Problem):
         # A failed refresh must leave the last complete catalogue available.
-        pass
+        status = 'invalid_response'
     finally:
         with ORIGINAL_LOCK:
+            entry[kind + '_status'] = status
             entry[kind + '_next'] = time.time() + delay
             entry[kind + '_loading'] = False
 
@@ -147,6 +154,15 @@ def original_snapshot(kind):
         if value and (kind == 'catalog' or value['expires'] > now):
             return value
     return None
+
+
+def original_status(kind):
+    if not os.getenv('ORIGINAL_INIT_DATA', '').strip():
+        return 'missing_env'
+    with ORIGINAL_LOCK:
+        if SHARED_ORIGINAL.get(kind + '_loading'):
+            return 'loading'
+        return SHARED_ORIGINAL.get(kind + '_status', 'waiting')
 
 
 def custom_session(create=False):
@@ -445,8 +461,16 @@ def home():
         return dict(local_home(),liveMode='local',bonus=bonus)
     live = original_snapshot('live')
     if live is None:
+        status = original_status('live')
+        message = {
+            'missing_env': 'Сервер не получил ORIGINAL_INIT_DATA',
+            'auth_rejected': 'Оригинал отклонил серверную сессию',
+            'network_error': 'Сервер не смог подключиться к оригиналу',
+            'invalid_response': 'Оригинал вернул неожиданный формат ленты',
+            'loading': 'Загружаем ленту оригинала…',
+        }.get(status, 'Лента оригинала пока недоступна')
         return dict(drops=[], top=None, bonus=bonus, liveMode='real',
-                    liveError='Лента оригинала пока недоступна')
+                    liveError=message)
     return dict(drops=live['drops'], top=live['top'], bonus=bonus, liveMode='real')
 
 
@@ -1300,6 +1324,11 @@ def custom_image(token,item_id):
 @app.get('/health')
 def health():
     db().execute('SELECT 1').fetchone()
+    if request.args.get('original') == '1':
+        kinds = ('live', 'giveaways')
+        for kind in kinds:
+            original_snapshot(kind)
+        return jsonify(ok=True, build=FRONTEND_BUILD, original={kind: original_status(kind) for kind in kinds})
     return jsonify(ok=True,payments=False,publicAdmin=True)
 
 
