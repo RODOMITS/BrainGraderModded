@@ -2724,6 +2724,56 @@
     }
   }
 
+  // Падающие листья — отдельным слоем поверх страниц (клики проходят насквозь), листик в углу карточек кейсов, кленовый лист у логотипа.
+  const AU_COLORS = ['#e8732a', '#c8401f', '#f0b429', '#b5541c', '#d9902f'];
+  const AU_MAPLE = (c) => `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M32 2 37 14 45 10 43 22 53 20 47 29 55 32 42 39 44 46 33 43 33 58 31 58 31 43 20 46 22 39 9 32 17 29 11 20 21 22 19 10 27 14Z" fill="${c}"/><path d="M32 12V50M32 30 22 22M32 30 42 22M32 38 18 32M32 38 46 32" stroke="rgba(0,0,0,.18)" stroke-width="1.4" fill="none" stroke-linecap="round"/></svg>`;
+  const AU_OAK = (c) => `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M32 4C40 8 38 13 44 14 50 15 47 21 51 24 56 28 49 32 51 37 53 43 45 43 43 48 41 53 35 52 33 58H31C29 52 23 53 21 48 19 43 11 43 13 37 15 32 8 28 13 24 17 21 14 15 20 14 26 13 24 8 32 4Z" fill="${c}"/><path d="M32 10V56M32 24 24 19M32 24 40 19M32 34 21 30M32 34 43 30M32 44 25 41M32 44 39 41" stroke="rgba(0,0,0,.18)" stroke-width="1.4" fill="none" stroke-linecap="round"/></svg>`;
+  const AU_SPOTS = [['.case-card', 'tr'], ['.promo-card', 'tr'], ['.gw-empty', 'tl'], ['.mys-stage', 'tr'], ['.cd-stage', 'tr']];
+  let auObs = null;
+  let auQueued = false;
+  function auDecorate() {
+    auQueued = false;
+    let k = 0;
+    for (const [sel, corner] of AU_SPOTS) {
+      for (const el of document.querySelectorAll(sel)) {
+        k++;
+        if (el.querySelector(':scope > .au-leaf')) continue;
+        if (getComputedStyle(el).position === 'static') el.style.position = 'relative';
+        const c = AU_COLORS[k % AU_COLORS.length];
+        el.insertAdjacentHTML('beforeend', `<span class="au-leaf ${corner}">${k % 2 ? AU_MAPLE(c) : AU_OAK(c)}</span>`);
+      }
+    }
+  }
+  function autumn(on) {
+    document.documentElement.classList.toggle('autumn', on);
+    if (!on) {
+      auObs?.disconnect();
+      auObs = null;
+      $('#auLayer')?.remove();
+      $$('.au-leaf, .au-logo').forEach((el) => el.remove());
+      return;
+    }
+    if (!$('#auLayer')) {
+      // 9 листьев: разные места, размеры, скорость и цвет; задержки отрицательные — с первой секунды уже летят
+      const leaves = Array.from({ length: 9 }, (_, i) => {
+        const c = AU_COLORS[i % AU_COLORS.length];
+        const left = [6, 18, 31, 44, 57, 69, 81, 92, 50][i];
+        const size = [26, 20, 30, 18, 24, 28, 19, 23, 16][i];
+        const dur = [17, 22, 19, 25, 18, 21, 24, 20, 27][i];
+        return `<div class="au-fall" style="left:${left}%;width:${size}px;animation-duration:${dur}s;animation-delay:-${(i * 2.7) % dur}s"><i style="animation-duration:${3 + (i % 3)}s">${i % 2 ? AU_MAPLE(c) : AU_OAK(c)}</i></div>`;
+      }).join('');
+      const pile = (side) => `<span class="au-pile ${side}">${AU_MAPLE(AU_COLORS[0])}${AU_OAK(AU_COLORS[2])}${AU_MAPLE(AU_COLORS[1])}</span>`;
+      document.body.insertAdjacentHTML('beforeend', `<div id="auLayer" aria-hidden="true">${leaves}<div class="au-glow"></div>${pile('l')}${pile('r')}</div>`);
+    }
+    const logo = document.querySelector('.topbar a[aria-label="На главную"]');
+    if (logo && !logo.querySelector('.au-logo')) logo.insertAdjacentHTML('beforeend', `<span class="au-logo">${AU_MAPLE('#e8732a')}</span>`);
+    auDecorate();
+    if (!auObs) {
+      auObs = new MutationObserver(() => { if (!auQueued) { auQueued = true; requestAnimationFrame(auDecorate); } });
+      auObs.observe(view, { childList: true, subtree: true });
+    }
+  }
+
   // =====================================================================
   //                             РОЗЫГРЫШИ
   // =====================================================================
@@ -2767,7 +2817,7 @@
           : `<button class="btn gw-join ghost" data-dep="${g.id}">Пополнить на ${fmt(Math.max(0, Math.round((need - g.deposited) * 100) / 100))} BG</button>`;
       return `
         <section class="gw-card rar-${esc(g.item.rarity)}" data-id="${g.id}">
-          ${webs}
+          ${state.cfg.theme === 'halloween' ? webs : ''}
           <div class="gw-prize">
             <div class="gw-glow"></div>
             <img src="${itemImgBig(g.item.image)}" alt="">
@@ -4525,6 +4575,7 @@
     }
     adminModeStrip();
     halloween(state.cfg.theme === 'halloween');
+    autumn(state.cfg.theme === 'autumn');
     setInterval(()=>{if(!document.hidden&&!state.locked&&state.streak?.nextAt&&Date.now()>=new Date(state.streak.nextAt))streakCheckin();},60000);
     document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!state.locked)streakCheckin();});
     // «я тут» для счётчика онлайна в админке — раз в минуту, пока приложение на экране

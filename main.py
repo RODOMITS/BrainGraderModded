@@ -407,7 +407,7 @@ def case(i):
 
 
 def config():
-    return dict(build=FRONTEND_BUILD,theme='halloween',caseAnim='classic',sandbox=True,depositEnabled=False,withdrawEnabled=False,
+    return dict(build=FRONTEND_BUILD,theme='autumn',caseAnim='classic',sandbox=True,depositEnabled=False,withdrawEnabled=False,
                 starsRate=1,starsMin=1,starsMax=10000,refBonusPercent=0,withdrawMin=1,withdrawWindow='отключён',
                 upgrade=dict(maxItems=5,minChance=1,maxChance=90,presets=[dict(label=f'×{n}',mult=n) for n in [1.25,2,3,5,10]]),
                 mystery=dict(enabled=True,mult=3,minInput=1,maxInput=1e9,floor=1,cap=1e9),

@@ -1772,3 +1772,64 @@ html.admin-concealed a[href="/admin"], html.admin-concealed a[href="#/admin"] { 
 #adminHost{padding-top:16px;padding-bottom:0}.admin-frame{display:block;width:100%;height:calc(100dvh - var(--hdr,66px) - 16px);border:0;background:var(--cave);color-scheme:dark}
 
 .modded-welcome{width:min(480px,calc(100vw - 32px));padding:0;border:1px solid var(--ridge-2);border-radius:20px;background:var(--stone);color:var(--text);box-shadow:0 24px 80px #0008;max-height:90dvh;overflow:auto}.modded-welcome::backdrop{background:rgba(0,0,0,.78)}.mw-content{padding:28px}.mw-content h2{margin:0 0 16px;font:600 24px/1.3 var(--body)}.mw-content p{margin:0 0 28px;color:var(--muted);font:400 15px/1.65 var(--body)}.mw-content a{color:var(--crystal);font-weight:600;text-decoration:none;overflow-wrap:anywhere}.mw-content a:hover{text-decoration:underline}.mw-content .btn{width:100%;margin:0}.mw-content .btn:disabled{background:var(--stone-2);border:1px solid var(--ridge-2);color:var(--faint);opacity:1;cursor:default;box-shadow:none;transform:none}.modded-welcome[open]{animation:mw-enter .24s ease-out}@keyframes mw-enter{from{opacity:0;translate:0 12px}to{opacity:1;translate:0 0}}@media(prefers-reduced-motion:reduce){.modded-welcome[open]{animation:none}}@media(max-width:480px){.mw-content{padding:24px}.mw-content h2{font-size:22px}}
+
+
+/* Осенняя тема */
+html.autumn body {
+  background:
+    radial-gradient(900px 520px at 88% -12%, rgba(232, 115, 42, .13), transparent 60%),
+    radial-gradient(760px 520px at -5% 108%, rgba(200, 64, 31, .12), transparent 62%),
+    radial-gradient(600px 400px at 50% 120%, rgba(240, 180, 41, .06), transparent 70%),
+    var(--cave);
+  background-attachment: fixed;
+}
+/* главные кнопки — янтарные */
+html.autumn .btn:not(.ghost):not(:disabled):not(.skip):not(.danger) { background: linear-gradient(180deg, #f2a43a, #d9631e); color: #2a1300; box-shadow: 0 0 18px rgba(232, 115, 42, .22); }
+html.autumn .tn-item[aria-current='page'] { color: #f5b25a; background: rgba(232, 115, 42, .12); box-shadow: inset 0 0 0 1px rgba(232, 115, 42, .38); }
+html.autumn .tn-item[aria-current='page'] svg { color: #e8732a; }
+html.autumn .tn-item[aria-current='page']::after { background: #e8732a; box-shadow: 0 0 12px #e8732a; }
+html.autumn .case-card:hover { border-color: rgba(232, 115, 42, .5); box-shadow: 0 14px 34px rgba(0, 0, 0, .45), 0 0 0 1px rgba(232, 115, 42, .2), 0 0 26px rgba(200, 64, 31, .16); }
+html.autumn h2::after { content: ' 🍂'; font-size: .8em; }
+
+/* листик в углу карточки */
+.au-leaf { position: absolute; z-index: 3; width: 26px; height: 26px; pointer-events: none; opacity: .9; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .35)); }
+.au-leaf svg, .au-logo svg, .au-fall svg, .au-pile svg { display: block; width: 100%; height: 100%; }
+.au-leaf.tr { top: -6px; right: -4px; transform: rotate(28deg); }
+.au-leaf.tl { top: -6px; left: -4px; transform: rotate(-24deg); }
+.cd-stage .au-leaf, .mys-stage .au-leaf { width: 34px; height: 34px; top: 4px; }
+
+/* кленовый лист у логотипа — покачивается */
+.au-logo { width: 22px; height: 22px; margin-left: 6px; animation: auRock 3.2s ease-in-out infinite; transform-origin: 50% 90%; }
+@keyframes auRock { 50% { transform: rotate(-14deg); } }
+
+/* слой поверх страницы: клики проходят насквозь */
+#auLayer { position: fixed; inset: 0; z-index: 15; pointer-events: none; overflow: hidden; }
+.au-fall { position: absolute; top: 0; opacity: 0; animation: auFall 20s linear infinite; }
+.au-fall i { display: block; animation: auSway 4s ease-in-out infinite alternate; }
+.au-fall svg { opacity: .85; filter: drop-shadow(0 2px 4px rgba(0, 0, 0, .35)); }
+@keyframes auFall {
+  0% { transform: translateY(-60px); opacity: 0; }
+  5% { opacity: .9; }
+  90% { opacity: .9; }
+  100% { transform: translateY(calc(100vh + 40px)); opacity: 0; }
+}
+@keyframes auSway { from { transform: translateX(-26px) rotate(-35deg); } to { transform: translateX(26px) rotate(40deg); } }
+/* тёплое свечение снизу */
+.au-glow { position: absolute; left: -10%; right: -10%; bottom: -30px; height: 120px; opacity: .55;
+  background: radial-gradient(55% 100% at 22% 100%, rgba(232, 115, 42, .18), transparent 70%), radial-gradient(50% 100% at 78% 100%, rgba(200, 64, 31, .14), transparent 70%); }
+/* кучки листьев в нижних углах — только на компьютере, чтобы не закрывать кнопки на телефоне */
+.au-pile { display: none; position: absolute; bottom: 8px; width: 74px; height: 40px; }
+.au-pile svg { position: absolute; width: 34px; height: 34px; }
+.au-pile svg:nth-child(1) { left: 0; bottom: 0; transform: rotate(-30deg); }
+.au-pile svg:nth-child(2) { left: 22px; bottom: 6px; transform: rotate(15deg); }
+.au-pile svg:nth-child(3) { left: 40px; bottom: -2px; transform: rotate(60deg); }
+.au-pile.l { left: 12px; }
+.au-pile.r { right: 12px; transform: scaleX(-1); }
+@media (min-width: 900px) {
+  .au-pile { display: block; }
+  .au-leaf { width: 30px; height: 30px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .au-fall { display: none; }
+  .au-logo { animation: none; }
+}
