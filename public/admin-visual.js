@@ -47,7 +47,7 @@ window.addEventListener('admin:data',()=>{
     const cancel=document.createElement('button');cancel.type='button';cancel.className='secondary';cancel.textContent='×';cancel.setAttribute('aria-label','Отменить Rig: '+names[game]);cancel.onclick=async()=>{cancel.disabled=true;try{await api('admin/next-result/cancel',{game});await load(false);}catch(e){notice(e.message,true);cancel.disabled=false;}};card.append(cancel);status.append(card);
   }
   if(!status.children.length)status.textContent='Нет заданных результатов';
-  $('promos').replaceChildren(...data.promos.map(p=>{const row=document.createElement('span');row.className='promo-entry';row.innerHTML='<b>'+safeAdmin(p.code)+'</b><span>'+fmtAdmin(p.reward)+' BG</span><small>Осталось '+p.uses+'</small>';return row;}));
+  $('promos').replaceChildren(...data.promos.map(p=>{const row=document.createElement('span');row.className='promo-entry';row.innerHTML='<b>'+safeAdmin(p.code)+'</b><span>'+(p.caseId ? 'Кейс №'+p.caseId : fmtAdmin(p.reward)+' BG')+'</span><small>Осталось '+p.uses+'</small>';return row;}));
 });
 if(adminCatalog.length)window.dispatchEvent(new Event('admin:data'));
 

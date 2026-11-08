@@ -918,10 +918,10 @@
       </div>
       ${b.used
         ? '<p class="promo-used">Этот промокод ты уже использовал. Следующий появится, когда закончится время</p>'
-        : '<button class="btn" id="promoUse">Пополнить с промокодом</button>'}`;
+        : '<button class="btn" id="promoUse">Скопировать код оригинала</button>'}`;
     $('#promoCode', box).onclick = () => copy(b.code, 'Промокод скопирован');
     const use = $('#promoUse', box);
-    if (use) use.onclick = () => openDeposit(dep.tab, { promo: b.code });
+    if (use) use.onclick = () => copy(b.code, 'Промокод скопирован');
   }
 
   // Названия разделов кейсов на главной (новый раздел = новая строка здесь + category у кейса)
@@ -941,7 +941,7 @@
       try {
         const home = await api('/api/home');
         if (stale(t)) return;
-        const codeChanged = !state.home?.bonus || !home.bonus || state.home.bonus.code !== home.bonus.code || state.home.bonus.used !== home.bonus.used;
+        const codeChanged = !state.home?.bonus || !home.bonus || state.home.bonus.code !== home.bonus.code || state.home.bonus.used !== home.bonus.used || state.home.bonus.endsAt !== home.bonus.endsAt || state.home.bonus.percent !== home.bonus.percent;
         state.home = home;
         drawTopDrop(home);
         drawDrops(home, animate);
@@ -963,7 +963,7 @@
       }
     });
     try {
-      state.cases = state.cases || (await api('/api/cases'));
+      state.cases = await api('/api/cases');
     } catch (e) {
       return fail(e);
     }
@@ -1195,6 +1195,21 @@
     return pool[0];
   }
 
+  function stripCards(pool, winner, winIdx, len) {
+    const top = [...pool].sort((a, b) => b.price - a.price).slice(0, Math.min(4, Math.max(1, Math.ceil(pool.length / 4))));
+    const rich = top.filter((x) => x.id !== winner.id).length ? top.filter((x) => x.id !== winner.id) : top;
+    const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+    const cards = Array.from({ length: len }, (_, i) => {
+      if (i === winIdx) return winner;
+      const d = Math.abs(i - winIdx);
+      if (d === 1 && Math.random() < 0.75) return pick(rich); // соседи выпавшего — чаще всего дорогие
+      if (d === 2 && Math.random() < 0.4) return pick(rich);
+      if (d > 2 && Math.random() < 0.12) return pick(rich); // по пути тоже пролетают
+      return randomItem(pool);
+    });
+    return cards;
+  }
+
   function placeStrip(strip, index, offset = 0) {
     const W = strip.parentElement.clientWidth;
     const x = W / 2 - (index * STEP + CARD / 2) + offset;
@@ -1379,7 +1394,7 @@
     const roulette = strip.parentElement;
     // При ×3/×5 лента короче (меньше карточек в странице — легче телефону), время прокрута то же
     const winIdx = roulette.classList.contains('n5') ? Math.round(cfg.win * 0.5) : roulette.classList.contains('n3') ? Math.round(cfg.win * 0.65) : cfg.win;
-    const cards = Array.from({ length: winIdx + 8 }, (_, i) => (i === winIdx ? winner : randomItem(pool)));
+    const cards = stripCards(pool, winner, winIdx, winIdx + 8);
     stopIdle(strip);
     roulette.classList.remove('done');
     strip.style.transition = 'none';
@@ -1459,7 +1474,7 @@
     const { delay = 0, sound = true, skip = null } = opts;
     const cfg = prefs.fast ? SPIN.fast : SPIN.normal;
     const winIdx = cfg.win;
-    const cards = Array.from({ length: winIdx + 6 }, (_, i) => (i === winIdx ? winner : randomItem(pool)));
+    const cards = stripCards(pool, winner, winIdx, winIdx + 6);
     stopIdle(strip);
     strip.style.transition = 'none';
     strip.classList.remove('spinning');
@@ -1708,8 +1723,8 @@
     try {
       const v2 = caseAnimV2();
       const r = test
-        ? await api(`/api/test/open/${cs.id}`, { method: 'POST', body: { count: n, buttonSide } })
-        : await api(`/api/cases/${cs.id}/open`, { method: 'POST', body: { key: newKey(), count: n, buttonSide, ...(promo ? { promo } : {}) } });
+        ? await api(`/api/test/open/${cs.id}`, { method: 'POST', body: { count: n, expectedPrice: cs.price, buttonSide } })
+        : await api(`/api/cases/${cs.id}/open`, { method: 'POST', body: { key: newKey(), count: n, expectedPrice: cs.price, buttonSide, ...(promo ? { promo } : {}) } });
       if (promo) toast('Промокод сработал — открываем бесплатно');
       if (test) state.me.testBalance = r.testBalance;
       else setBalance(r.balance);
@@ -2827,7 +2842,7 @@
           <div class="gw-info">
             <div class="gw-timer"><span class="muted">До конца</span><b class="mono" data-left="${g.id}">${dhm(left(g))}</b></div>
             <div class="gw-stats">
-              <div><span class="muted">Участников</span><b>${fmt(g.participants)}</b></div>
+              <div><span class="muted">Участников</span><b data-gw-count="${g.id}">${g.participants == null ? '—' : fmt(g.participants)}</b></div>
               <div><span class="muted">Твой номер</span><b>${joined ? '№' + fmt(g.myNum) : '—'}</b></div>
             </div>
             <div class="gw-need">
@@ -2845,7 +2860,7 @@
       <div class="gw-past rar-${esc(g.item.rarity)}">
         <img src="${itemImg(g.item.image)}" alt="">
         <div class="gw-past-n"><b>${esc(g.item.name)}</b>${price(g.item.price)}</div>
-        <div class="gw-past-w">${g.winner ? `${g.winner.me ? '🎉 <b>Ты победил!</b>' : `Победил <b>${esc(g.winner.name)}</b>`} · №${fmt(g.winner.num)} из ${fmt(g.participants)}` : '<span class="muted">Участников не было</span>'}</div>
+        <div class="gw-past-w">${g.participants == null ? '' : 'Участников: ' + fmt(g.participants) + ' · '}${g.winner ? `${g.winner.me ? '🎉 <b>Ты победил!</b>' : `Победил <b>${esc(g.winner.name)}</b>`} · №${fmt(g.winner.num)}` : '<span class="muted">Победителя нет</span>'}</div>
       </div>`;
     $('#gwBody').innerHTML = (data.active.length
       ? data.active.map(card).join('')
@@ -2865,9 +2880,20 @@
     $$('[data-dep]', view).forEach((b) => (b.onclick = () => openDeposit()));
     // таймеры; закончился — через пару секунд обновляем (сервер подведёт итоги)
     let reloading = false;
+    let countRefreshAt = Date.now() + 3000;
     if (gwTimer) clearInterval(gwTimer);
     gwTimer = setInterval(() => {
       if (stale(t)) return;
+      if (data.active.length && !document.hidden && Date.now() >= countRefreshAt) {
+        countRefreshAt = Date.now() + 15000;
+        api('/api/giveaways').then(result => {
+          if (stale(t)) return;
+          for (const giveaway of result.active) {
+            const count = $(`[data-gw-count="${giveaway.id}"]`, view);
+            if (count) count.textContent = giveaway.participants == null ? '—' : fmt(giveaway.participants);
+          }
+        }).catch(() => {});
+      }
       for (const g of data.active) {
         const el = $(`[data-left="${g.id}"]`);
         const ms = left(g);
@@ -3473,32 +3499,8 @@
     суббота: ['в субботу', 'Каждую субботу'],
     воскресенье: ['в воскресенье', 'Каждое воскресенье'],
   };
-  function payoutParts(iso, tz, label) {
-    const d = new Date(iso);
-    let wd, date, time;
-    try {
-      wd = d.toLocaleDateString('ru-RU', { weekday: 'long', timeZone: tz });
-      date = d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', timeZone: tz });
-      time = d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', timeZone: tz });
-    } catch {
-      wd = d.toLocaleDateString('ru-RU', { weekday: 'long' });
-      date = d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
-      time = d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-    }
-    const [on, every] = WEEKDAY[wd] || [wd, wd];
-    return { next: `${on}, ${date}, в ${time} ${label}`, every: `${every} в ${time} ${label}` };
-  }
-  function refHelp(r) {
-    const when = payoutParts(r.nextPayoutAt, r.tz, r.tzLabel);
-    const body = h(`<div class="ref-help">
-      <p>Каждую неделю ты получаешь <b>${fmt(r.percent)}%</b> от того, сколько проиграли приглашённые тобой друзья: сколько они потратили на кейсы и апгрейды минус стоимость того, что им выпало.</p>
-      <p>Засчитывается не больше, чем друг пополнил за эту неделю. Если он играет без пополнений, на доход это не влияет.</p>
-      <p>Если друг выиграл, его выигрыш (тоже не больше его пополнений) уменьшает доход. Если за неделю друзья в плюсе, реферальный баланс уходит в минус, и этот минус гасится доходом следующих недель.</p>
-      <p>${esc(when.every)} доход за неделю переходит на реферальный баланс. Оттуда его можно перевести на основной баланс в любой момент.</p>
-      <button class="btn" id="helpOk">Понятно</button>
-    </div>`);
-    const sh = openSheet('Как считается доход', body);
-    $('#helpOk', body).onclick = () => sh.close();
+  function refHelp() {
+    openSheet('Реферальная статистика', h('<p>Код, ссылка, баланс и доход задаются во вкладке «Рефералы» в админке.</p>'));
   }
 
   async function renderReferrals() {
@@ -3519,7 +3521,7 @@
       <section class="panel ref-code">
         <span class="muted">Твой код</span>
         <button class="ref-code-big" id="copyCode" aria-label="Скопировать код">${esc(r.code)}</button>
-        <p class="hint">Друг получает <b>+${fmt(r.bonusPercent)}%</b> к каждому пополнению с твоим кодом. Ты получаешь <b>${fmt(r.percent)}%</b> от его проигрышей каждую неделю.</p>
+        <p class="hint">Бонус другу <b>+${fmt(r.bonusPercent)}%</b> · Твой процент <b>${fmt(r.percent)}%</b></p>
         ${r.link ? `<div class="reflink"><input id="refLink" readonly value="${esc(r.link)}"><button class="btn small" id="copyRef">Копировать</button></div>
         <button class="btn ghost small" id="shareRef" style="margin-top:8px">Отправить ссылку друзьям</button>` : ''}
         ${!r.isPartner && r.partnerContact ? '<button class="btn ghost small" id="howPartner" style="margin-top:8px">Как стать партнёром?</button>' : ''}
@@ -3532,14 +3534,12 @@
           <button class="help" id="refHelp" aria-label="Как считается доход">?</button>
         </div>
         <div class="ref-income-sum ${pre < 0 ? 'neg' : ''}">${COIN}${signed(pre)}</div>
-        <span class="ref-income-when">Начислится ${esc(payoutParts(r.nextPayoutAt, r.tz, r.tzLabel).next)}</span>
+        <span class="ref-income-when">Задаётся в админке</span>
       </section>
 
       <section class="panel">
         <span class="muted">Реферальный баланс</span>
         <div class="bal-big ${neg ? 'neg' : ''}">${COIN}${neg ? signed(r.refBalance) : fmt(r.refBalance)}</div>
-        ${neg ? '<p class="hint">Друзья выиграли больше, чем проиграли. Этот минус погасится доходом следующих недель, с основного баланса ничего не спишется.</p>' : ''}
-        <button class="btn" id="refTransfer" ${r.refBalance > 0 ? '' : 'disabled'}>Перевести на баланс</button>
         <div class="stats two">
           <div class="stat"><b>${r.count}</b><span>${plural(r.count, 'друг', 'друга', 'друзей')}</span></div>
           <div class="stat"><b>${fmt(r.earned)}</b><span>BG заработано</span></div>
@@ -3549,7 +3549,7 @@
       <h2>Друзья</h2>
       ${r.referrals.length
         ? `<div class="panel ref-list">${r.referrals.map((f) => `<div class="line"><div class="grow"><b>${esc(f.name)}</b><span class="muted">с ${new Date(f.joinedAt).toLocaleDateString('ru-RU')}</span></div>${price(f.earned)}</div>`).join('')}</div>`
-        : '<div class="empty">Пока никого. Отправь другу ссылку: когда он зайдёт по ней, он появится здесь</div>'}
+        : '<div class="empty">Список друзей пуст</div>'}
 
       ${r.history.length ? `<h2>История</h2><div class="panel ref-list">${r.history.map((x) => `<div class="line"><div class="grow"><b>${x.kind === 'week' ? 'Доход за неделю' : x.kind === 'transfer' ? 'Перевод на баланс' : 'Корректировка'}</b><span class="muted">${new Date(x.at).toLocaleString('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}</span></div><span class="price ${x.amount < 0 ? 'neg' : ''}">${COIN}${signed(x.amount)}</span></div>`).join('')}</div>` : ''}`;
 
@@ -3563,23 +3563,8 @@
         try { TG?.openTelegramLink ? TG.openTelegramLink(url) : window.open(url, '_blank'); } catch { window.open(url, '_blank'); }
       };
     }
-    $('#refTransfer').onclick = async (ev) => {
-      ev = { currentTarget: ev.currentTarget }; // после await у события пропадает currentTarget
-      ev.currentTarget.disabled = true;
-      try {
-        const res = await api('/api/referrals/transfer', { method: 'POST', body: { key: newKey() } });
-        setBalance(res.balance);
-        haptic('success');
-        toast(`Переведено на баланс: ${fmt(res.transferred)} BG`);
-        renderReferrals();
-      } catch (e) {
-        fail(e);
-        ev.currentTarget.disabled = false;
-      }
-    };
   }
 
-  // Как стать партнёром: написать владельцу, приложить ссылки на TikTok и Telegram-канал
   function partnerHow(contact) {
     const nick = String(contact).replace(/^@/, '');
     const body = h(`
@@ -3811,7 +3796,7 @@
       <h1 class="page-title">Кабинет партнёра</h1>
       <div class="pc-grid">
         <div class="pc-stat"><span>Твой процент</span><b>${fmt(r.percent)}%</b><small>от проигрышей друзей</small></div>
-        <div class="pc-stat accent"><span>Предварительный доход</span><b>${COIN}${signed(r.preliminary)}</b><small>начислится ${esc(payoutParts(r.nextPayoutAt, r.tz, r.tzLabel).next)}</small></div>
+        <div class="pc-stat accent"><span>Предварительный доход</span><b>${COIN}${signed(r.preliminary)}</b><small>задаётся в админке</small></div>
         <div class="pc-stat"><span>Реферальный баланс</span><b>${COIN}${fmt(r.refBalance)}</b><small>заработано всего ${fmt(r.earned)} BG</small></div>
         <div class="pc-stat"><span>Друзей</span><b>${fmt(r.friends)}</b><small>+${fmt(r.friendsDay)} за сутки · заходили ${fmt(r.activeDay)}</small></div>
         <div class="pc-stat"><span>Пополнили</span><b>${fmt(r.payers)}</b><small>из ${fmt(r.friends)} друзей</small></div>
@@ -3823,13 +3808,13 @@
         <div class="pc-chart">${r.days.map((d) => `<div class="pc-day" title="${dd(d.day)}: +${d.joined} друзей, пополнили ${fmt(d.deposits)} BG, проиграли ${fmt(d.lost)} BG">
           <div class="pc-bars"><i class="dep" style="height:${Math.round((Math.max(0, d.deposits) / max) * 100)}%"></i><i class="lost" style="height:${Math.round((Math.max(0, d.lost) / max) * 100)}%"></i></div>
           <span class="pc-j">${d.joined ? '+' + d.joined : ''}</span><span class="pc-d">${new Date(d.day).getDate()}</span></div>`).join('')}</div>
-        <p class="hint">Цифра над датой — сколько друзей пришло в этот день. Доход — ${fmt(r.percent)}% от проигрышей друзей, но не больше их пополнений за неделю.</p>
+        <p class="hint">Цифра над датой — сколько друзей пришло в этот день. Показатели задаются в админке.</p>
       </section>
 
       <section class="panel ref-code">
         <span class="muted">Твой код и ссылка</span>
         <button class="ref-code-big" id="pcCode">${esc(r.code)}</button>
-        <p class="hint">Друг получает <b>+${fmt(r.bonusPercent)}%</b> к каждому пополнению с твоим кодом.</p>
+        <p class="hint">Бонус другу <b>+${fmt(r.bonusPercent)}%</b></p>
         ${r.link ? `<div class="reflink"><input readonly value="${esc(r.link)}"><button class="btn small" id="pcLink">Копировать</button></div>` : ''}
       </section>
 
@@ -3852,7 +3837,7 @@
     const mask = (c) => (show ? esc(c) : '•'.repeat(Math.min(10, c.length)));
     box.innerHTML = `
       <div class="section-head" style="margin-top:0"><h3 style="margin:0">Мои промокоды</h3><button class="link-btn" id="ppShow">${show ? '🙈 Скрыть коды' : '👁 Показать коды'}</button></div>
-      <p class="hint" style="margin-top:0">Ты партнёр: можешь создать промокод на монеты для своих подписчиков. Каждый игрок активирует его только один раз. Монеты списываются с твоего баланса сразу, за неиспользованные активации вернутся при удалении.</p>
+      <p class="hint" style="margin-top:0">Ты партнёр: можешь создать промокод на монеты для своих подписчиков. Каждый игрок активирует его только один раз.</p>
       <label class="field"><span>Промокод (5–20 латинских букв или цифр)</span><input id="ppCode" maxlength="20" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Например, VLADTV50"></label>
       <div class="btn-row" style="gap:8px">
         <label class="field" style="flex:1"><span>Активаций</span><input id="ppUses" type="number" inputmode="numeric" min="1" max="${L.maxUses}" value="10"></label>
@@ -3861,16 +3846,9 @@
       <button class="btn" id="ppCreate" style="margin-top:12px"></button>
       <div id="ppList" style="margin-top:12px">${d.promos.length ? d.promos.map((p) => `
         <div class="line"><div class="grow"><b class="pp-code">${mask(p.code)}</b><span class="muted">${fmt(p.reward)} BG × ${p.maxUses} · использовано ${p.uses} из ${p.maxUses}${p.status === 'used_up' ? ' · закончился' : ''}</span></div>
-        ${p.status === 'active' ? `<button class="link-btn" data-pdel="${p.id}" data-code="${show ? esc(p.code) : 'этот'}" data-left="${(p.maxUses - p.uses) * p.reward}">Удалить</button>` : ''}</div>`).join('') : '<p class="hint">Промокодов пока нет</p>'}</div>`;
-    const cost = () => {
-      const n = Math.floor(Number($('#ppUses').value) || 0);
-      const r = Number($('#ppReward').value) || 0;
-      $('#ppCreate').innerHTML = `Создать за ${price(Math.round(n * r * 100) / 100)}`;
-    };
+        ${p.status === 'active' ? `<button class="link-btn" data-pdel="${p.id}" data-code="${show ? esc(p.code) : 'этот'}">Удалить</button>` : ''}</div>`).join('') : '<p class="hint">Промокодов пока нет</p>'}</div>`;
+    $('#ppCreate').textContent = 'Создать промокод';
     $('#ppShow').onclick = () => { state.showCodes = !state.showCodes; drawPartnerPromos(); };
-    $('#ppUses').oninput = cost;
-    $('#ppReward').oninput = cost;
-    cost();
     $('#ppCreate').onclick = async (ev) => {
       const btn = ev.currentTarget;
       if (btn.disabled) return; // уже создаём — повторные нажатия игнорируем
@@ -3883,7 +3861,7 @@
       btn.disabled = true;
       try {
         const ok = await confirmBox(
-          `Создать промокод ${code}: ${uses} активаций по ${fmt(reward)} BG?\nС баланса спишется ${fmt(uses * reward)} BG.`,
+          `Создать промокод ${code}: ${uses} активаций по ${fmt(reward)} BG?`,
           { ok: 'Создать' },
         );
         if (!ok) return;
@@ -3902,16 +3880,14 @@
       if (b.disabled) return;
       b.disabled = true;
       try {
-        // Сумма в окне — на момент открытия. Вернём ровно за те активации, которые останутся неиспользованными
-        // в момент удаления: если кто-то успеет активировать раньше, вернётся меньше — сервер считает сам.
         const ok = await confirmBox(
-          `Удалить промокод ${b.dataset.code}? Вернём монеты за неиспользованные активации — сейчас это ${fmt(Number(b.dataset.left))} BG.`,
+          `Удалить промокод ${b.dataset.code}?`,
           { ok: 'Удалить' },
         );
         if (!ok) return;
         const r = await api(`/api/promos/${b.dataset.pdel}/delete`, { method: 'POST', body: {} });
         setBalance(r.balance);
-        toast(`Промокод удалён, вернули ${fmt(r.refund)} BG`);
+        toast('Промокод удалён');
         drawPartnerPromos();
       } catch (e) {
         fail(e);

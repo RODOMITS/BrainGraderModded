@@ -15,7 +15,7 @@
 <button>Добавить Rig</button></form><button id="rigCancel">Отменить для выбранной игры</button><p id="rigStatus" role="status"></p></section>
 <section><h2>Прогресс для розыгрыша</h2><form id="giveawayForm"><label>Учтённые BG для текущего розыгрыша</label><input id="giveawayAmount" type="number" min="0" step=".01" value="0" required><p class="hint">Задаёт прогресс вручную, отдельно от баланса. При 500 BG игрок может нажать «Участвовать». Средства не списываются.</p><button>Сохранить прогресс</button></form></section>
 <section><h2>Каталог предметов и кейсов</h2><p class="hint">items — предметы; cases — кейсы. price — цена BG; image — путь /img/... с оригинального сайта; rarity — common, rare, epic, legendary или og. Внутри кейса itemId ссылается на ID предмета, weight задаёт относительный вес выпадения (шанс = вес / сумма весов). freeKind: "daily" — раз в сутки, null — платный кейс.</p><p class="hint">Изменения кейсов и предметов сохраняются только у тебя. Существующие предметы в инвентарях сохраняют цену на момент получения.</p><label>Импорт каталога JSON</label><input id="importFile" type="file" accept=".json,application/json"><form id="catalogForm"><textarea id="catalog" aria-label="Каталог JSON" spellcheck="false"></textarea><button>Сохранить каталог</button></form><button id="resetCatalog">Вернуть исходный каталог для себя</button></section>
-<section><h2>Промокод на BG</h2><form id="promoForm"><label>Код (латиница, цифры, _)</label><input id="code" minlength="3" maxlength="20" required><label>Награда BG</label><input id="reward" type="number" min="1" value="500" required><label>Число активаций</label><input id="uses" type="number" min="1" max="10000" value="100" required><button>Создать</button></form><p id="promos"></p></section>
+<section><h2>Промокод на BG или кейс</h2><form id="promoForm"><label>Код (латиница, цифры, _)</label><input id="code" minlength="3" maxlength="20" required><label for="promoCase">Награда</label><select id="promoCase"><option value="">BG</option></select><label for="reward">Количество BG</label><input id="reward" type="number" min="1" value="500" required><label>Число активаций</label><input id="uses" type="number" min="1" max="10000" value="100" required><button>Создать</button></form><p id="promos"></p></section>
 <section>
   <h2>Управление апгрейдом по нажатию</h2>
   <p class="hint">Правая половина кнопки «Апгрейд» гарантирует выигрыш выбранного брейнрота. Левая половина гарантирует проигрыш.</p>
@@ -32,6 +32,38 @@
     <label for="caseButtonMode">Режим кнопки открытия</label>
     <select id="caseButtonMode"><option value="off">Выключен</option><option value="on">Включён</option></select>
     <button>Сохранить</button>
+  </form>
+</section>
+<section>
+  <h2>Реферальный код и статистика</h2>
+  <p class="hint">Код, ссылка и показатели отображаются на твоей странице рефералов. Все значения задаются вручную.</p>
+  <form id="referralForm">
+    <label>Код <input name="code" minlength="3" maxlength="20" pattern="[A-Za-z0-9_]{3,20}" required></label>
+    <label>Ссылка <input name="link" type="url" maxlength="500" placeholder="https://t.me/..."></label>
+    <label>Число друзей <input name="count" type="number" min="0" max="1000000" required></label>
+    <label>Новых друзей за сутки <input name="friendsDay" type="number" min="0" max="1000000" required></label>
+    <label>Заходило за сутки <input name="activeDay" type="number" min="0" max="1000000" required></label>
+    <label>Заработано BG <input name="earned" type="number" min="0" step=".01" required></label>
+    <label>Реферальный баланс BG <input name="refBalance" type="number" step=".01" required></label>
+    <label>Предварительный доход BG <input name="preliminary" type="number" step=".01" required></label>
+    <label>Процент дохода <input name="percent" type="number" min="0" max="100" step=".01" required></label>
+    <label>Бонус другу, % <input name="bonusPercent" type="number" min="0" max="100" step=".01" required></label>
+    <label>Друзей с пополнением <input name="payers" type="number" min="0" max="1000000" required></label>
+    <label>Пополнено друзьями, BG <input name="deposits" type="number" min="0" step=".01" required></label>
+    <label>Пополнено за сутки, BG <input name="dailyDeposits" type="number" min="0" step=".01" required></label>
+    <label>Проиграно за сутки, BG <input name="dailyLosses" type="number" min="0" step=".01" required></label>
+    <label>Кабинет партнёра <select name="isPartner"><option value="off">Выключен</option><option value="on">Включён</option></select></label>
+    <button>Сохранить</button>
+  </form>
+</section>
+<section>
+  <h2>Счётчик участников розыгрыша</h2>
+  <p class="hint">Реальный режим берёт число участников из оригинального Brainrot Grader. Подключи сессию оригинала во вкладке «Лайв-дропы». В своём режиме можно задать отображаемое число для себя.</p>
+  <form id="giveawayCountForm">
+    <label>Розыгрыш <select id="giveawayCountId" required></select></label>
+    <label>Режим <select id="giveawayCountMode"><option value="real">Реальный</option><option value="custom">Свой</option></select></label>
+    <label id="giveawayCountField" hidden>Участников <input id="giveawayCount" type="number" min="0" max="1000000" value="0"></label>
+    <button>Сохранить счётчик</button>
   </form>
 </section>
 </body></html>

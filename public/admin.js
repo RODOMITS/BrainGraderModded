@@ -18,7 +18,27 @@ const names={case:'Кейсы',upgrade:'Апгрейдер',mystery:'Мисте�
 $('promos').textContent=d.promos.map(p=>p.code+': '+p.reward+' BG, осталось '+p.uses).join(' | ');for (const game of ['upgrade', 'case']) {
   $(game + 'ButtonMode').value = d.buttonModes?.[game] ? 'on' : 'off';
 }
-window.adminSnapshot=d;window.dispatchEvent(new Event('admin:data'));if(window.parent!==window)window.parent.postMessage({type:'bg-admin-balance',balance:Number(d.me.balance)},location.origin);}
+const referralForm = $('referralForm');
+for (const [name, value] of Object.entries(d.referralProfile || {})) {
+  const field = referralForm.elements.namedItem(name);
+  if (field) field.value = name === 'isPartner' ? (value ? 'on' : 'off') : value;
+}
+if (d.catalog) {
+  const select = $('promoCase');
+  const selected = select.value;
+  select.replaceChildren(option('', 'BG'), ...d.catalog.cases.filter(cs => !cs.freeKind)
+    .map(cs => option(cs.id, 'Кейс: ' + cs.name)));
+  select.value = [...select.options].some(entry => entry.value === selected) ? selected : '';
+  $('reward').disabled = Boolean(select.value);
+}
+const giveawaySelect = $('giveawayCountId');
+const currentGiveaway = giveawaySelect.value;
+giveawaySelect.replaceChildren(...(d.giveaways || []).map(row => option(row.id, row.name)));
+if ([...giveawaySelect.options].some(entry => entry.value === currentGiveaway)) {
+  giveawaySelect.value = currentGiveaway;
+}
+window.adminSnapshot=d;
+drawGiveawayCount();window.dispatchEvent(new Event('admin:data'));if(window.parent!==window)window.parent.postMessage({type:'bg-admin-balance',balance:Number(d.me.balance)},location.origin);}
 function bind(form,action){$(form).onsubmit=async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;try{await action();notice('Сохранено');await load(false);}catch(err){notice(err.message,true);}finally{b.disabled=false;}};}
 for (const game of ['upgrade', 'case']) {
   bind(game + 'ButtonModeForm', () => api('admin/button-modes', {
@@ -26,6 +46,23 @@ for (const game of ['upgrade', 'case']) {
     enabled: $(game + 'ButtonMode').value === 'on'
   }));
 }
+function drawGiveawayCount() {
+  const override = window.adminSnapshot?.giveawayParticipantOverrides?.[$('giveawayCountId').value];
+  $('giveawayCountMode').value = override?.mode || 'real';
+  $('giveawayCount').value = override?.count ?? 0;
+  $('giveawayCountMode').onchange();
+}
+$('giveawayCountId').onchange = drawGiveawayCount;
+$('giveawayCountMode').onchange = () => {
+  const custom = $('giveawayCountMode').value === 'custom';
+  $('giveawayCountField').hidden = !custom;
+  $('giveawayCount').disabled = !custom;
+};
+bind('giveawayCountForm', () => api('admin/giveaway-participants', {
+  giveawayId: Number($('giveawayCountId').value),
+  mode: $('giveawayCountMode').value,
+  count: Number($('giveawayCount').value)
+}));
 let previewUrl=null;
 $('customImage').onchange=()=>{if(previewUrl)URL.revokeObjectURL(previewUrl);const file=$('customImage').files[0];$('customPreview').hidden=!file;if(file){previewUrl=URL.createObjectURL(file);$('customPreview').src=previewUrl;}};
 const imageData=file=>new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=()=>reject(new Error('Не удалось прочитать картинку'));r.readAsDataURL(file);});
@@ -34,7 +71,21 @@ bind('balanceForm',()=>api('admin/balance',{balance:Number($('balance').value)})
 bind('grantForm',()=>api('admin/grant',{itemId:Number($('item').value),qty:Number($('qty').value)}));
 bind('catalogForm',async()=>{await api('admin/catalog',JSON.parse($('catalog').value));await load(true);});
 bind('giveawayForm',()=>api('admin/giveaway-progress',{amount:Number($('giveawayAmount').value)}));
-bind('promoForm',()=>api('admin/promo',{code:$('code').value,reward:Number($('reward').value),uses:Number($('uses').value)}));
+$('promoCase').onchange = () => { $('reward').disabled = Boolean($('promoCase').value); };
+bind('promoForm', () => api('admin/promo', {
+  code: $('code').value,
+  reward: Number($('reward').value),
+  uses: Number($('uses').value),
+  caseId: $('promoCase').value ? Number($('promoCase').value) : null
+}));
+bind('referralForm', () => {
+  const data = Object.fromEntries(new FormData($('referralForm')));
+  for (const field of $('referralForm').querySelectorAll('input[type=number]')) {
+    data[field.name] = Number(field.value);
+  }
+  data.isPartner = data.isPartner === 'on';
+  return api('admin/referrals', data);
+});
 function updateRigFields(){const game=$('rigGame').value;const allowed={case:['item'],mystery:['item'],upgrade:['item','win','lose'],dice:['item','win','lose','bonus'],mines:['safe','bomb']}[game];for(const o of $('rigMode').options)o.disabled=!allowed.includes(o.value);if(!allowed.includes($('rigMode').value))$('rigMode').value=allowed[0];$('rigItemField').hidden=$('rigMode').value!=='item';$('rigHitsField').hidden=game!=='dice'||['lose','bonus'].includes($('rigMode').value);}
 $('rigGame').onchange=updateRigFields;$('rigMode').onchange=updateRigFields;updateRigFields();
 bind('rigForm',()=>api('admin/next-result',{game:$('rigGame').value,mode:$('rigMode').value,itemId:Number($('rigItem').value),hits:Number($('rigHits').value)}));
@@ -44,24 +95,24 @@ $('resetCatalog').onclick=async()=>{try{await api('admin/catalog/reset',{});awai
 function fillItems(id,query=''){const select=$(id),old=select.value;select.replaceChildren(...adminCatalog.filter(i=>(id!=='liveItem'||!i.customSession)&&i.name.toLowerCase().includes(query.toLowerCase())).map(i=>option(i.id,i.name+' · '+i.price+' BG')));if([...select.options].some(o=>o.value===old))select.value=old;}
 // Group existing forms into compact, keyboard-accessible tabs without duplicating them.
 const sections=[...document.querySelectorAll('body > section,body > .grid > section')];
-const groups=[['quick','Быстрые действия',[0,1,3]],['live','Лайв-дропы',[]],['custom','Свои предметы',[2]],['catalog','Каталог',[5]],['other','Розыгрыш и промо',[4,6]],['buttons','Управление кнопками',[7,8]]];
+const groups=[['quick','Быстрые действия',[0,1,3]],['live','Лайв-дропы',[]],['custom','Свои предметы',[2]],['catalog','Каталог',[5]],['other','Розыгрыш и промо',[4,6,10]],['buttons','Управление кнопками',[7,8]],['referrals','Рефералы',[9]]];
 const nav=document.createElement('nav');nav.className='admin-tabs';nav.setAttribute('aria-label','Разделы админки');
 const host=document.createElement('main');host.className='admin-panels';
 document.querySelector('body > .grid').before(nav,host);
 for(const [id,name,indexes] of groups){const button=document.createElement('button');button.type='button';button.textContent=name;button.dataset.panel=id;nav.append(button);const panel=document.createElement('div');panel.id='panel-'+id;panel.className='admin-panel';panel.hidden=true;for(const i of indexes)if(sections[i])panel.append(sections[i]);host.append(panel);button.onclick=()=>{for(const b of nav.children)b.setAttribute('aria-pressed',String(b===button));for(const p of host.children)p.hidden=p!==panel;sessionStorage.setItem('bg_admin_tab',id);};}
 document.querySelector('body > .grid').remove();
-$('panel-live').innerHTML=`<section><h2>Лайв-дропы</h2><p class="hint">Лента и её настройки меняются только у тебя. Редактор не выдаёт предметы в инвентарь.</p><label>Источник ленты</label><select id="liveMode"><option value="local">Дропы этого приложения</option><option value="editor">Моя лента из редактора</option><option value="real">Реальный лайв дроп — оригинальный сайт</option></select><div id="realConnect" hidden><p class="hint">Оригинал требует собственную авторизацию Telegram. В консоли открытого оригинального мини-приложения выполни <code>Telegram.WebApp.initData</code> и вставь результат ниже. Данные используются только для запроса ленты, хранятся в памяти сервера до часа и не сохраняются в базу. После истечения сессии подключись заново.</p><label>initData оригинала</label><input id="originalInit" type="password" autocomplete="off" placeholder="query_id=… или user=…"><button id="connectOriginal" type="button">Подключить оригинал</button></div><button id="saveLiveMode" type="button">Сохранить источник</button><button id="refreshLive" type="button" class="secondary">Обновить предпросмотр</button><p id="liveHealth" role="status"></p></section><section><h2>Редактор моей ленты</h2><input id="liveSearch" placeholder="Найти брейнрота" aria-label="Поиск брейнрота"><label>Брейнрот</label><select id="liveItem"></select><label>Игра</label><select id="liveSource"><option value="case">Кейсы</option><option value="upgrade">Апгрейдер</option><option value="mystery">Мистери</option><option value="dice">Дайсы</option><option value="mines">Мины</option></select><button id="addLive" type="button">Добавить в начало ленты</button><div id="liveRows"></div><button id="saveLive" type="button">Сохранить мою ленту</button><button id="clearLive" type="button" class="secondary">Очистить черновик</button></section><section><h2>Предпросмотр активной ленты</h2><div id="livePreview" class="drop-preview"></div></section>`;
+$('panel-live').innerHTML=`<section><h2>Лайв-дропы</h2><p class="hint">Лента и её настройки меняются только у тебя. Редактор не выдаёт предметы в инвентарь.</p><label>Источник ленты</label><select id="liveMode"><option value="local">Дропы этого приложения</option><option value="editor">Моя лента из редактора</option><option value="real">Реальный лайв дроп — оригинальный сайт</option></select><div id="realConnect" hidden><p class="hint">Оригинал требует собственную авторизацию Telegram. В консоли открытого оригинального мини-приложения выполни <code>Telegram.WebApp.initData</code> и вставь результат ниже. Данные используются для ленты, каталога, бонусного кода и счётчика розыгрышей, хранятся в памяти сервера до часа и не сохраняются в базу. После истечения сессии подключись заново.</p><label>initData оригинала</label><input id="originalInit" type="password" autocomplete="off" placeholder="query_id=… или user=…"><button id="connectOriginal" type="button">Подключить оригинал</button></div><button id="saveLiveMode" type="button">Сохранить источник</button><button id="refreshLive" type="button" class="secondary">Обновить предпросмотр</button><p id="liveHealth" role="status"></p></section><section><h2>Редактор моей ленты</h2><input id="liveSearch" placeholder="Найти брейнрота" aria-label="Поиск брейнрота"><label>Брейнрот</label><select id="liveItem"></select><label>Игра</label><select id="liveSource"><option value="case">Кейсы</option><option value="upgrade">Апгрейдер</option><option value="mystery">Мистери</option><option value="dice">Дайсы</option><option value="mines">Мины</option></select><button id="addLive" type="button">Добавить в начало ленты</button><div id="liveRows"></div><button id="saveLive" type="button">Сохранить мою ленту</button><button id="clearLive" type="button" class="secondary">Очистить черновик</button></section><section><h2>Предпросмотр активной ленты</h2><div id="livePreview" class="drop-preview"></div></section>`;
 const balanceNow=document.createElement('p');balanceNow.id='balanceNow';$('balanceForm').before(balanceNow);
 for(const [id,label] of [['item','Поиск предмета для выдачи'],['rigItem','Поиск приза для Rig']]){const search=document.createElement('input');search.type='search';search.placeholder=label;search.setAttribute('aria-label',label);$(id).before(search);search.oninput=()=>fillItems(id,search.value);}
 const quick=document.createElement('div');quick.className='quick-buttons';for(const amount of [10000,100000,1000000]){const b=document.createElement('button');b.type='button';b.className='secondary';b.textContent='+'+amount.toLocaleString('ru-RU');b.onclick=()=>{$('balance').value=Number($('balance').value)+amount;};quick.append(b);}$('balance').after(quick);
-function drawLiveEditor(){if(!liveDraft)return;$('liveMode').value=liveDraft.mode;$('realConnect').hidden=liveDraft.mode!=='real';$('liveRows').replaceChildren();for(const [index,d] of liveDraft.drops.entries()){const row=document.createElement('div');row.className='live-row';const img=document.createElement('img');img.src=d.image;img.alt='';const actions=document.createElement('div');actions.className='live-actions';row.classList.toggle('is-top',liveDraft.topId===d.id);const title=document.createElement('span');title.textContent=d.name+' · '+d.price+' BG';row.append(img,title);for(const [label,action] of [['Заменить выбранным',()=>{const item=adminCatalog.find(i=>i.id===Number($('liveItem').value));if(item){liveDraft.drops[index]={...item,id:d.id,itemId:item.id,source:$('liveSource').value};drawLiveEditor();}}],['↑',()=>{if(index){[liveDraft.drops[index-1],liveDraft.drops[index]]=[d,liveDraft.drops[index-1]];drawLiveEditor();}}],[liveDraft.topId===d.id?'★ Топ':'☆ Топ',()=>{liveDraft.topId=d.id;drawLiveEditor();}],['Удалить',()=>{liveDraft.drops.splice(index,1);drawLiveEditor();}]]){const b=document.createElement('button');b.type='button';b.className='secondary';b.textContent=label;b.onclick=action;actions.append(b);}row.append(actions);$('liveRows').append(row);}}
+function drawLiveEditor(){if(!liveDraft)return;$('liveMode').value=liveDraft.mode;$('realConnect').hidden=false;$('liveRows').replaceChildren();for(const [index,d] of liveDraft.drops.entries()){const row=document.createElement('div');row.className='live-row';const img=document.createElement('img');img.src=d.image;img.alt='';const actions=document.createElement('div');actions.className='live-actions';row.classList.toggle('is-top',liveDraft.topId===d.id);const title=document.createElement('span');title.textContent=d.name+' · '+d.price+' BG';row.append(img,title);for(const [label,action] of [['Заменить выбранным',()=>{const item=adminCatalog.find(i=>i.id===Number($('liveItem').value));if(item){liveDraft.drops[index]={...item,id:d.id,itemId:item.id,source:$('liveSource').value};drawLiveEditor();}}],['↑',()=>{if(index){[liveDraft.drops[index-1],liveDraft.drops[index]]=[d,liveDraft.drops[index-1]];drawLiveEditor();}}],[liveDraft.topId===d.id?'★ Топ':'☆ Топ',()=>{liveDraft.topId=d.id;drawLiveEditor();}],['Удалить',()=>{liveDraft.drops.splice(index,1);drawLiveEditor();}]]){const b=document.createElement('button');b.type='button';b.className='secondary';b.textContent=label;b.onclick=action;actions.append(b);}row.append(actions);$('liveRows').append(row);}}
 async function saveLive(){liveDraft.mode=$('liveMode').value;await api('admin/live',liveDraft);notice('Источник и лента сохранены');await previewLive();}
 async function previewLive(){const d=await api('home');$('liveHealth').textContent=d.liveError||'Лента загружена · '+d.drops.length+' дропов';$('livePreview').replaceChildren(...d.drops.map(item=>{const card=document.createElement('div');const img=document.createElement('img');img.src=item.image;img.alt='';const text=document.createElement('span');text.textContent=item.name+' · '+item.price+' BG';card.append(img,text);return card;}));}
 function runAction(id,fn){$(id).onclick=async()=>{const b=$(id);b.disabled=true;try{await fn();}catch(e){notice(e.message,true);}finally{b.disabled=false;}};}
 $('liveSearch').oninput=e=>fillItems('liveItem',e.target.value);
-$('liveMode').onchange=()=>{liveDraft.mode=$('liveMode').value;$('realConnect').hidden=liveDraft.mode!=='real';};
+$('liveMode').onchange=()=>{liveDraft.mode=$('liveMode').value;$('realConnect').hidden=false;};
 runAction('saveLiveMode',saveLive);runAction('saveLive',saveLive);runAction('refreshLive',previewLive);
-runAction('connectOriginal',async()=>{await api('admin/live-connect',{initData:$('originalInit').value.trim()});$('originalInit').value='';await saveLive();});
+runAction('connectOriginal',async()=>{await api('admin/live-connect',{initData:$('originalInit').value.trim()});$('originalInit').value='';notice('Сессия подключена. Обновляем данные оригинала.');});
 $('addLive').onclick=()=>{if(!liveDraft)return;if(liveDraft.drops.length>=30)return notice('Максимум 30 дропов',true);const item=adminCatalog.find(i=>i.id===Number($('liveItem').value));if(!item)return;liveDraft.drops.unshift({...item,itemId:item.id,id:'editor:'+crypto.randomUUID(),source:$('liveSource').value});drawLiveEditor();};
 $('clearLive').onclick=()=>{liveDraft.drops=[];liveDraft.topId=null;drawLiveEditor();notice('Черновик очищен. Сохрани, чтобы применить.');};
 const initial=sessionStorage.getItem('bg_admin_tab')||'quick';(nav.querySelector(`[data-panel="${CSS.escape(initial)}"]`)||nav.firstChild).click();

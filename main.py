@@ -12,8 +12,9 @@ import sqlite3
 import time
 import threading
 from datetime import datetime, timezone
+from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import parse_qsl
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 from urllib.error import HTTPError, URLError
 
 from flask import Flask, Response, g, jsonify, redirect, request, send_from_directory
@@ -34,6 +35,117 @@ CUSTOM_SESSIONS = {}
 CUSTOM_LOCK = threading.RLock()
 REAL_LIVE = {}
 REAL_LIVE_LOCK = threading.RLock()
+SHARED_ORIGINAL = {}
+
+
+class OriginalNoRedirect(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def original_api(path, token):
+    request = Request('https://brainrotgrader.com/api/' + path, headers={
+        'Authorization': 'tma ' + token, 'Accept': 'application/json',
+    })
+    with build_opener(OriginalNoRedirect()).open(request, timeout=5) as response:
+        payload = response.read(2_000_001)
+    if len(payload) > 2_000_000:
+        raise ValueError('Original response too large')
+    return json.loads(payload)
+
+
+def original_item(item):
+    result = {key: item[key] for key in ('name', 'price', 'rarity', 'image')}
+    result['id'] = integer(item['id'])
+    if result['rarity'] == 'coins':
+        result['rarity'] = 'common'
+    return result
+
+
+def fetch_original_catalog(token):
+    summaries = original_api('cases', token)
+    if not isinstance(summaries, list) or not 1 <= len(summaries) <= 100:
+        raise ValueError('Invalid case list')
+    bundled = json.loads((ROOT / 'source_catalog.json').read_text(encoding='utf-8-sig'))
+    weights = {(cs['id'], i['itemId']): i['weight'] for cs in bundled['cases'] for i in cs['items']}
+    shop = original_api('shop', token)
+    items = {}
+    for raw in shop['items']:
+        item = original_item(raw)
+        items[item['id']] = item
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        details = list(pool.map(lambda cs: original_api(f"cases/{integer(cs['id'])}", token), summaries))
+    cases = []
+    for summary, detail in zip(summaries, details):
+        cid = integer(summary['id'])
+        if detail['id'] != cid:
+            raise ValueError('Mismatched case')
+        case_items = []
+        for raw in detail['items']:
+            item = original_item(raw)
+            iid = item['id']
+            items[iid] = item
+            case_items.append(dict(itemId=iid, weight=weights.get((cid, iid), 1)))
+        cases.append(dict(id=cid, name=summary['name'], price=summary['price'], image=summary['image'],
+                          category=summary.get('category', 'standard'),
+                          freeKind='daily' if summary.get('freeKind') else None, items=case_items))
+    catalog = dict(items=list(items.values()), cases=cases)
+    validate_catalog(catalog)
+    return catalog
+
+
+def refresh_original(entry, token, kind):
+    delay = 60
+    try:
+        if kind == 'catalog':
+            value = fetch_original_catalog(token)
+            delay = 300
+        elif kind == 'giveaways':
+            data = original_api('giveaways', token)
+            value = {
+                group: [dict(itemId=integer(row['item']['id']), count=integer(row['participants'], 0))
+                        for row in data[group]]
+                for group in ('active', 'finished')
+            }
+            value['expires'] = time.time() + 120
+        else:
+            raw = original_api('home', token).get('bonus')
+            value = None
+            if raw:
+                expires = datetime.fromisoformat(raw['endsAt'].replace('Z', '+00:00')).timestamp()
+                if expires > time.time():
+                    value = dict(code=promo_code(raw['code']), percent=number(raw['percent'], 0, 100),
+                                 endsAt=iso(expires), expires=expires, used=False)
+                    delay = min(60, max(1, expires - time.time()))
+            if value is None:
+                delay = 15
+        with REAL_LIVE_LOCK:
+            entry[kind] = value
+    except (OSError, ValueError, TypeError, KeyError, AttributeError, Problem):
+        # A failed refresh must leave the last complete catalogue available.
+        pass
+    finally:
+        with REAL_LIVE_LOCK:
+            entry[kind + '_next'] = time.time() + delay
+            entry[kind + '_loading'] = False
+
+
+def original_snapshot(kind):
+    now = time.time()
+    with REAL_LIVE_LOCK:
+        personal = REAL_LIVE.get((g.uid, g.play_session), {})
+        sources = [
+            (personal, personal.get('token') if personal.get('expires', 0) > now else None),
+            (SHARED_ORIGINAL, os.getenv('ORIGINAL_INIT_DATA', '').strip()),
+        ]
+        for entry, token in sources:
+            if token and now >= entry.get(kind + '_next', 0) and not entry.get(kind + '_loading'):
+                entry[kind + '_loading'] = True
+                threading.Thread(target=refresh_original, args=(entry, token, kind), daemon=True).start()
+            value = entry.get(kind)
+            if value and (kind == 'catalog' or value['expires'] > now):
+                return value
+    return None
 
 
 def custom_session(create=False):
@@ -147,6 +259,12 @@ def init_db():
         CREATE INDEX IF NOT EXISTS live_drops_created ON live_drops(created DESC, inventory_id DESC);
         CREATE TABLE IF NOT EXISTS promos(code TEXT PRIMARY KEY, reward REAL NOT NULL, uses INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS claims(user_id TEXT, code TEXT, PRIMARY KEY(user_id,code));
+        CREATE TABLE IF NOT EXISTS promo_options(
+          code TEXT PRIMARY KEY, case_id INTEGER, partner_id TEXT, max_uses INTEGER
+        );
+        CREATE TABLE IF NOT EXISTS referral_profiles(
+          user_id TEXT PRIMARY KEY, code TEXT NOT NULL, stats TEXT NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS giveaways(id INTEGER PRIMARY KEY, item TEXT NOT NULL,
           ends REAL NOT NULL, minimum REAL NOT NULL, finished INTEGER NOT NULL DEFAULT 0,
           winner_id TEXT, winner_num INTEGER);
@@ -187,6 +305,10 @@ def base_catalog():
     personal = db().execute('SELECT value FROM user_catalogs WHERE user_id=?', (g.uid,)).fetchone()
     if personal:
         return json.loads(personal[0])
+    if 'original_catalog' not in g:
+        g.original_catalog = original_snapshot('catalog')
+    if g.original_catalog:
+        return dict(items=list(g.original_catalog['items']), cases=g.original_catalog['cases'])
     source = ROOT / 'source_catalog.json'
     if source.exists():
         data = json.loads(source.read_text(encoding='utf-8-sig'))
@@ -313,25 +435,24 @@ def live_settings():
 
 def home():
     config=live_settings()
+    bonus = original_snapshot('bonus')
     if config['mode']=='editor':
         drops=[dict(d,source=dict(kind=d['source']) if isinstance(d.get('source'),str) else d.get('source')) for d in config['drops']]
         top=next((d for d in drops if d['id']==config.get('topId')),None)
-        return dict(drops=drops,top=top or max(drops,key=lambda d:d['price'],default=None),bonus=None,liveMode='editor')
+        return dict(drops=drops,top=top or max(drops,key=lambda d:d['price'],default=None),bonus=bonus,liveMode='editor')
     if config['mode']!='real':
-        return dict(local_home(),liveMode='local')
+        return dict(local_home(),liveMode='local',bonus=bonus)
     key=(g.uid,g.play_session)
     # Credentials and cached original responses remain in memory, never in SQLite/history.
     with REAL_LIVE_LOCK:
         entry=REAL_LIVE.get(key)
         if not entry or entry['expires']<time.time():
             REAL_LIVE.pop(key,None)
-            return dict(drops=[],top=None,bonus=None,liveMode='real',liveError='Подключи сессию оригинала в редакторе лайв-дропов')
+            return dict(drops=[],top=None,bonus=bonus,liveMode='real',liveError='Подключи сессию оригинала в редакторе лайв-дропов')
         if entry.get('next',0)>time.time():
-            return entry['data']
+            return dict(entry['data'], bonus=bonus)
         try:
-            req=Request('https://brainrotgrader.com/api/home',headers={'Authorization':'tma '+entry['token'],'Accept':'application/json'})
-            with urlopen(req,timeout=4) as response:
-                data=json.loads(response.read(512_001))
+            data = original_api('home', entry['token'])
             if not isinstance(data,dict) or not isinstance(data.get('drops'),list):
                 raise ValueError('format')
             clean=[]
@@ -348,7 +469,7 @@ def home():
             message='Оригинал отклонил сессию. Открой его заново и переподключись.' if isinstance(error,HTTPError) and error.code in (401,403) else 'Лента оригинала временно недоступна'
             entry['data']=dict(entry.get('data') or dict(drops=[],top=None,bonus=None),liveMode='real',liveError=message)
         entry['next']=time.time()+10
-        return entry['data']
+        return dict(entry['data'], bonus=bonus)
 
 
 def settle_giveaways():
@@ -361,6 +482,11 @@ def settle_giveaways():
                      (winner['user_id'] if winner else None,winner['num'] if winner else None,giveaway['id']))
 
 
+def giveaway_participant_overrides():
+    row = db().execute('SELECT value FROM settings WHERE key=?', ('giveaway-count:' + g.uid,)).fetchone()
+    return json.loads(row[0]) if row else {}
+
+
 def giveaway_view(row):
     c=db(); gid=row['id']
     entry=c.execute('SELECT num FROM giveaway_entries WHERE giveaway_id=? AND user_id=?',(gid,g.uid)).fetchone()
@@ -370,8 +496,23 @@ def giveaway_view(row):
     if row['winner_id']:
         winner_user=c.execute('SELECT name FROM users WHERE id=?',(row['winner_id'],)).fetchone()
         winner=dict(name=winner_user[0] if winner_user else 'Игрок',num=row['winner_num'],me=row['winner_id']==g.uid)
-    return dict(id=gid,item=json.loads(row['item']),endsAt=iso(row['ends']),needDeposit=row['minimum'],
-                deposited=amount,participants=c.execute('SELECT COUNT(*) FROM giveaway_entries WHERE giveaway_id=?',(gid,)).fetchone()[0],
+    override = giveaway_participant_overrides().get(str(gid), {})
+    item = json.loads(row['item'])
+    participants = None
+    if override.get('mode') == 'custom':
+        participants = override['count']
+    else:
+        if 'original_giveaways' not in g:
+            g.original_giveaways = original_snapshot('giveaways')
+        group = 'finished' if row['finished'] else 'active'
+        original = (g.original_giveaways or {}).get(group, [])
+        matching = next((entry for entry in original if entry['itemId'] == item['id']), None)
+        if matching is None and not row['finished'] and len(original) == 1:
+            matching = original[0]
+        if matching is not None:
+            participants = matching['count']
+    return dict(id=gid,item=item,endsAt=iso(row['ends']),needDeposit=row['minimum'],
+                deposited=amount,participants=participants,
                 myNum=entry[0] if entry else None,canJoin=not row['finished'] and amount>=row['minimum'],winner=winner)
 
 
@@ -558,6 +699,55 @@ def mines_cashout(row):
     return db().execute('SELECT * FROM mines_games WHERE id=?',(row['id'],)).fetchone()
 
 
+REFERRAL_STATS = {
+    'bonusPercent': (0, 100), 'percent': (0, 100),
+    'preliminary': (-1_000_000_000, 1_000_000_000),
+    'refBalance': (-1_000_000_000, 1_000_000_000),
+    'earned': (0, 1_000_000_000), 'deposits': (0, 1_000_000_000),
+    'dailyDeposits': (0, 1_000_000_000), 'dailyLosses': (0, 1_000_000_000),
+}
+
+
+def referral_profile():
+    row = db().execute('SELECT code,stats FROM referral_profiles WHERE user_id=?', (g.uid,)).fetchone()
+    stats = {key: 0 for key in REFERRAL_STATS}
+    stats.update(count=0, payers=0, friendsDay=0, activeDay=0, link='', isPartner=False)
+    if row:
+        stats.update(json.loads(row['stats']))
+    return dict(stats, code=row['code'] if row else '')
+
+
+def referral_view():
+    profile = referral_profile()
+    now = time.time()
+    day_start = int((now + 10800) // 86400) * 86400 - 10800
+    days = [dict(day=iso(day_start - offset * 86400), joined=0, deposits=0, lost=0)
+            for offset in range(13, -1, -1)]
+    days[-1].update(joined=profile['friendsDay'], deposits=profile['dailyDeposits'], lost=profile['dailyLosses'])
+    return dict(profile, code=profile['code'] or 'SANDBOX', friends=profile['count'], days=days, referrals=[], history=[])
+
+def promo_code(value):
+    code = str(value or '').strip().upper()
+    if not 3 <= len(code) <= 20 or not code.isascii() or not code.replace('_', '').isalnum():
+        raise Problem('Код: 3–20 букв, цифр или _')
+    return code
+
+
+def redeem_promo(value, case_id=None):
+    c = db()
+    code = promo_code(value)
+    row = c.execute('SELECT p.*, o.case_id FROM promos p LEFT JOIN promo_options o USING(code) WHERE p.code=?', (code,)).fetchone()
+    if not row or row['uses'] < 1:
+        raise Problem('Код не найден или закончился')
+    if row['case_id'] != case_id:
+        raise Problem('Код предназначен для другого кейса или способа активации')
+    if c.execute('SELECT 1 FROM claims WHERE user_id=? AND code=?', (g.uid, code)).fetchone():
+        raise Problem('Код уже использован')
+    c.execute('INSERT INTO claims VALUES (?,?)', (g.uid, code))
+    c.execute('UPDATE promos SET uses=uses-1 WHERE code=?', (code,))
+    return row['reward']
+
+
 def dispatch(path, body):
     c=db()
     parts=path.split('/')
@@ -620,13 +810,20 @@ def dispatch(path, body):
         test=path.startswith('test/')
         cs=case(parts[2] if test else parts[1]); n=integer(body.get('count',1),1,5)
         if n not in [1,3,5]: raise Problem('Количество: 1, 3 или 5')
-        if body.get('promo'): raise Problem('Промокоды открытия не настроены')
+        promo = body.get('promo')
+        if promo:
+            if test or cs.get('freeKind'):
+                raise Problem('Промокод доступен для платного кейса')
+            redeem_promo(promo, cs['id'])
+            n = 1
+        elif 'expectedPrice' in body and number(body['expectedPrice']) != cs['price']:
+            raise Problem('Цена кейса обновилась. Открой его заново.', 'case_price_changed', 409)
         if cs.get('freeKind') and not test:
             n=1
             r=c.execute('SELECT until FROM cooldown WHERE user_id=? AND case_id=?',(g.uid,cs['id'])).fetchone()
             if r and r[0]>time.time(): raise Problem('Бесплатный кейс доступен раз в сутки')
             c.execute('INSERT OR REPLACE INTO cooldown VALUES (?,?,?)',(g.uid,cs['id'],time.time()+86400))
-        field='testBalance' if test else 'balance'; cost=cs['price']*n
+        field='testBalance' if test else 'balance'; cost=0 if promo else cs['price']*n
         if user()[field]<cost: raise Problem('Недостаточно BG. Добавь баланс в админке.', 'insufficient_balance')
         c.execute(f'UPDATE users SET {field}={field}-?, cases=cases+? WHERE id=?',(cost,0 if test else n,g.uid))
         side = controlled_side('case', body)
@@ -728,7 +925,7 @@ def dispatch(path, body):
         view=giveaway_view(row)
         if view['myNum'] is not None: return dict(num=view['myNum'])
         if not view['canJoin']: raise Problem('Недостаточно прогресса для участия')
-        num=view['participants']+1
+        num = c.execute('SELECT COALESCE(MAX(num),0)+1 FROM giveaway_entries WHERE giveaway_id=?', (row['id'],)).fetchone()[0]
         c.execute('INSERT INTO giveaway_entries VALUES (?,?,?)',(row['id'],g.uid,num))
         return dict(num=num)
     if path=='streak/checkin' and post: return streak_view(True)
@@ -779,17 +976,63 @@ def dispatch(path, body):
         c.execute('DELETE FROM streak_rewards WHERE user_id=? AND claimed=0',(g.uid,))
         return dict(ok=True)
     if path=='referrals' and not post:
-        return dict(code='SANDBOX',link='',bonusPercent=0,percent=0,preliminary=0,refBalance=0,count=0,earned=0,
-                    referrals=[],history=[],nextPayoutAt=iso(time.time()+604800),tz='Europe/Moscow',tzLabel='МСК',isPartner=False)
+        return referral_view()
+    if path=='admin/referrals' and post:
+        code = promo_code(body.get('code'))
+        link = str(body.get('link', '')).strip()
+        if link and (not link.startswith('https://') or len(link) > 500):
+            raise Problem('Ссылка должна начинаться с https://')
+        stats = {key: number(body.get(key, 0), *bounds) for key, bounds in REFERRAL_STATS.items()}
+        stats.update(count=integer(body.get('count', 0), 0, 1_000_000),
+                     payers=integer(body.get('payers', 0), 0, 1_000_000),
+                     friendsDay=integer(body.get('friendsDay', 0), 0, 1_000_000),
+                     activeDay=integer(body.get('activeDay', 0), 0, 1_000_000),
+                     link=link,
+                     isPartner=body.get('isPartner') is True)
+        c.execute('INSERT OR REPLACE INTO referral_profiles VALUES (?,?,?)', (g.uid, code, json.dumps(stats)))
+        return dict(ok=True)
+    if path=='partner' and not post:
+        result = referral_view()
+        if not result['isPartner']:
+            raise Problem('Режим партнёра выключен', 'not_partner', 403)
+        return result
+    if path=='promos' or (path.startswith('promos/') and path.endswith('/delete') and post):
+        if not referral_profile()['isPartner']:
+            raise Problem('Режим партнёра выключен', 'not_partner', 403)
+        if not post:
+            rows = c.execute('SELECT p.*, o.max_uses FROM promos p JOIN promo_options o USING(code) WHERE o.partner_id=?', (g.uid,))
+            return dict(limits=dict(maxUses=10000, minReward=1, maxReward=1_000_000), promos=[
+                dict(id=r['code'], code=r['code'], reward=r['reward'], maxUses=r['max_uses'],
+                     uses=r['max_uses']-r['uses'], status='active' if r['uses'] else 'used_up') for r in rows
+            ])
+        if path=='promos':
+            code = promo_code(body.get('code'))
+            if len(code) < 5 or not code.isalnum():
+                raise Problem('Промокод: 5–20 латинских букв или цифр')
+            if c.execute('SELECT 1 FROM promos WHERE code=?', (code,)).fetchone():
+                raise Problem('Такой код уже существует')
+            uses = integer(body.get('uses'), 1, 10000)
+            reward = number(body.get('reward'), 1, 1_000_000)
+            c.execute('INSERT INTO promos VALUES (?,?,?)', (code, reward, uses))
+            c.execute('INSERT INTO promo_options VALUES (?,NULL,?,?)', (code, g.uid, uses))
+            return dict(promo=dict(code=code), balance=user()['balance'])
+        code = promo_code(parts[1])
+        row = c.execute('SELECT p.* FROM promos p JOIN promo_options o USING(code) WHERE p.code=? AND o.partner_id=?', (code, g.uid)).fetchone()
+        if not row:
+            raise Problem('Промокод не найден', 'not_found', 404)
+        c.execute('UPDATE promos SET uses=0 WHERE code=?', (code,))
+        c.execute('DELETE FROM promo_options WHERE code=?', (code,))
+        return dict(balance=user()['balance'])
     if path=='promo' and post:
-        code=str(body.get('code','')).upper().strip(); r=c.execute('SELECT * FROM promos WHERE code=?',(code,)).fetchone()
-        if not r or r['uses']<1: raise Problem('Промокод не найден или закончился')
-        if c.execute('SELECT 1 FROM claims WHERE user_id=? AND code=?',(g.uid,code)).fetchone(): raise Problem('Код уже использован')
-        c.execute('INSERT INTO claims VALUES (?,?)',(g.uid,code)); c.execute('UPDATE promos SET uses=uses-1 WHERE code=?',(code,))
-        c.execute('UPDATE users SET balance=balance+? WHERE id=?',(r['reward'],g.uid))
-        return dict(type='coins',kind='coins',reward=r['reward'],balance=user()['balance'])
+        reward = redeem_promo(body.get('code'))
+        c.execute('UPDATE users SET balance=balance+? WHERE id=?',(reward,g.uid))
+        return dict(type='coins',kind='coins',reward=reward,balance=user()['balance'])
     if path=='admin/state' and not post:
-        result=dict(me=me(),promos=[dict(r) for r in c.execute('SELECT * FROM promos')],nextResults={},live=live_settings())
+        promos = c.execute('SELECT p.*, o.case_id AS caseId FROM promos p LEFT JOIN promo_options o USING(code)')
+        result=dict(me=me(),promos=[dict(r) for r in promos],nextResults={},live=live_settings(),referralProfile=referral_profile())
+        result['giveaways'] = [dict(id=row['id'], name=json.loads(row['item'])['name'])
+                              for row in c.execute('SELECT id,item FROM giveaways ORDER BY id DESC')]
+        result['giveawayParticipantOverrides'] = giveaway_participant_overrides()
         result['buttonModes'] = button_modes()
         if request.args.get('catalog','1')!='0':
             result['catalog']=catalog()
@@ -856,6 +1099,20 @@ def dispatch(path, body):
         value['remaining']=count
         c.execute('INSERT OR REPLACE INTO next_results VALUES (?,?,?)',(g.uid,game,json.dumps(value)))
         return dict(ok=True)
+    if path=='admin/giveaway-participants' and post:
+        gid = integer(body.get('giveawayId'))
+        if not c.execute('SELECT 1 FROM giveaways WHERE id=?', (gid,)).fetchone():
+            raise Problem('Розыгрыш не найден')
+        overrides = giveaway_participant_overrides()
+        mode = body.get('mode')
+        if mode not in ('real', 'custom'):
+            raise Problem('Выбери реальный или свой счётчик')
+        count = overrides.get(str(gid), {}).get('count', 0)
+        if mode == 'custom':
+            count = integer(body.get('count'), 0, 1_000_000)
+        overrides[str(gid)] = dict(mode=mode, count=count)
+        c.execute('INSERT OR REPLACE INTO settings VALUES (?,?)', ('giveaway-count:' + g.uid, json.dumps(overrides)))
+        return dict(ok=True)
     if path=='admin/giveaway-progress' and post:
         gid=integer(body.get('giveawayId',1)); uid=g.uid; amount=number(body.get('amount'))
         if not c.execute('SELECT 1 FROM giveaways WHERE id=? AND finished=0',(gid,)).fetchone(): raise Problem('Активный розыгрыш не найден')
@@ -888,10 +1145,15 @@ def dispatch(path, body):
             session['catalog']=None
         return dict(ok=True)
     if path=='admin/promo' and post:
-        code=str(body.get('code','')).upper().strip()
-        if not 3<=len(code)<=20 or not code.isascii() or not code.replace('_','').isalnum(): raise Problem('Код: 3–20 букв, цифр или _')
+        code = promo_code(body.get('code'))
         if c.execute('SELECT 1 FROM promos WHERE code=?',(code,)).fetchone(): raise Problem('Такой код уже существует')
-        c.execute('INSERT INTO promos VALUES (?,?,?)',(code,number(body.get('reward'),1),integer(body.get('uses'),1,10000)))
+        target = case(body['caseId']) if body.get('caseId') is not None else None
+        if target and target.get('freeKind'):
+            raise Problem('Выбери платный кейс')
+        reward = 0 if target else number(body.get('reward'), 1)
+        c.execute('INSERT INTO promos VALUES (?,?,?)', (code, reward, integer(body.get('uses'), 1, 10000)))
+        if target:
+            c.execute('INSERT INTO promo_options(code,case_id) VALUES (?,?)', (code, target['id']))
         return dict(ok=True)
     raise Problem('Раздел недоступен', 'not_available',404)
 
@@ -991,6 +1253,9 @@ def connect_real_live():
         if len(REAL_LIVE)>=100 and (g.uid,g.play_session) not in REAL_LIVE:
             raise Problem('Слишком много подключений. Попробуй позже')
         REAL_LIVE[(g.uid,g.play_session)]=dict(token=token,expires=now+3600)
+    original_snapshot('catalog')
+    original_snapshot('bonus')
+    original_snapshot('giveaways')
     return jsonify(dict(ok=True))
 
 
