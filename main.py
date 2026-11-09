@@ -64,8 +64,9 @@ def original_item(item):
 
 
 CASE_RARITY_WEIGHTS = {'common': 60, 'rare': 25, 'epic': 10, 'legendary': 4, 'og': 1}
-UPGRADE_MIN_CHANCE = 75
-UPGRADE_MAX_CHANCE = 90
+UPGRADE_MIN_CHANCE = 0
+UPGRADE_MAX_CHANCE = 75
+UPGRADE_CHANCE_FACTOR = 90
 DICE_PAYOUTS = (0, 2, 0, 0, 3)
 DICE_BONUS_MULTIPLIER = 10
 
@@ -672,9 +673,10 @@ def targets(body):
     for item in catalog()['items']:
         if item.get('coins') or item['id'] in input_ids or round(item['price'], 2) in input_prices:
             continue
-        chance = value / item['price'] * UPGRADE_MAX_CHANCE
+        chance = value / item['price'] * UPGRADE_CHANCE_FACTOR
         if UPGRADE_MIN_CHANCE <= chance <= UPGRADE_MAX_CHANCE:
-            options.append(dict(item, chance=round(chance, 2)))
+            # Keep tiny positive chances playable even when the display rounds them to 0%.
+            options.append(dict(item, chance=round(chance, 2) or chance))
     options.sort(key=lambda x: (x['price'], x['id']))
     presets=[]
     for n in [1.25,2,3,5,10]:
