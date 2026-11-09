@@ -56,7 +56,8 @@ def original_api(path, token):
 def original_item(item):
     result = {key: item[key] for key in ('name', 'price', 'rarity', 'image')}
     result['id'] = integer(item['id'])
-    if result['rarity'] == 'coins':
+    if result['rarity'] == 'coins' or item.get('coins'):
+        result['coins'] = True
         result['rarity'] = 'common'
     return result
 
@@ -584,7 +585,7 @@ def targets(body):
     input_ids={i['item']['id'] for i in rows}
     input_prices={round(i['item']['price'],2) for i in rows}
     options=[dict(x,chance=round(value/x['price']*90,2)) for x in catalog()['items']
-             if x['id'] not in input_ids and round(x['price'],2) not in input_prices
+             if not x.get('coins') and x['id'] not in input_ids and round(x['price'],2) not in input_prices
              and 1<=value/x['price']*90<=90]
     options.sort(key=lambda x: (x['price'], x['id']))
     presets=[]
@@ -682,7 +683,7 @@ def mines_multiplier(count, opened):
 
 
 def mines_reward(value):
-    pool=[i for i in catalog()['items'] if i['price']<=value]
+    pool=[i for i in catalog()['items'] if not i.get('coins') and i['price']<=value]
     item=max(pool,key=lambda i:(i['price'],-i['id'])) if pool else None
     return dict(item=item,coins=round(value-(item['price'] if item else 0),2),total=value)
 
@@ -858,8 +859,12 @@ def dispatch(path, body):
             else:
                 item = dict(RNG.choices(cs['items'], weights=[x['weight'] for x in cs['items']])[0])
             item.pop('weight',None)
-            iid=add_item(item,dict(kind='case',caseId=cs['id'],caseName=cs['name'],caseImage=cs['image']),test)
-            drops.append(dict(item=item,inventoryId=iid))
+            if item.get('coins'):
+                c.execute(f'UPDATE users SET {field}={field}+? WHERE id=?', (item['price'], g.uid))
+                drops.append(dict(item=item))
+            else:
+                iid = add_item(item, dict(kind='case', caseId=cs['id'], caseName=cs['name'], caseImage=cs['image']), test)
+                drops.append(dict(item=item, inventoryId=iid))
         return dict(drops=drops,balance=user()['balance'],testBalance=user()['testBalance'],test=test)
     if post and path in ('inventory/sell','inventory/sell-all','test/sell'):
         test=path=='test/sell'
@@ -869,10 +874,12 @@ def dispatch(path, body):
         field='testBalance' if test else 'balance'
         c.execute(f'UPDATE users SET {field}={field}+? WHERE id=?',(total,g.uid))
         return dict(total=total,balance=user()['balance'],testBalance=user()['testBalance'],test=test)
-    if path=='shop' and not post: return dict(enabled=True,items=sorted(catalog()['items'],key=lambda x:(x['price'],x['id'])))
+    if path=='shop' and not post:
+        items = [item for item in catalog()['items'] if not item.get('coins')]
+        return dict(enabled=True, items=sorted(items, key=lambda item: (item['price'], item['id'])))
     if path=='shop/buy' and post:
         it=find_item(body.get('itemId'))
-        if not it: raise Problem('Предмет не найден')
+        if not it or it.get('coins'): raise Problem('Предмет не найден')
         if user()['balance']<it['price']: raise Problem('Недостаточно BG')
         c.execute('UPDATE users SET balance=balance-? WHERE id=?',(it['price'],g.uid))
         return dict(item=it,inventoryId=add_item(it,'shop'),balance=user()['balance'])
@@ -895,7 +902,7 @@ def dispatch(path, body):
         c.execute('UPDATE users SET upgrades=upgrades+1 WHERE id=?',(g.uid,))
         return dict(won=won,chance=target['chance'],roll=roll,target=target,inventoryIds=[add_item(target,'upgrade')] if won else [])
     if path in ('mystery/info','mystery') and post:
-        row=selected(body)[0]; value=row['item']['price']; pool=[x for x in catalog()['items'] if value/3<=x['price']<=value*3]
+        row=selected(body)[0]; value=row['item']['price']; pool=[x for x in catalog()['items'] if not x.get('coins') and value/3<=x['price']<=value*3]
         if path.endswith('info'): return dict(ok=bool(pool),min=value/3,max=value*3,items=pool,reason='Нет подходящих предметов')
         if not pool: raise Problem('Нет подходящих предметов')
         rig=take_next_result('mystery')
@@ -959,6 +966,9 @@ def dispatch(path, body):
             return dict(kind='coins',amount=reward['amount'],balance=user()['balance'])
         item=reward.get('item')
         if reward['kind']=='case': item=RNG.choices(reward['pool'],weights=[i['weight'] for i in reward['pool']])[0]
+        if item.get('coins'):
+            c.execute('UPDATE users SET balance=balance+? WHERE id=?', (item['price'], g.uid))
+            return dict(kind='coins', amount=item['price'], balance=user()['balance'], fromCase=reward['kind']=='case')
         item={k:v for k,v in item.items() if k!='weight'}
         return dict(kind='item',item=item,inventoryId=add_item(item,'streak'),balance=user()['balance'],fromCase=reward['kind']=='case')
     if path=='admin/streak' and not post: return dict(config=streak_config(),progress=streak_view())
@@ -1101,6 +1111,8 @@ def dispatch(path, body):
             item=find_item(body.get('itemId'))
             if not item:
                 raise Problem('Предмет не найден')
+            if item.get('coins') and game != 'case':
+                raise Problem('Монеты можно назначить только дропом кейса')
         value=dict(mode=mode,item=item)
         if game=='dice':
             value['hits']=0 if mode in ('lose','bonus') else integer(body.get('hits',1),1,4)

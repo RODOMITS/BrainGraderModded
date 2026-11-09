@@ -1808,7 +1808,7 @@
         <button class="btn" data-a="again" style="margin-top:${items.length ? 8 : 18}px">${test ? (enough ? `Ещё${again > 1 ? ` ${again} шт.` : ''} за ${price(cs.price * again)}` : 'Готово') : cs.freeKind ? 'Готово' : enough ? `Открыть ещё${again > 1 ? ` ${again} шт.` : ''} за ${price(cs.price * again)}` : 'Пополнить баланс'}</button>
         
       </div>`);
-    const s = openSheet((n > 1 ? `Тебе выпало ${n} ${plural(n, 'брейнрот', 'брейнрота', 'брейнротов')}` : 'Тебе выпало'), body);
+    const s = openSheet((n > 1 && !coins ? `Тебе выпало ${n} ${plural(n, 'брейнрот', 'брейнрота', 'брейнротов')}` : 'Тебе выпало'), body);
     const sellBtn = $('[data-a=sell]', body);
     if (sellBtn) sellBtn.onclick = async (ev) => {
       ev = { currentTarget: ev.currentTarget }; // после await у события пропадает currentTarget
@@ -2078,7 +2078,8 @@
         if (up.selected.length || !$('#upList')) return drawRight();
       }
       if (!up.shop.enabled) return void paint('shop-off', '<div class="empty">Выбери своего брейнрота слева — здесь появятся цели для апгрейда</div>');
-      const list = up.shop.items.filter(match).sort((a, b) => a.price - b.price || a.id - b.id);
+      const list = up.shop.items.filter(item => item.price >= 10 && match(item))
+        .sort((a, b) => a.price - b.price || a.id - b.id);
       paint(`shop|${qy}`, `<div class="shop-warn">⚠️ <b>Брейнротов из магазина нельзя вывести.</b> Купленного можно поставить в апгрейд, сыграть в мистери или продать за ту же цену. А то, что выиграешь в апгрейде, выводится как обычно.</div>
         <div class="items">${list
           .map((it) => `<button class="item rar-${esc(it.rarity)}" data-id="${it.id}">${ogTag(it)}<img loading="lazy" decoding="async" src="${itemImg(it.image)}" alt=""><div class="n">${esc(it.name)}</div>${price(it.price)}<small class="buy-lbl">Купить</small></button>`)
