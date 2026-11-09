@@ -1714,12 +1714,7 @@ html.halloween h2::after { content: ' 🎃'; font-size: .8em; }
 }
 /* Modded master: no reserved navigation slot when disabled. */
 html.admin-concealed a[href="/admin"], html.admin-concealed a[href="#/admin"] { display: none; }
-.modded-settings { position: relative; }
-.modded-settings.modded-off { height: 0; min-height: 0; padding: 0 !important; margin: 0 !important; border: 0 !important; overflow: visible; }
 .modded-off .modded-sub { display: none; }
-.modded-off .modded-main { position: absolute; bottom: 0; left: 0; right: 0; height: 8px; min-height: 8px; padding: 0; margin: 0; overflow: hidden; opacity: 0; z-index: 8; border-radius: 12px; }
-.modded-off .modded-main:hover, .modded-off .modded-main:has(:focus-visible) { height: auto; min-height: 72px; opacity: 1; padding: 16px; background: var(--stone-2); border: 1px solid var(--ridge-2); }
-.modded-off .modded-main .sw { flex-shrink: 0; }
 .mines-wrap { width: 100%; max-width: 720px; margin: 0 auto; }
 .mines-board { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 12px; width: 100%; margin: 24px 0; }
 .mine-tile { aspect-ratio: 1; min-width: 0; perspective: 600px; border-radius: 12px; }

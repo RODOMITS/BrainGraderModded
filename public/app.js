@@ -711,13 +711,13 @@
             </div>
           </div>
         </section>
-        <section class="set-group modded-settings ${prefs.modded ? '' : 'modded-off'}" id="moddedSettings">
-          <div class="set-row main modded-main">
+        <section class="set-group ${prefs.modded ? '' : 'modded-off'}" id="moddedSettings">
+          <div class="set-row main">
             <div class="grow"><b>Моддед</b><p>Дополнительные возможности</p></div>
             ${sw('modded', prefs.modded, 'Моддед')}
           </div>
+          <div class="set-row"><div class="grow"><b>Админка</b><p>Показывать «Админку» в меню. При включении также включается «Моддед».</p></div>${sw('showAdmin', prefs.modded && prefs.showAdmin, 'Админка')}</div>
           <div class="set-sub modded-sub">
-            <div class="set-row"><div class="grow"><b>Админ-панель</b><p>Показывать кнопку админки</p></div>${sw('showAdmin', prefs.showAdmin, 'Админ-панель')}</div>
             <div class="set-row"><div class="grow"><b>Мины</b><p>Поле с алмазами и минами, ставка брейнротом</p></div>${sw('minesEnabled', prefs.minesEnabled, 'Мины')}</div>
           </div>
         </section>
@@ -726,6 +726,11 @@
     const save = () => {
       savePrefs(); applyStreamer(); syncSpeedSound(); applyAdminVisibility(); drawTopnav();
       $('#moddedSettings',body).classList.toggle('modded-off',!prefs.modded);
+      for (const [key, enabled] of [['modded', prefs.modded], ['showAdmin', prefs.modded && prefs.showAdmin]]) {
+        const toggle = $(`[data-k="${key}"]`, body);
+        toggle.classList.toggle('on', enabled);
+        toggle.setAttribute('aria-checked', enabled);
+      }
       if (!(prefs.modded && prefs.minesEnabled) && location.hash.startsWith('#/mines')) location.hash='#/';
     };
     $$('.sw', body).forEach((b) => (b.onclick = () => {
@@ -733,7 +738,10 @@
       let on;
       if (k === 'sound') { on = prefs.sound = !prefs.sound; $('.set-vol', body).classList.toggle('off', !on); }
       else if (k === 'fast') on = prefs.fast = !prefs.fast;
-      else if (k === 'showAdmin') on = prefs.showAdmin = !prefs.showAdmin;
+      else if (k === 'showAdmin') {
+        on = prefs.showAdmin = !(prefs.modded && prefs.showAdmin);
+        if (on) prefs.modded = true;
+      }
       else if (k === 'modded') on = prefs.modded = !prefs.modded;
       else if (k === 'minesEnabled') on = prefs.minesEnabled = !prefs.minesEnabled;
       else if (k === 'sm') { on = sm.on = !sm.on; $('#smSub', body).classList.toggle('off', !on); }
