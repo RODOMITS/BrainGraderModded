@@ -4053,23 +4053,26 @@
     else itemsTab();
   }
 
-  function starsTab() {
+  async function starsTab() {
     const cfg = state.cfg;
     const box = $('#dep');
     box.innerHTML = `
       <label class="field"><span>Сколько звёзд</span><input id="stars" type="number" inputmode="numeric" min="${cfg.starsMin}" max="${cfg.starsMax}" placeholder="Например, 100"></label>
-      <label class="field"><span>Промокод</span><input id="dPromo" maxlength="20" autocomplete="off" autocapitalize="characters" spellcheck="false" value="${esc(dep.promo)}"></label>
+      <label class="field"><span>Промокод или код друга</span><input id="dPromo" maxlength="20" autocomplete="off" autocapitalize="characters" spellcheck="false" value="${esc(dep.promo)}"></label>
+      <p class="hint" style="margin-top:6px">Промокод с главной даёт бонус к пополнению.</p>
       <div class="total"><span>Получишь</span><b>${COIN}<span id="get">0</span></b></div>
       <p class="hint" id="bonusHint"></p>
       <button class="btn" type="button" id="pay" disabled>Оплатить звёздами</button>
       <p class="hint center">1 ⭐ = ${fmt(cfg.starsRate)} BG, минимум ${cfg.starsMin} ⭐. Предпросмотр пополнения.</p>`;
     const input = $('#stars', box);
     const promoInput = $('#dPromo', box);
+    let bonus = state.home?.bonus;
     const recalc = () => {
       const stars = Number(input.value);
       dep.promo = promoInput.value;
-      const bonus = state.home?.bonus;
-      const applies = bonus && !bonus.used && Date.now() < Date.parse(bonus.endsAt)
+      const active = bonus?.code && Date.now() < Date.parse(bonus.endsAt);
+      promoInput.placeholder = active ? `Например, ${bonus.code}` : '';
+      const applies = active && !bonus.used
         && dep.promo.trim().toUpperCase() === bonus.code;
       const percent = applies ? bonus.percent : 0;
       $('#get', box).textContent = fmt(Math.max(0, stars || 0) * cfg.starsRate * (1 + percent / 100));
@@ -4079,6 +4082,18 @@
     input.oninput = recalc;
     promoInput.oninput = recalc;
     recalc();
+    // The first request can start the server's background refresh before a code is ready.
+    try {
+      for (const delay of [0, 1500, 4500]) {
+        if (delay) await sleep(delay);
+        if (!promoInput.isConnected) return;
+        const home = await api('/api/home');
+        if (!promoInput.isConnected) return;
+        bonus = home.bonus;
+        recalc();
+        if (bonus?.code) break;
+      }
+    } catch {}
   }
 
   async function itemsTab() {
