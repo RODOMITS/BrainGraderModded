@@ -2909,7 +2909,6 @@
   async function renderDice() {
     const t = state.render;
     const cfg = state.cfg.dice;
-    dice.busy = false;
     if (!cfg?.enabled) {
       view.innerHTML = '<div class="empty">Колор Дайс скоро вернётся</div>';
       return;
@@ -2917,7 +2916,7 @@
     const colors = cfg.colors;
     // правила: «N из 4 — выплата», проигрыш красным, выигрыш зелёным, внизу бонус за разноцветный кубик
     const ruleRow = (label, mult, extra = '') => `<div class="cd-rule ${mult > 0 ? 'win' : 'lose'} ${extra}"><span class="cd-rule-k">${label}</span><b>${mult > 0 ? '×' + fmt(mult) : 'проигрыш'}</b></div>`;
-    const rulesHtml = [ruleRow('Не одного совпадения', 0), ...cfg.table.map((r) => ruleRow(`${r.hits} из 4`, r.mult))].join('')
+    const rulesHtml = [ruleRow('Ни одного совпадения', 0), ...cfg.table.map((r) => ruleRow(`${r.hits} из 4`, r.mult))].join('')
       + (cfg.rainbow ? ruleRow('<i class="cd-rbdot rbw"></i>БОНУС', cfg.rainbow.mult, 'rb') : '')
       + `<p class="cd-rule-note">Выиграл — твой брейнрот остаётся и к нему добавляются такие же (×2 — ещё один, ×3 — ещё два…). Проиграл — сгорает.</p>`;
     view.innerHTML = `
@@ -2934,7 +2933,7 @@
             </div>
             <div class="cd-result hidden" id="cdRes"></div>
           </section>
-          <div class="cd-colors" id="cdColors">${colors.map((c) => `<button class="cd-color" data-c="${c.id}" style="--c:${esc(c.hex)}" aria-label="${esc(c.name)}"><i></i><span>${esc(c.name)}</span></button>`).join('')}</div>
+          <div class="cd-colors" id="cdColors">${colors.map((c, index) => `<button class="cd-color" data-c="${index}" style="--c:${esc(c.hex)}" aria-label="${esc(c.name)}"><i></i><span>${esc(c.name)}</span></button>`).join('')}</div>
           <div class="up-ctrl cd-ctrl">${speedSoundHtml()}</div>
           <button class="btn cd-go" id="cdGo" disabled>Крутить Колор Дайс</button>
           <p class="hint center cd-note">Выбери брейнрота и цвет, желаю удачи <img class="cd-luck" src="${mascot('luck')}" alt=""></p>
@@ -2959,11 +2958,12 @@
 
   async function loadDiceInv(t) {
     try {
-      dice.inv = (await api('/api/inventory')).filter((i) => i.status === 'owned' && !i.test && !i.item.coins);
+      const inventory = await api('/api/inventory');
+      if (stale(t)) return;
+      dice.inv = inventory.filter((i) => i.status === 'owned' && !i.test && !i.item.coins);
     } catch (e) {
       return fail(e);
     }
-    if (t && stale(t)) return;
     dice.sel = dice.sel.filter((id) => dice.inv.some((i) => i.id === id));
     drawDiceInv();
   }
@@ -3013,7 +3013,7 @@
     const n = $('#cdSelN');
     if (n) n.textContent = chosen.length ? `${chosen.length} из ${cfg.maxItems}` : `до ${cfg.maxItems} шт.`;
     const go = $('#cdGo');
-    if (go && !dice.busy) go.disabled = !chosen.length || sum < cfg.min;
+    if (go) go.disabled = dice.busy || !chosen.length || sum < cfg.min || sum > cfg.max;
   }
 
   async function loadDiceHist(t) {
@@ -3035,9 +3035,20 @@
 
   async function rollDice() {
     if (dice.busy) return;
-    const cfg = state.cfg.dice;
     if (!dice.sel.length) return toast('Выбери брейнрота для ставки', 'err');
     dice.busy = true;
+    lockNav(true);
+    try {
+      await animateDiceRoll();
+    } finally {
+      dice.busy = false;
+      lockNav(false);
+      drawDiceSlot();
+    }
+  }
+
+  async function animateDiceRoll() {
+    const cfg = state.cfg.dice;
     const t = state.render;
     const go = $('#cdGo');
     go.disabled = true;
@@ -3070,14 +3081,14 @@
       [r] = await Promise.all([api('/api/dice', { method: 'POST', body: { color: dice.color, ids: dice.sel, key: newKey() } }), sleep(T.min)]);
     } catch (e) {
       clearInterval(flick);
-      dice.busy = false;
       if (!stale(t)) {
         box.innerHTML = [0, 1, 2, 3].map((i) => diceFace(colors[(dice.color + i) % 6], 'idle')).join('');
-        drawDiceSlot();
+        res.className = 'cd-result hidden';
+        await loadDiceInv(t);
       }
       return fail(e);
     }
-    if (stale(t)) { clearInterval(flick); dice.busy = false; return; }
+    if (stale(t)) { clearInterval(flick); return; }
     // кубики останавливаются по одному: перед остановкой цвета мелькают всё медленнее
     for (let i = 0; i < 4; i++) {
       const d = dies[i];
@@ -3098,7 +3109,7 @@
       if (i < 3) await sleep(T.gap);
     }
     clearInterval(flick);
-    if (stale(t)) { dice.busy = false; return; }
+    if (stale(t)) return;
     const got = r.wonIds?.length || 0;
     if (r.mult > 0) {
       res.className = `cd-result win ${r.rainbow ? 'rb' : ''}`;
@@ -3112,7 +3123,6 @@
       haptic('error');
       dice.sel = [];
     }
-    dice.busy = false;
     loadDiceHist(t);
     await loadDiceInv(t);
   }

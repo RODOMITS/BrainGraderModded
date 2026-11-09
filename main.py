@@ -12,7 +12,6 @@ import secrets
 import sqlite3
 import time
 import threading
-from collections import Counter
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import parse_qsl
@@ -64,17 +63,22 @@ def original_item(item):
     return result
 
 
-CASE_RARITY_WEIGHTS = {'common': 6000, 'rare': 2500, 'epic': 1000, 'legendary': 400, 'og': 100}
+CASE_RARITY_WEIGHTS = {'common': 60, 'rare': 25, 'epic': 10, 'legendary': 4, 'og': 1}
+DICE_PAYOUTS = (0, 2, 0, 0, 3)
+DICE_BONUS_MULTIPLIER = 10
 
 
 def apply_case_rarity_weights(catalog):
-    rarity_by_id = {item['id']: item['rarity'] for item in catalog['items']}
+    items = {item['id']: item for item in catalog['items']}
     for case_data in catalog['cases']:
         drops = case_data['items']
-        counts = Counter(rarity_by_id[drop['itemId']] for drop in drops)
+        weights = []
         for drop in drops:
-            rarity = rarity_by_id[drop['itemId']]
-            drop['weight'] = round(CASE_RARITY_WEIGHTS[rarity] / counts[rarity], 2)
+            item = items[drop['itemId']]
+            weights.append(CASE_RARITY_WEIGHTS[item['rarity']] / item['price'] ** 1.5)
+        scale = 1_000_000 / max(weights)
+        for drop, weight in zip(drops, weights):
+            drop['weight'] = max(0.01, round(weight * scale, 2))
     return catalog
 
 
@@ -648,11 +652,11 @@ def config():
                 starsRate=1,starsMin=1,starsMax=10000,refBonusPercent=0,withdrawMin=1,withdrawWindow='отключён',
                 upgrade=dict(maxItems=5,minChance=1,maxChance=90,presets=[dict(label=f'×{n}',mult=n) for n in [1.25,2,3,5,10]]),
                 mystery=dict(enabled=True,mult=3,minInput=1,maxInput=1e9,floor=1,cap=1e9),
-                dice=dict(enabled=True,min=1,max=100000,maxItems=5,colors=[dict(name=n,hex=h) for n,h in
-                    zip(['Красный','Оранжевый','Жёлтый','Зелёный','Синий','Фиолетовый'],
-                        ['#ef4444','#f97316','#facc15','#22c55e','#3b82f6','#a855f7'])],
-                    table=[dict(hits=h,mult=m) for h,m in [(1,2),(2,0),(3,0),(4,3)]],
-                    rainbow=dict(mult=10)))
+                dice=dict(enabled=True,min=1,max=100000,maxItems=5,colors=[dict(id=i,name=n,hex=h) for i,(n,h) in
+                    enumerate(zip(['Красный','Оранжевый','Жёлтый','Зелёный','Синий','Фиолетовый'],
+                                  ['#ef4444','#f97316','#facc15','#22c55e','#3b82f6','#a855f7']))],
+                    table=[dict(hits=h,mult=m) for h,m in enumerate(DICE_PAYOUTS) if h],
+                    rainbow=dict(mult=DICE_BONUS_MULTIPLIER)))
 
 
 def targets(body):
@@ -1010,7 +1014,8 @@ def dispatch(path, body):
         return [json.loads(r[0]) for r in c.execute("SELECT payload FROM history WHERE user_id=? AND kind='dice' ORDER BY id DESC LIMIT 20",(g.uid,))]
     if path=='dice' and post:
         rows=selected(body); color=integer(body.get('color'),0,5); value=sum(i['item']['price'] for i in rows)
-        if len(rows)>5 or value>100000: raise Problem('Ставка: до 5 предметов и до 100000 BG')
+        if len(rows) > 5 or not 1 <= value <= 100000 or any(row['item'].get('coins') for row in rows):
+            raise Problem('Ставка: до 5 брейнротов на сумму от 1 до 100000 BG')
         rig=take_next_result('dice')
         dice=[RNG.randrange(6) for _ in range(4)]
         if rig:
@@ -1023,7 +1028,8 @@ def dispatch(path, body):
         bonus=rig['mode']=='bonus' if rig else RNG.random()<number(os.getenv('DICE_BONUS_CHANCE','0.01'),0,1)
         if bonus:
             dice[RNG.randrange(4)]=6
-        hits=dice.count(color); mult=10 if bonus else {0:0,1:2,2:0,3:0,4:3}[hits]
+        hits = dice.count(color)
+        mult = DICE_BONUS_MULTIPLIER if bonus else DICE_PAYOUTS[hits]
         won=[]
         winnings=0
         if not mult: consume(rows,'dice')
