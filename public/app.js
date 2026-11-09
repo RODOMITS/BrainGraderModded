@@ -3980,7 +3980,6 @@
     const form = h(`<form>
       <div class="line"><img src="${itemImg(it.item.image)}" alt=""><div class="grow"><b>${esc(it.item.name)}</b></div>${price(it.item.price)}</div>
       <label class="field"><span>Твой ник в Roblox</span><input id="rbx" autocomplete="off" autocapitalize="off" spellcheck="false" minlength="3" maxlength="20" pattern="[A-Za-z0-9_]{3,20}" placeholder="Например, Player_123" required></label>
-      <p class="hint">Предмет будет на выводе, пока ты не отменишь заявку.</p>
       <button class="btn" type="submit">Поставить на вывод</button>
     </form>`);
     const sheet = openSheet('Вывод', form);
