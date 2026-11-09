@@ -918,7 +918,7 @@
       </div>
       ${b.used
         ? '<p class="promo-used">Этот промокод ты уже использовал. Следующий появится, когда закончится время</p>'
-        : '<button class="btn" id="promoUse">Скопировать код оригинала</button>'}`;
+        : '<button class="btn" id="promoUse">Пополнить с промокодом</button>'}`;
     $('#promoCode', box).onclick = () => copy(b.code, 'Промокод скопирован');
     const use = $('#promoUse', box);
     if (use) use.onclick = () => copy(b.code, 'Промокод скопирован');
