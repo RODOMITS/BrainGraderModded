@@ -64,6 +64,8 @@ def original_item(item):
 
 
 CASE_RARITY_WEIGHTS = {'common': 60, 'rare': 25, 'epic': 10, 'legendary': 4, 'og': 1}
+UPGRADE_MIN_CHANCE = 75
+UPGRADE_MAX_CHANCE = 90
 DICE_PAYOUTS = (0, 2, 0, 0, 3)
 DICE_BONUS_MULTIPLIER = 10
 
@@ -650,7 +652,7 @@ def case(i):
 def config():
     return dict(build=FRONTEND_BUILD,theme='autumn',caseAnim='classic',sandbox=True,depositEnabled=False,withdrawEnabled=True,
                 starsRate=1,starsMin=1,starsMax=10000,refBonusPercent=0,withdrawMin=1,withdrawWindow='отключён',
-                upgrade=dict(maxItems=5,minChance=1,maxChance=90,presets=[dict(label=f'×{n}',mult=n) for n in [1.25,2,3,5,10]]),
+                upgrade=dict(maxItems=5,minChance=UPGRADE_MIN_CHANCE,maxChance=UPGRADE_MAX_CHANCE,presets=[dict(label=f'×{n}',mult=n) for n in [1.25,2,3,5,10]]),
                 mystery=dict(enabled=True,mult=3,minInput=1,maxInput=1e9,floor=1,cap=1e9),
                 dice=dict(enabled=True,min=1,max=100000,maxItems=5,colors=[dict(id=i,name=n,hex=h) for i,(n,h) in
                     enumerate(zip(['Красный','Оранжевый','Жёлтый','Зелёный','Синий','Фиолетовый'],
@@ -666,9 +668,13 @@ def targets(body):
     value=sum(i['item']['price'] for i in rows)
     input_ids={i['item']['id'] for i in rows}
     input_prices={round(i['item']['price'],2) for i in rows}
-    options=[dict(x,chance=round(value/x['price']*90,2)) for x in catalog()['items']
-             if not x.get('coins') and x['id'] not in input_ids and round(x['price'],2) not in input_prices
-             and 1<=value/x['price']*90<=90]
+    options = []
+    for item in catalog()['items']:
+        if item.get('coins') or item['id'] in input_ids or round(item['price'], 2) in input_prices:
+            continue
+        chance = value / item['price'] * UPGRADE_MAX_CHANCE
+        if UPGRADE_MIN_CHANCE <= chance <= UPGRADE_MAX_CHANCE:
+            options.append(dict(item, chance=round(chance, 2)))
     options.sort(key=lambda x: (x['price'], x['id']))
     presets=[]
     for n in [1.25,2,3,5,10]:
