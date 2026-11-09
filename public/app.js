@@ -742,7 +742,10 @@
         on = prefs.showAdmin = !(prefs.modded && prefs.showAdmin);
         if (on) prefs.modded = true;
       }
-      else if (k === 'modded') on = prefs.modded = !prefs.modded;
+      else if (k === 'modded') {
+        on = prefs.modded = !prefs.modded;
+        if (on) prefs.showAdmin = true;
+      }
       else if (k === 'minesEnabled') on = prefs.minesEnabled = !prefs.minesEnabled;
       else if (k === 'sm') { on = sm.on = !sm.on; $('#smSub', body).classList.toggle('off', !on); }
       else if (k === 'hover') on = sm.hover = !sm.hover;
