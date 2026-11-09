@@ -52,6 +52,7 @@ input { font: inherit; color: inherit; }
 .logo { height: 30px; width: auto; image-rendering: pixelated; }
 .fs-btn { width: 36px; height: 36px; border-radius: 10px; background: var(--stone); border: 1px solid var(--ridge); color: var(--muted); font-size: 18px; line-height: 1; }
 .topbar .spacer { flex: 1; }
+.topbar .admin-shortcut { width: auto; margin-right: 8px; }
 .balance {
   display: flex; align-items: center; gap: 6px;
   height: 36px; padding: 0 4px 0 10px;
@@ -1832,4 +1833,19 @@ html.autumn h2::after { content: ' 🍂'; font-size: .8em; }
 @media (prefers-reduced-motion: reduce) {
   .au-fall { display: none; }
   .au-logo { animation: none; }
+}
+
+@media (max-width: 1099px) {
+  .topbar .admin-shortcut { display: none; }
+}
+
+@media (max-width: 599px) {
+  .topbar { gap: 6px; padding-inline: 8px; }
+  .topbar .spacer, .topbar .au-logo, .topbar .hw-logo { display: none; }
+  .topbar a[aria-label="На главную"] { min-width: 0; margin-inline-end: auto; }
+  .topbar .logo { height: 24px; max-width: 100%; object-fit: contain; }
+  .topbar .streak-pill { flex: none; margin-right: 0; padding-inline: 6px; }
+  .topbar .balance { min-width: 0; max-width: 42vw; padding-left: 6px; gap: 4px; }
+  .topbar .plus, .topbar .fs-btn { flex: none; }
+  #balance { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }

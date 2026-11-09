@@ -1,41 +1,41 @@
 <!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Моддед · Управление</title>
 <script defer src="/telegram-web-app.js?v=__BG_BUILD__"></script><script defer src="/sandbox.js?v=__BG_BUILD__" data-admin-bootstrap></script><script defer src="/ui-audio.js?v=__BG_BUILD__"></script><script defer src="/admin.js?v=__BG_BUILD__"></script>
 <link rel="stylesheet" href="/styles.css?v=__BG_BUILD__"><link rel="stylesheet" href="/admin.css?v=__BG_BUILD__"><script defer src="/admin-visual.js?v=__BG_BUILD__"></script></head><body><a href="/">← К приложению</a><h1>Моддед · Управление</h1><p>Правки каталога и кейсов видны только тебе. Баланс и предметы можно выдавать только себе.</p><div id="message" role="status"></div>
-<div class="grid"><section><h2>Мой баланс</h2><form id="balanceForm"><label>Установить баланс BG</label><input id="balance" type="number" min="0" max="1000000000" step=".01" value="10000" required><button>Сохранить баланс</button></form></section>
-<section><h2>Выдать себе брейнротов</h2><form id="grantForm"><label>Предмет</label><select id="item"></select><label>Количество</label><input id="qty" type="number" min="1" max="100" value="1" required><button>Выдать</button></form></section></div>
-<section><h2>Добавить кастомного брейнрота</h2><p class="hint">Только для текущей сессии. После создания один экземпляр появится в твоём инвентаре, а предмет — в магазине, целях и Rig. В лайв-дропы он не попадает. Перезагрузка страницы сохраняет его; закрытие вкладки или перезапуск сервера завершает сессию.</p>
+<div class="grid"><section><h2>Баланс</h2><form id="balanceForm"><label>Баланс, BG</label><input id="balance" type="number" min="0" max="1000000000" step=".01" value="10000" required><button>Сохранить баланс</button></form></section>
+<section><h2>Выдать предмет</h2><form id="grantForm"><label>Предмет</label><select id="item"></select><label>Количество</label><input id="qty" type="number" min="1" max="100" value="1" required><button>Выдать</button></form></section></div>
+<section><h2>Новый предмет</h2><p class="hint">Только для текущей сессии. После создания один экземпляр появится в твоём инвентаре, а предмет — в магазине, целях и Rig. В лайв-дропы он не попадает. Перезагрузка страницы сохраняет его; закрытие вкладки или перезапуск сервера завершает сессию.</p>
 <form id="customForm"><label>Картинка (PNG, JPEG, WebP, до 1 МБ)</label><input id="customImage" type="file" accept="image/png,image/jpeg,image/webp" required><img id="customPreview" alt="Предпросмотр картинки" hidden style="width:140px;height:140px;object-fit:contain;margin-top:12px">
 <label>Название</label><input id="customName" maxlength="80" required><label>Цена BG</label><input id="customPrice" type="number" min="0.01" max="1000000000" step=".01" value="100" required>
 <label>Редкость</label><select id="customRarity"><option value="common">Common</option><option value="rare">Rare</option><option value="epic">Epic</option><option value="legendary">Legendary</option><option value="og">OG</option></select><button>Создать брейнрота</button></form></section>
-<section><h2>Rig следующего результата</h2><p class="hint">Каждое нажатие добавляет одно применение, только к твоим играм выбранного типа. Повторное добавление того же результата увеличивает число повторов; другой результат заменяет настройку. В открытии ×3/×5 заменяется первый дроп. Можно выбрать любой предмет из своего каталога. В минах Rig меняет следующий неоткрытый квадрат на алмаз или бомбу. Обычная стоимость игры сохраняется. При ошибке игры настройка остаётся.</p>
+<section><h2>Следующий дроп (Rig)</h2><p class="hint">Каждое нажатие добавляет одно применение, только к твоим играм выбранного типа. Повторное добавление того же результата увеличивает число повторов; другой результат заменяет настройку. В открытии ×3/×5 заменяется первый дроп. Можно выбрать любой предмет из своего каталога. В минах Rig меняет следующий неоткрытый квадрат на алмаз или бомбу. Обычная стоимость игры сохраняется. При ошибке игры настройка остаётся.</p>
 <form id="rigForm"><label>Игра</label><select id="rigGame"><option value="case">Кейсы</option><option value="upgrade">Апгрейдер</option><option value="mystery">Мистери</option><option value="dice">Колор Дайс</option><option value="mines">Мины</option></select>
 <label>Результат</label><select id="rigMode"><option value="item">Выбранный предмет</option><option value="win">Победа с обычным призом</option><option value="lose">Проигрыш</option><option value="bonus">Радужный бонус ×10</option><option value="safe">Мины: следующий клик — алмаз</option><option value="bomb">Мины: следующий клик — бомба</option></select>
 <div id="rigItemField"><label>Предмет</label><select id="rigItem"></select></div>
 <div id="rigHitsField" hidden><label>Совпадений в дайсе</label><select id="rigHits"><option value="1">1 из 4 — ×2</option><option value="4">4 из 4 — ×3</option></select><p class="hint">При выбранном предмете он заменяет добавляемые копии выигрыша. Исходная ставка остаётся в инвентаре, как при обычной победе.</p></div>
 <button>Добавить Rig</button></form><button id="rigCancel">Отменить для выбранной игры</button><p id="rigStatus" role="status"></p></section>
-<section><h2>Прогресс для розыгрыша</h2><form id="giveawayForm"><label>Учтённые BG для текущего розыгрыша</label><input id="giveawayAmount" type="number" min="0" step=".01" value="0" required><p class="hint">Задаёт прогресс вручную, отдельно от баланса. При 500 BG игрок может нажать «Участвовать». Средства не списываются.</p><button>Сохранить прогресс</button></form></section>
-<section><h2>Каталог предметов и кейсов</h2><p class="hint">items — предметы; cases — кейсы. price — цена BG; image — путь /img/... с оригинального сайта; rarity — common, rare, epic, legendary или og. Внутри кейса itemId ссылается на ID предмета, weight задаёт относительный вес выпадения (шанс = вес / сумма весов). freeKind: "daily" — раз в сутки, null — платный кейс.</p><p class="hint">Изменения кейсов и предметов сохраняются только у тебя. Существующие предметы в инвентарях сохраняют цену на момент получения.</p><label>Импорт каталога JSON</label><input id="importFile" type="file" accept=".json,application/json"><form id="catalogForm"><textarea id="catalog" aria-label="Каталог JSON" spellcheck="false"></textarea><button>Сохранить каталог</button></form><button id="resetCatalog">Вернуть исходный каталог для себя</button></section>
-<section><h2>Промокод на BG или кейс</h2><form id="promoForm"><label>Код (латиница, цифры, _)</label><input id="code" minlength="3" maxlength="20" required><label for="promoCase">Награда</label><select id="promoCase"><option value="">BG</option></select><label for="reward">Количество BG</label><input id="reward" type="number" min="1" value="500" required><label>Число активаций</label><input id="uses" type="number" min="1" max="10000" value="100" required><button>Создать</button></form><details id="promoList"><summary>Все промокоды</summary><p id="promos"></p></details></section>
+<section><h2>Допуск к розыгрышу</h2><form id="giveawayForm"><label>Учтено BG</label><input id="giveawayAmount" type="number" min="0" step=".01" value="0" required><p class="hint">Задаёт прогресс вручную, отдельно от баланса. При 500 BG игрок может нажать «Участвовать». Средства не списываются.</p><button>Сохранить прогресс</button></form></section>
+<section><h2>Каталог</h2><p class="hint">items — предметы; cases — кейсы. price — цена BG; image — путь /img/... с оригинального сайта; rarity — common, rare, epic, legendary или og. Внутри кейса itemId ссылается на ID предмета, weight задаёт относительный вес выпадения (шанс = вес / сумма весов). freeKind: "daily" — раз в сутки, null — платный кейс.</p><p class="hint">Изменения кейсов и предметов сохраняются только у тебя. Существующие предметы в инвентарях сохраняют цену на момент получения.</p><label>Импорт JSON</label><input id="importFile" type="file" accept=".json,application/json"><form id="catalogForm"><textarea id="catalog" aria-label="Каталог JSON" spellcheck="false"></textarea><button>Сохранить каталог</button></form><button id="resetCatalog">Сбросить каталог</button></section>
+<section><h2>Новый промокод</h2><form id="promoForm"><label>Код (латиница, цифры, _)</label><input id="code" minlength="3" maxlength="20" required><label for="promoCase">Награда</label><select id="promoCase"><option value="">BG</option></select><label for="reward">Количество BG</label><input id="reward" type="number" min="1" value="500" required><label>Число активаций</label><input id="uses" type="number" min="1" max="10000" value="100" required><button>Создать</button></form><details id="promoList"><summary>Все промокоды</summary><p id="promos"></p></details></section>
 <section>
-  <h2>Управление апгрейдом по нажатию</h2>
+  <h2>Кнопка апгрейда</h2>
   <p class="hint">Правая половина кнопки «Апгрейд» гарантирует выигрыш выбранного брейнрота. Левая половина гарантирует проигрыш.</p>
   <form id="upgradeButtonModeForm">
-    <label for="upgradeButtonMode">Режим кнопки апгрейда</label>
+    <label for="upgradeButtonMode">Режим</label>
     <select id="upgradeButtonMode"><option value="off">Выключен</option><option value="on">Включён</option></select>
     <button>Сохранить</button>
   </form>
 </section>
 <section>
-  <h2>Управление дропом кейса по нажатию</h2>
+  <h2>Кнопка кейса</h2>
   <p class="hint">Правая половина кнопки открытия выдаёт самый дорогой предмет из кейса, левая — самый дешёвый. При ×3 или ×5 правило действует на каждый дроп.</p>
   <form id="caseButtonModeForm">
-    <label for="caseButtonMode">Режим кнопки открытия</label>
+    <label for="caseButtonMode">Режим</label>
     <select id="caseButtonMode"><option value="off">Выключен</option><option value="on">Включён</option></select>
     <button>Сохранить</button>
   </form>
 </section>
 <section>
-  <h2>Реферальный код и статистика</h2>
+  <h2>Рефералы</h2>
   <p class="hint">Код, ссылка и показатели отображаются на твоей странице рефералов. Все значения задаются вручную.</p>
   <form id="referralForm">
     <label>Код <input name="code" minlength="3" maxlength="20" pattern="[A-Za-z0-9_]{3,20}" required></label>
@@ -57,7 +57,7 @@
   </form>
 </section>
 <section>
-  <h2>Счётчик участников розыгрыша</h2>
+  <h2>Участники розыгрыша</h2>
   <p class="hint">Реальный режим берёт число участников из оригинального Brainrot Grader. В своём режиме можно задать отображаемое число для себя.</p>
   <form id="giveawayCountForm">
     <label>Розыгрыш <select id="giveawayCountId" required></select></label>

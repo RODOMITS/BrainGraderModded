@@ -12,6 +12,7 @@ import secrets
 import sqlite3
 import time
 import threading
+from collections import Counter
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import parse_qsl
@@ -63,12 +64,24 @@ def original_item(item):
     return result
 
 
+CASE_RARITY_WEIGHTS = {'common': 6000, 'rare': 2500, 'epic': 1000, 'legendary': 400, 'og': 100}
+
+
+def apply_case_rarity_weights(catalog):
+    rarity_by_id = {item['id']: item['rarity'] for item in catalog['items']}
+    for case_data in catalog['cases']:
+        drops = case_data['items']
+        counts = Counter(rarity_by_id[drop['itemId']] for drop in drops)
+        for drop in drops:
+            rarity = rarity_by_id[drop['itemId']]
+            drop['weight'] = round(CASE_RARITY_WEIGHTS[rarity] / counts[rarity], 2)
+    return catalog
+
+
 def fetch_original_catalog(token):
     summaries = original_api('cases', token)
     if not isinstance(summaries, list) or not 1 <= len(summaries) <= 100:
         raise ValueError('Invalid case list')
-    bundled = json.loads((ROOT / 'source_catalog.json').read_text(encoding='utf-8-sig'))
-    weights = {(cs['id'], i['itemId']): i['weight'] for cs in bundled['cases'] for i in cs['items']}
     shop = original_api('shop', token)
     items = {}
     for raw in shop['items']:
@@ -86,13 +99,13 @@ def fetch_original_catalog(token):
             item = original_item(raw)
             iid = item['id']
             items[iid] = item
-            case_items.append(dict(itemId=iid, weight=weights.get((cid, iid), 1)))
+            case_items.append(dict(itemId=iid, weight=1))
         cases.append(dict(id=cid, name=summary['name'], price=summary['price'], image=summary['image'],
                           category=summary.get('category', 'standard'),
                           freeKind='daily' if summary.get('freeKind') else None, items=case_items))
     catalog = dict(items=list(items.values()), cases=cases)
     validate_catalog(catalog)
-    return catalog
+    return apply_case_rarity_weights(catalog)
 
 
 def refresh_original(entry, token, kind):
@@ -344,7 +357,7 @@ def base_catalog():
     if source.exists():
         data = json.loads(source.read_text(encoding='utf-8-sig'))
         validate_catalog(data)
-        return data
+        return apply_case_rarity_weights(data)
     return json.loads(db().execute("SELECT value FROM settings WHERE key='catalog'").fetchone()[0])
 
 
