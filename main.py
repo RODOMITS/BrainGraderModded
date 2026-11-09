@@ -7,6 +7,7 @@ import json
 import math
 import os
 from pathlib import Path
+import re
 import secrets
 import sqlite3
 import time
@@ -273,6 +274,12 @@ def init_db():
         CREATE TABLE IF NOT EXISTS inventory(id INTEGER PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id),
           item TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'owned', test INTEGER NOT NULL DEFAULT 0,
           source TEXT NOT NULL, created REAL NOT NULL);
+        CREATE TABLE IF NOT EXISTS fake_withdrawals(
+          id INTEGER PRIMARY KEY, inventory_id INTEGER NOT NULL REFERENCES inventory(id) ON DELETE CASCADE,
+          roblox_username TEXT NOT NULL, status TEXT NOT NULL, created REAL NOT NULL
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS fake_withdrawals_queued
+          ON fake_withdrawals(inventory_id) WHERE status='queued';
         CREATE TABLE IF NOT EXISTS operations(user_id TEXT NOT NULL, key TEXT NOT NULL, path TEXT NOT NULL,
           body TEXT NOT NULL, response TEXT NOT NULL, PRIMARY KEY(user_id,key));
         CREATE TABLE IF NOT EXISTS cooldown(user_id TEXT NOT NULL, case_id INTEGER NOT NULL, until REAL NOT NULL,
@@ -418,10 +425,62 @@ def cookie(response):
 
 
 def inventory(owned=False):
-    rows = db().execute("SELECT * FROM inventory WHERE user_id=? AND status='owned' ORDER BY id DESC LIMIT 2000", (g.uid,))
-    return [dict(id=r['id'], item=json.loads(r['item']), status=r['status'], test=bool(r['test']),
-                 source=r['source'], createdAt=iso(r['created']), withdrawable=False) for r in rows
-            if (not owned or r['status']=='owned') and visible_item(json.loads(r['item']))]
+    rows = db().execute("""SELECT i.*, w.id AS withdrawal_id FROM inventory i
+        LEFT JOIN fake_withdrawals w ON w.inventory_id=i.id AND w.status='queued'
+        WHERE i.user_id=? AND (i.status='owned' OR (?=0 AND i.status='withdrawing'))
+        ORDER BY i.id DESC LIMIT 2000""", (g.uid, int(owned)))
+    items = []
+    for row in rows:
+        item = json.loads(row['item'])
+        if not visible_item(item):
+            continue
+        entry = dict(id=row['id'], item=item, status=row['status'], test=bool(row['test']),
+                     source=row['source'], createdAt=iso(row['created']),
+                     withdrawable=row['status'] == 'owned' and not row['test'] and not item.get('coins', False))
+        if row['withdrawal_id'] is not None:
+            entry['withdraw'] = dict(id=row['withdrawal_id'], status='queued')
+        items.append(entry)
+    return items
+
+
+def withdrawal_history():
+    rows = db().execute("""SELECT w.id,w.status,w.created,i.item FROM fake_withdrawals w
+        JOIN inventory i ON i.id=w.inventory_id WHERE i.user_id=? ORDER BY w.id DESC LIMIT 100""", (g.uid,))
+    requests = []
+    for row in rows:
+        item = json.loads(row['item'])
+        if visible_item(item):
+            requests.append(dict(id=row['id'], status=row['status'], createdAt=iso(row['created']), item=item))
+    return dict(requests=requests, enabled=True)
+
+
+def start_fake_withdrawal(body):
+    nickname = body.get('robloxUsername')
+    if not isinstance(nickname, str) or not re.fullmatch(r'[A-Za-z0-9_]{3,20}', nickname.strip()):
+        raise Problem('Ник в Roblox: 3–20 символов, латиница, цифры и _')
+    items = selected(body)
+    if len(items) != 1 or items[0]['item'].get('coins'):
+        raise Problem('Выбери один предмет для вывода')
+    item = items[0]
+    c = db()
+    withdrawal = c.execute('INSERT INTO fake_withdrawals(inventory_id,roblox_username,status,created) VALUES (?,?,?,?)',
+                           (item['id'], nickname.strip(), 'queued', time.time()))
+    consume(items, 'withdrawing')
+    return dict(id=withdrawal.lastrowid, status='queued')
+
+
+def cancel_fake_withdrawal(withdrawal_id):
+    c = db()
+    row = c.execute("""SELECT w.status,w.inventory_id,i.item FROM fake_withdrawals w
+        JOIN inventory i ON i.id=w.inventory_id WHERE w.id=? AND i.user_id=?""",
+                    (integer(withdrawal_id), g.uid)).fetchone()
+    if not row or not visible_item(json.loads(row['item'])):
+        raise Problem('Заявка не найдена', 'not_found', 404)
+    if row['status'] == 'queued':
+        c.execute("UPDATE fake_withdrawals SET status='cancelled' WHERE id=?", (integer(withdrawal_id),))
+        c.execute("UPDATE inventory SET status='owned' WHERE id=? AND user_id=? AND status='withdrawing'",
+                  (row['inventory_id'], g.uid))
+    return dict(ok=True)
 
 
 def add_item(item, source, test=False, uid=None):
@@ -572,7 +631,7 @@ def case(i):
 
 
 def config():
-    return dict(build=FRONTEND_BUILD,theme='autumn',caseAnim='classic',sandbox=True,depositEnabled=False,withdrawEnabled=False,
+    return dict(build=FRONTEND_BUILD,theme='autumn',caseAnim='classic',sandbox=True,depositEnabled=False,withdrawEnabled=True,
                 starsRate=1,starsMin=1,starsMax=10000,refBonusPercent=0,withdrawMin=1,withdrawWindow='отключён',
                 upgrade=dict(maxItems=5,minChance=1,maxChance=90,presets=[dict(label=f'×{n}',mult=n) for n in [1.25,2,3,5,10]]),
                 mystery=dict(enabled=True,mult=3,minInput=1,maxInput=1e9,floor=1,cap=1e9),
@@ -795,7 +854,11 @@ def dispatch(path, body):
             raise Problem('Это действие доступно только для своего аккаунта', 'forbidden',403)
     if path == 'deposit/current' and not post:
         return deposit_preview()
-    # All payment and withdrawal mutations are rejected, including unknown nested routes.
+    if path == 'withdraw':
+        return start_fake_withdrawal(body) if post else withdrawal_history()
+    if post and len(parts) == 3 and parts[0] == 'withdraw' and parts[2] == 'cancel':
+        return cancel_fake_withdrawal(parts[1])
+    # Payment and other withdrawal routes stay disabled.
     if path.startswith('deposit') or (path.startswith('withdraw') and post):
         raise Problem('Пополнение и вывод отключены. Баланс можно изменить в общей админке.', 'payments_disabled',403)
     if path=='me': return me()
@@ -840,7 +903,6 @@ def dispatch(path, body):
     if path in ('ping','diag'): return dict(ok=True)
     if path=='avatar': raise Problem('Нет аватара','not_found',404)
     if path=='inventory' and not post: return inventory()
-    if path=='withdraw' and not post: return dict(requests=[],enabled=False)
     if path=='cases' and not post: return [case(x['id']) for x in catalog()['cases']]
     if path.startswith('cases/') and len(parts)==2 and not post: return case(parts[1])
     if path.startswith('cases/') and path.endswith('/free') and not post:

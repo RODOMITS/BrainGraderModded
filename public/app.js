@@ -3912,20 +3912,9 @@
     box.innerHTML = `<div class="items">${inv
       .map((i) => {
         const w = i.withdraw;
-        let layer = '';
-        if (w && w.status === 'queued') {
-          // старая заявка-замена (брейнрот уже обменян) — без кнопки ×; остальные (и новая замена) — обычный «На выводе»
-          const oldEx = w.exchange && typeof w.exchange !== 'object';
-          layer = oldEx
-            ? `<div class="wd-layer"><div class="spinner"></div>На выводе</div>`
-            : `<div class="wd-layer"><div class="spinner"></div>На выводе<button class="wd-cancel" data-cancel="${w.id}" aria-label="Отменить вывод">×</button></div>`;
-        } else if (w && w.status === 'waiting') {
-          layer = `<div class="wd-layer wd-wait">📦<span>Ждём на складе</span><button class="wd-cancel" data-cancel="${w.id}" aria-label="Отменить вывод">×</button></div>`;
-        } else if (w && w.status === 'called') {
-          layer = w.inGame
-            ? `<div class="wd-layer"><div class="spinner"></div>Ждём тебя в игре</div>`
-            : `<div class="wd-layer">Твоя очередь!<button class="wd-ingame" data-ingame="${w.id}">Я в игре</button></div>`;
-        }
+        const layer = w?.status === 'queued'
+          ? `<div class="wd-layer"><div class="spinner"></div>На выводе<button class="wd-cancel" data-cancel="${w.id}" aria-label="Отменить вывод">×</button></div>`
+          : '';
         // div, а не button: внутри есть свои кнопки (отмена вывода, «Я в игре»)
         return `<div class="item rar-${esc(i.item.rarity)} ${w ? 'withdrawing' : ''} ${i.test ? 'is-test' : ''}" role="button" tabindex="0" data-id="${i.id}">${ogTag(i.item)}${i.test ? testTag : ''}<img loading="lazy" src="${itemImg(i.item.image)}" alt=""><div class="n">${esc(i.item.name)}</div>${price(i.item.price)}${layer}</div>`;
       })
@@ -3933,9 +3922,7 @@
     $$('.item', box).forEach((b) => {
       b.onclick = (ev) => {
         const cancelId = ev.target.closest('[data-cancel]')?.dataset.cancel;
-        const ingameId = ev.target.closest('[data-ingame]')?.dataset.ingame;
         if (cancelId) return cancelWithdraw(Number(cancelId));
-        if (ingameId) return imInGame(Number(ingameId));
         const it = inv.find((x) => x.id === Number(b.dataset.id));
         if (it && it.status === 'owned') itemActions(it);
       };
@@ -3952,22 +3939,14 @@
       .join('')}`;
   }
 
-  const GARAMA = 'Garama and Madundung';
   function itemActions(it) {
-    const min = state.cfg.withdrawMin;
-    // Гарамы дешевле минимума, но выводятся парой: берём эту и ещё одну свободную
-    const garPair = it.item.name === GARAMA && it.item.price < min
-      ? (state.inv || []).filter((x) => x.status === 'owned' && !x.bought && !x.test && x.item.name === GARAMA && x.id !== it.id).slice(0, 1).map((x) => x.id)
-      : null;
-    const canWithdraw = false;
-    it.withIds = garPair && garPair.length === 1 ? [it.id, garPair[0]] : [it.id];
+    const canWithdraw = state.cfg.withdrawEnabled && it.withdrawable;
     const body = h(`
       <div>
         <div class="result-card rar-${esc(it.item.rarity)}" ${it.item.rarity === 'og' ? '' : 'style="box-shadow:none;border-color:var(--ridge-2)"'}>${ogTag(it.item)}
           <img src="${itemImgBig(it.item.image)}" alt=""><b>${esc(it.item.name)}</b>${price(it.item.price)}
         </div>
-        <button class="btn" data-a="withdraw" ${canWithdraw ? '' : 'disabled'}>${it.withIds.length > 1 ? `Вывести ${it.withIds.length} шт. в Roblox` : 'Вывести в Roblox'}</button>
-        ${canWithdraw ? '' : it.test ? '' : it.reward ? '<p class="hint center">Награда за серию заходов — вывести нельзя. Продай её, поставь в апгрейд или сыграй в мистери: выигрыш вывести можно</p>' : it.bought ? '<p class="hint center">Куплен за баланс — вывести нельзя. Продай его, поставь в апгрейд или сыграй в мистери: выигрыш вывести можно</p>' : `<p class="hint center">${garPair ? 'Garama and Madundung выводится от 2 шт. — нужна ещё одна' : `Вывести можно брейнрота от ${fmt(min)} BG`}</p>`}
+        <button class="btn" data-a="withdraw" ${canWithdraw ? '' : 'disabled'}>Вывести в Roblox</button>
         <div class="btn-row" style="margin-top:8px">
           <button class="btn ghost" data-a="sell">Продать за ${price(it.item.price)}</button>
           <button class="btn ghost" data-a="upgrade">Апгрейд</button>
@@ -3997,113 +3976,45 @@
   }
 
   function withdrawSheet(it) {
-    toast('Вывод отключён в этой версии.', 'err'); return;
-    if (payBlocked()) return;
-    const body = h(`
-      <div>
-        <div class="line" style="border-top:1px solid var(--ridge)"><img src="${itemImg(it.item.image)}" alt=""><div class="grow"><b>${esc(it.item.name)}${(it.withIds || []).length > 1 ? ` ×${it.withIds.length}` : ''}</b></div>${price(it.item.price * ((it.withIds || []).length || 1))}</div>
-        <label class="field"><span>Твой ник в Roblox</span><input id="rbx" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="20" placeholder="Например, Player_123" value="${esc(state.me.robloxUsername || '')}"></label>
-        <div class="note">Выводы проходят каждый день ${esc(state.cfg.withdrawWindow)}. Бот напишет в Telegram, когда подойдёт твоя очередь и нужно будет зайти в игру.</div>
-        ${state.cfg.withdrawNeed ? `<div class="note">Вывод доступен, если за последние ${state.cfg.withdrawNeed.hours} ч ты пополнил баланс от ${fmt(state.cfg.withdrawNeed.min)} BG — звёздами или брейнротами.</div>` : ''}
-        ${state.cfg.withdrawBig && it.item.price >= state.cfg.withdrawBig.from ? `<div class="note warn">🕓 Крупный вывод (от ${fmt(state.cfg.withdrawBig.from)} BG) — обработка займёт <b>до ${state.cfg.withdrawBig.days} дней</b>.</div>` : ''}
-        <button class="btn" id="wdGo">Поставить на вывод</button>
-      </div>`);
-    const s = openSheet('Вывод', body);
-    $('#wdGo', body).onclick = async (ev) => {
-      ev = { currentTarget: ev.currentTarget }; // после await у события пропадает currentTarget
-      const nick = $('#rbx', body).value.trim();
-      if (!/^[A-Za-z0-9_]{3,20}$/.test(nick)) return toast('Ник в Roblox: 3–20 символов, латиница, цифры и _', 'err');
-      ev.currentTarget.disabled = true;
-      const btn = ev.currentTarget;
-      const picked = {}; // выбор по каждому брейнроту копится: при выводе пары спросим про каждый
-      const send = async (choices) => {
-        Object.assign(picked, choices || {});
-        const r = await api('/api/withdraw', { method: 'POST', body: { ids: it.withIds || [it.id], robloxUsername: nick, choices: picked } });
-        state.me.robloxUsername = nick;
-        if (r.balance != null) setBalance(r.balance);
-        s.close();
+    if (payBlocked() || !it.withdrawable) return;
+    const form = h(`<form>
+      <div class="line"><img src="${itemImg(it.item.image)}" alt=""><div class="grow"><b>${esc(it.item.name)}</b></div>${price(it.item.price)}</div>
+      <label class="field"><span>Твой ник в Roblox</span><input id="rbx" autocomplete="off" autocapitalize="off" spellcheck="false" minlength="3" maxlength="20" pattern="[A-Za-z0-9_]{3,20}" placeholder="Например, Player_123" required></label>
+      <p class="hint">Предмет будет на выводе, пока ты не отменишь заявку.</p>
+      <button class="btn" type="submit">Поставить на вывод</button>
+    </form>`);
+    const sheet = openSheet('Вывод', form);
+    const key = newKey();
+    form.onsubmit = async (event) => {
+      event.preventDefault();
+      const button = form.querySelector('button[type="submit"]');
+      if (button.disabled) return;
+      const nick = $('#rbx', form).value.trim();
+      const render = state.render;
+      button.disabled = true;
+      try {
+        await api('/api/withdraw', { method: 'POST', body: { ids: [it.id], robloxUsername: nick, key } });
         haptic('success');
-        const ex = r.requests.filter((x) => x.mode === 'exchange').length;
-        if (r.bigDays) toast(`Крупный вывод — обработка займёт до ${r.bigDays} дней. Бот напишет, когда подойдёт очередь`);
-        else if (r.waiting) toast('Как только брейнрот появится у нас на складе, вывод встанет в очередь — бот напишет');
-        else if (ex) toast('Ты в очереди на вывод. Замену выдадим в игре, когда подойдёт твоя очередь — бот напишет');
-        else toast('Ты в очереди на вывод. Бот напишет, когда нужно будет зайти в игру');
-        renderProfile();
-      };
-      try {
-        await send();
-      } catch (e) {
-        btn.disabled = false;
-        // брейнрота нет на складе — даём выбрать: замена сразу или подождать
-        if (e.code === 'need_choice' && e.data?.offers?.length) return exchangeSheet(e.data.offers[0], s, send);
-        if (e.code === 'need_recent_deposit') {
-          const b2 = h(`<div><p>${esc(e.message)}</p><button class="btn" id="needDep">Пополнить баланс</button></div>`);
-          const s3 = openSheet('Нужно пополнение', b2);
-          $('#needDep', b2).onclick = () => { s3.close(); s.close(); openDeposit(); };
-          return;
+        toast('Предмет на выводе');
+        if (!stale(render)) {
+          sheet.close();
+          renderProfile();
         }
-        fail(e);
+      } catch (error) {
+        fail(error);
+        button.disabled = false;
       }
     };
-  }
-
-  // Брейнрота нет на складе: замена драконами / Гарамами (+ остаток на баланс) или подождать, пока появится
-  function exchangeSheet(o, parent, send) {
-    const ex = o.exchange;
-    const body = h(`
-      <div>
-        <p class="ex-lead">«${esc(o.item.name)}» сейчас нет у нас на складе. Как поступим?</p>
-        ${ex ? `
-        <div class="ex-card">
-          <div class="ex-title">Вывести с заменой</div>
-          <div class="line"><img src="${itemImg(ex.item.image)}" alt=""><div class="grow"><b>${ex.qty} × ${esc(ex.item.name)}</b>${ex.change > 0 ? `<span class="muted">+ ${fmt(ex.change)} BG на баланс</span>` : ''}</div></div>
-          <p class="muted">Сейчас ничего не меняется: «${esc(o.item.name)}» просто встанет в очередь на вывод. Когда тебя вызовут, в игре выдадим это вместо него. До этого можно отменить.</p>
-          <button class="btn" data-a="exchange">Вывести с заменой</button>
-        </div>` : '<p class="hint">Заменить сейчас нечем — на складе не хватает брейнротов для замены.</p>'}
-        <div class="ex-card">
-          <div class="ex-title">Подождать «${esc(o.item.name)}»</div>
-          <p class="muted">Как только он появится у нас на складе, вывод сам встанет в очередь, и бот напишет. Пока ждёшь, отменить можно в любой момент.</p>
-          <button class="btn ghost" data-a="wait">Подождать</button>
-        </div>
-      </div>`);
-    const s2 = openSheet('Нет на складе', body);
-    const go = (choice) => async (ev) => {
-      const b = ev.currentTarget;
-      $$('button', body).forEach((x) => (x.disabled = true));
-      try {
-        await send({ [o.inventoryId]: choice });
-        s2.close();
-        parent.close?.();
-      } catch (e) {
-        $$('button', body).forEach((x) => (x.disabled = false));
-        if (e.code === 'need_choice' && e.data?.offers?.length) { s2.close(); return exchangeSheet(e.data.offers[0], parent, send); }
-        fail(e);
-      }
-      return b;
-    };
-    const exBtn = $('[data-a=exchange]', body);
-    if (exBtn) exBtn.onclick = go('exchange');
-    $('[data-a=wait]', body).onclick = go('wait');
   }
 
   async function cancelWithdraw(id) {
+    const render = state.render;
     try {
       await api(`/api/withdraw/${id}/cancel`, { method: 'POST', body: {} });
-      toast('Вывод успешно отменён');
-      renderProfile();
-    } catch (e) {
-      fail(e);
-      renderProfile();
-    }
-  }
-
-  async function imInGame(id) {
-    try {
-      await api(`/api/withdraw/${id}/in-game`, { method: 'POST', body: {} });
-      toast('Отлично, сейчас отправим брейнрота');
-      renderProfile();
-    } catch (e) {
-      fail(e);
+      toast('Вывод отменён. Предмет снова доступен.');
+      if (!stale(render)) renderProfile();
+    } catch (error) {
+      fail(error);
     }
   }
 
