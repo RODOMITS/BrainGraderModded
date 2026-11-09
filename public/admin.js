@@ -37,6 +37,7 @@ giveawaySelect.replaceChildren(...(d.giveaways || []).map(row => option(row.id, 
 if ([...giveawaySelect.options].some(entry => entry.value === currentGiveaway)) {
   giveawaySelect.value = currentGiveaway;
 }
+$('depositMode').value = d.depositMode || 'original';
 window.adminSnapshot=d;
 drawGiveawayCount();window.dispatchEvent(new Event('admin:data'));if(window.parent!==window)window.parent.postMessage({type:'bg-admin-balance',balance:Number(d.me.balance)},location.origin);}
 function bind(form,action){$(form).onsubmit=async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;try{await action();notice('Сохранено');await load(false);}catch(err){notice(err.message,true);}finally{b.disabled=false;}};}
@@ -63,6 +64,7 @@ bind('giveawayCountForm', () => api('admin/giveaway-participants', {
   mode: $('giveawayCountMode').value,
   count: Number($('giveawayCount').value)
 }));
+bind('depositModeForm', () => api('admin/deposit-mode', { mode: $('depositMode').value }));
 let previewUrl=null;
 $('customImage').onchange=()=>{if(previewUrl)URL.revokeObjectURL(previewUrl);const file=$('customImage').files[0];$('customPreview').hidden=!file;if(file){previewUrl=URL.createObjectURL(file);$('customPreview').src=previewUrl;}};
 const imageData=file=>new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=()=>reject(new Error('Не удалось прочитать картинку'));r.readAsDataURL(file);});
@@ -95,7 +97,7 @@ $('resetCatalog').onclick=async()=>{try{await api('admin/catalog/reset',{});awai
 function fillItems(id,query=''){const select=$(id),old=select.value;select.replaceChildren(...adminCatalog.filter(i=>(id!=='liveItem'||!i.customSession)&&i.name.toLowerCase().includes(query.toLowerCase())).map(i=>option(i.id,i.name+' · '+i.price+' BG')));if([...select.options].some(o=>o.value===old))select.value=old;}
 // Group existing forms into compact, keyboard-accessible tabs without duplicating them.
 const sections=[...document.querySelectorAll('body > section,body > .grid > section')];
-const groups=[['quick','Быстрые действия',[0,1,3]],['live','Лайв-дропы',[]],['custom','Свои предметы',[2]],['catalog','Каталог',[5]],['other','Розыгрыш и промо',[4,6,10]],['buttons','Управление кнопками',[7,8]],['referrals','Рефералы',[9]]];
+const groups=[['quick','Быстрые действия',[0,1,3]],['live','Лайв-дропы',[]],['custom','Свои предметы',[2]],['catalog','Каталог',[5]],['other','Розыгрыш и промо',[4,6,10]],['buttons','Управление кнопками',[7,8]],['referrals','Рефералы',[9]],['deposit','Пополнения',[11]]];
 const nav=document.createElement('nav');nav.className='admin-tabs';nav.setAttribute('aria-label','Разделы админки');
 const host=document.createElement('main');host.className='admin-panels';
 document.querySelector('body > .grid').before(nav,host);

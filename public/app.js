@@ -921,7 +921,7 @@
         : '<button class="btn" id="promoUse">Пополнить с промокодом</button>'}`;
     $('#promoCode', box).onclick = () => copy(b.code, 'Промокод скопирован');
     const use = $('#promoUse', box);
-    if (use) use.onclick = () => copy(b.code, 'Промокод скопирован');
+    if (use) use.onclick = () => openDeposit('stars', { promo: b.code });
   }
 
   // Названия разделов кейсов на главной (новый раздел = новая строка здесь + category у кейса)
@@ -4124,174 +4124,72 @@
   // =====================================================================
   //                             ПОПОЛНЕНИЕ
   // =====================================================================
-  const dep = { tab: 'stars', sel: new Map(), q: '', from: '', to: '', sort: 'desc', catalog: null, timers: [] };
-  const stopDepTimers = () => { dep.timers.forEach(clearInterval); dep.timers = []; };
+  const dep = { tab: 'stars', sel: new Map(), q: '', from: '', to: '', sort: 'desc', catalog: null, promo: '' };
 
-  // Одно поле «Промокод или код друга» в пополнении
-  const refPct = () => state.me.refBonusPercent || state.cfg.refBonusPercent;
-  function codeFieldsHtml() {
-    const hb = state.home?.bonus;
-    const about = state.me.canEnterRefCode
-      ? `Промокод с главной даёт бонус к пополнению. Код друга — +${fmt(refPct())}% к каждому пополнению, где его ввёл; на аккаунт можно привязать только один код друга.`
-      : 'Промокод с главной даёт бонус к пополнению.';
-    return `
-      <label class="field"><span>Промокод или код друга</span><input id="dPromo" maxlength="20" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Например, ${esc(hb?.code || 'DRAGON47')}" value="${esc(dep.promo || '')}"></label>
-      <p class="hint" style="margin-top:6px">${about}</p>`;
-  }
-  // Что за код в поле — спрашиваем у сервера, пока игрок печатает (промокод с главной узнаём сразу)
-  const peek = { code: '', res: null, timer: 0 };
-  function knownBonus(box) {
-    const code = ($('#dPromo', box)?.value || '').trim().toUpperCase();
-    const bound = state.me.firstDepositBonus || 0; // уже привязан к другу, впереди первое пополнение
-    let pct = bound;
-    const parts = bound ? [`+${fmt(bound)}% к первому пополнению по коду друга`] : [];
-    if (code.length >= 3) {
-      const r = peek.code === code ? peek.res : null;
-      if (!r) parts.push('Проверяем код…');
-      else if (r.ok && r.kind === 'friend' && bound) { /* тот же друг — бонус уже учтён */ }
-      else if (r.ok) { pct += r.percent; if (r.text) parts.push(r.text); }
-      else if (r.text) parts.push('⚠ ' + r.text);
-    }
-    return { pct, text: parts.join('. ') };
-  }
-  function watchCode(box, recalc) {
-    const inp = $('#dPromo', box);
-    if (!inp) return recalc();
-    const run = () => {
-      const code = inp.value.trim().toUpperCase();
-      clearTimeout(peek.timer);
-      if (code !== peek.code) {
-        peek.code = code;
-        peek.res = null;
-        const hb = state.home?.bonus;
-        if (hb && code === hb.code) {
-          peek.res = hb.used
-            ? { ok: false, kind: 'bonus', percent: 0, text: 'Ты уже использовал этот промокод' }
-            : { ok: true, kind: 'bonus', percent: hb.percent, text: `+${fmt(hb.percent)}% к пополнению по промокоду ${hb.code}` };
-        } else if (code.length >= 3) {
-          peek.timer = setTimeout(async () => {
-            let r;
-            try { r = await api('/api/deposit/code', { method: 'POST', body: { code } }); }
-            catch { r = { ok: true, kind: null, percent: 0, text: 'Код проверим, когда создашь оплату' }; }
-            if (peek.code === code) { peek.res = r; recalc(); }
-          }, 350);
-        }
-      }
-      recalc();
-    };
-    inp.oninput = run;
-    run();
-  }
-  const codeBody = (box) => ({ promo: $('#dPromo', box)?.value.trim() || undefined });
-  function afterCodes(kind) {
-    if (kind === 'friend') {
-      if (state.me.canEnterRefCode) state.me.firstDepositBonus = refPct();
-      Object.assign(state.me, { hasReferrer: true, canEnterRefCode: false });
-    }
-    dep.promo = '';
-    peek.code = '';
-    peek.res = null;
-  }
-
-  function openDeposit(tab = dep.tab, { promo } = {}) { toast('Пополнение отключено. Баланс меняется в админке.', 'err'); return;
+  function openDeposit(tab = dep.tab, { promo } = {}) {
     if (payBlocked()) return;
     if (promo !== undefined) dep.promo = promo;
+    dep.catalog = null;
     const body = h(`<div><div class="seg" id="depSeg" style="margin-top:0"><button data-t="stars">Звёзды</button><button data-t="items">Брейнроты</button></div><div id="dep"></div></div>`);
-    openSheet('Пополнение', body, { onClose: stopDepTimers });
-    $$('#depSeg button', body).forEach((b) => (b.onclick = () => showDepTab(b.dataset.t)));
+    openSheet('Пополнение', body);
+    $$('#depSeg button', body).forEach(b => { b.onclick = () => showDepTab(b.dataset.t); });
     showDepTab(tab);
   }
 
   function showDepTab(tab) {
     dep.tab = tab;
-    stopDepTimers();
-    $$('#depSeg button').forEach((b) => b.classList.toggle('on', b.dataset.t === tab));
+    $$('#depSeg button').forEach(b => b.classList.toggle('on', b.dataset.t === tab));
     if (tab === 'stars') starsTab();
     else itemsTab();
   }
 
-  // ----- Звёзды -----
   function starsTab() {
     const cfg = state.cfg;
     const box = $('#dep');
     box.innerHTML = `
       <label class="field"><span>Сколько звёзд</span><input id="stars" type="number" inputmode="numeric" min="${cfg.starsMin}" max="${cfg.starsMax}" placeholder="Например, 100"></label>
-      ${codeFieldsHtml()}
+      <label class="field"><span>Промокод</span><input id="dPromo" maxlength="20" autocomplete="off" autocapitalize="characters" spellcheck="false" value="${esc(dep.promo)}"></label>
       <div class="total"><span>Получишь</span><b>${COIN}<span id="get">0</span></b></div>
       <p class="hint" id="bonusHint"></p>
-      <button class="btn" id="pay" disabled>Оплатить звёздами</button>
-      <p class="hint center">1 ⭐ = ${fmt(cfg.starsRate)} BG, минимум ${cfg.starsMin} ⭐. Зачисление сразу после оплаты.</p>`;
-    const inp = $('#stars', box);
+      <button class="btn" type="button" id="pay" disabled>Оплатить звёздами</button>
+      <p class="hint center">1 ⭐ = ${fmt(cfg.starsRate)} BG, минимум ${cfg.starsMin} ⭐. Предпросмотр пополнения.</p>`;
+    const input = $('#stars', box);
+    const promoInput = $('#dPromo', box);
     const recalc = () => {
-      const n = Math.floor(Number(inp.value) || 0);
-      const base = n * cfg.starsRate;
-      const kb = knownBonus(box);
-      $('#get', box).textContent = fmt(base * (1 + kb.pct / 100));
-      $('#bonusHint', box).textContent = kb.text;
-      $('#pay', box).disabled = !(n >= cfg.starsMin && n <= cfg.starsMax);
+      const stars = Number(input.value);
+      dep.promo = promoInput.value;
+      const bonus = state.home?.bonus;
+      const applies = bonus && !bonus.used && Date.now() < Date.parse(bonus.endsAt)
+        && dep.promo.trim().toUpperCase() === bonus.code;
+      const percent = applies ? bonus.percent : 0;
+      $('#get', box).textContent = fmt(Math.max(0, stars || 0) * cfg.starsRate * (1 + percent / 100));
+      $('#bonusHint', box).textContent = applies ? `+${fmt(percent)}% по промокоду` : '';
+      $('#pay', box).disabled = !Number.isInteger(stars) || stars < cfg.starsMin || stars > cfg.starsMax;
     };
-    inp.oninput = recalc;
-    watchCode(box, recalc);
-    $('#pay', box).onclick = async (ev) => {
-      ev = { currentTarget: ev.currentTarget }; // после await у события пропадает currentTarget
-      const btn = ev.currentTarget;
-      btn.disabled = true;
-      try {
-        const codes = codeBody(box);
-        const r = await api('/api/deposit/stars', { method: 'POST', body: { stars: Math.floor(Number(inp.value)), ...codes } });
-        afterCodes(r.codeKind);
-        const after = (status) => {
-          if (status === 'paid') {
-            haptic('success');
-            toast(r.bonus > 0 ? `Оплата прошла: ${fmt(r.bg)} BG и +${fmt(r.bonus)} BG бонусом` : 'Оплата прошла, BG уже на балансе');
-            if (codes.promo && state.home?.bonus && codes.promo.toUpperCase() === state.home.bonus.code) state.home.bonus.used = true;
-            closeSheet();
-            pollBalance();
-          } else if (status === 'failed') toast('Оплата не прошла', 'err');
-          btn.disabled = false;
-        };
-        if (TG?.openInvoice) TG.openInvoice(r.link, after);
-        else {
-          window.open(r.link, '_blank');
-          btn.disabled = false;
-        }
-      } catch (e) {
-        btn.disabled = false;
-        fail(e);
-      }
-    };
+    input.oninput = recalc;
+    promoInput.oninput = recalc;
+    recalc();
   }
 
-  async function pollBalance() {
-    const before = state.me.balance;
-    for (let i = 0; i < 8; i++) {
-      await sleep(1500);
-      try {
-        const me = await refreshMe();
-        if (me.balance !== before) break;
-      } catch {}
-    }
-    state.caseUpdate?.();
-  }
-
-  // ----- Брейнроты -----
   async function itemsTab() {
     const box = $('#dep');
+    if (!box) return;
     box.innerHTML = '<div class="skeleton"></div>';
-    let cur;
     try {
-      cur = await api('/api/deposit/current');
-    } catch (e) {
-      return fail(e);
+      const deadline = Date.now() + 6500;
+      let status = await api('/api/deposit/current');
+      while (status.checking && Date.now() < deadline) {
+        if (!box.isConnected || dep.tab !== 'items') return;
+        await sleep(750);
+        status = await api('/api/deposit/current');
+      }
+      if (box.isConnected && dep.tab === 'items') await catalogView(box, status.open);
+    } catch (error) {
+      if (box.isConnected && dep.tab === 'items') fail(error);
     }
-    if (dep.tab !== 'items' || !$('#dep')) return;
-    if (cur.request && ['queued', 'active'].includes(cur.request.status)) return queueView(cur);
-    if (cur.request) return finishedView(cur.request);
-    return catalogView(cur.open);
   }
 
-  async function catalogView(open) {
-    const box = $('#dep');
+  async function catalogView(box, open) {
     // приём на паузе — в очередь не встать
     if (open === false) {
       box.innerHTML = `<div class="empty dep-paused"><img src="${mascot('pause')}" alt="" style="width:150px;max-width:50%;height:auto;margin:0 auto 6px;display:block"><b>Упсс…</b><p>Сейчас пополнения брейнротами на паузе.<br>Приходи позже</p><button class="btn" id="dreload">Проверить снова</button></div>`;
@@ -4301,14 +4199,20 @@
     if (!dep.catalog) {
       box.innerHTML = '<div class="skeleton"></div>';
       try {
-        dep.catalog = await api('/api/deposit/catalog');
+        const shop = await api('/api/shop');
+        dep.catalog = shop.items;
       } catch (e) {
         return fail(e);
       }
     }
-    const cat = dep.catalog;
+    if (!box.isConnected || dep.tab !== 'items') return;
+    const items = dep.catalog;
+    const byId = new Map(items.map(item => [item.id, item]));
+    for (const id of dep.sel.keys()) {
+      if (!byId.has(id)) dep.sel.delete(id);
+    }
     box.innerHTML = `
-      <p class="hint" style="margin-top:0">Выбери одного или сразу несколько брейнротов. Отдашь их одним трейдом в Roblox, BG зачислятся после приёма.</p>
+      <p class="hint" style="margin-top:0">Выбери брейнротов, чтобы посмотреть сумму пополнения.</p>
       <input class="search" id="dq" placeholder="Поиск брейнрота" value="${esc(dep.q)}" style="margin-top:12px">
       <div class="filters">
         <input id="dfrom" inputmode="decimal" placeholder="Цена от" value="${esc(dep.from)}">
@@ -4316,12 +4220,12 @@
         <button class="sort" id="dsort"></button>
       </div>
       <div class="items" id="dgrid"></div>
-      <div class="picked"><button class="btn" id="dnext"></button></div>`;
+      <div class="picked"><button class="btn" id="dnext" disabled></button></div>`;
     const draw = () => {
       const q = dep.q.toLowerCase();
       const from = Number(dep.from) || 0;
       const to = Number(dep.to) || Infinity;
-      let list = cat.items.filter((i) => i.name.toLowerCase().includes(q) && i.price >= from && i.price <= to);
+      let list = items.filter((i) => i.name.toLowerCase().includes(q) && i.price >= from && i.price <= to);
       list = list.sort((a, b) => (dep.sort === 'desc' ? b.price - a.price : a.price - b.price));
       $('#dsort').textContent = dep.sort === 'desc' ? 'Сначала дорогие' : 'Сначала дешёвые';
       $('#dgrid').innerHTML = list.length
@@ -4333,22 +4237,18 @@
             .join('')
         : '<div class="empty" style="grid-column:1/-1">Ничего не нашлось</div>';
       const count = [...dep.sel.values()].reduce((a, b) => a + b, 0);
-      const sum = [...dep.sel.entries()].reduce((a, [id, n]) => a + (cat.items.find((x) => x.id === id)?.price || 0) * n, 0);
+      const sum = [...dep.sel.entries()].reduce((a, [id, n]) => a + byId.get(id).price * n, 0);
       const nb = $('#dnext');
-      nb.disabled = !count;
       nb.innerHTML = count ? `Продолжить: ${count} шт. на ${price(sum)}` : 'Выбери брейнротов';
       $$('#dgrid .item').forEach((b) => {
         b.onclick = (ev) => {
           const id = Number(b.dataset.id);
           const n = dep.sel.get(id) || 0;
-          const minQty = cat.items.find((x) => x.id === id)?.minQty || 1;
           if (ev.target.closest('[data-minus]')) {
-            if (n <= minQty) dep.sel.delete(id);
+            if (n <= 1) dep.sel.delete(id);
             else dep.sel.set(id, n - 1);
           } else {
-            const add = n === 0 ? minQty : 1; // Гарамы — сразу парой: их принимаем от 2 шт.
-            if (count + add > cat.maxItems) return toast(`За одну заявку можно до ${cat.maxItems} брейнротов`, 'err', 3000);
-            dep.sel.set(id, n + add);
+            dep.sel.set(id, n + 1);
           }
           tick();
           draw();
@@ -4359,124 +4259,7 @@
     $('#dfrom').oninput = (e) => { dep.from = e.target.value.replace(',', '.'); draw(); };
     $('#dto').oninput = (e) => { dep.to = e.target.value.replace(',', '.'); draw(); };
     $('#dsort').onclick = () => { dep.sort = dep.sort === 'desc' ? 'asc' : 'desc'; draw(); };
-    $('#dnext').onclick = () => summaryView(open);
     draw();
-  }
-
-  function summaryView(open) {
-    const cat = dep.catalog;
-    const box = $('#dep');
-    const lines = [...dep.sel.entries()].map(([id, n]) => ({ it: cat.items.find((x) => x.id === id), n })).filter((l) => l.it);
-    const sum = lines.reduce((a, l) => a + l.it.price * l.n, 0);
-    box.innerHTML = `
-      <button class="back" id="dback">‹ Назад к выбору</button>
-      ${lines.map((l) => `<div class="line"><img src="${itemImg(l.it.image)}" alt=""><div class="grow"><b>${esc(l.it.name)} ×${l.n}</b></div>${price(l.it.price * l.n)}<button class="x" data-rm="${l.it.id}" aria-label="Убрать">×</button></div>`).join('')}
-      <div class="total"><span>Всего получишь</span><b>${COIN}<span id="dget">${fmt(sum)}</span></b></div>
-      <p class="hint" id="dbonus"></p>
-      ${sum < cat.minTotal ? `<div class="note warn">Минимальное пополнение — ${fmt(cat.minTotal)} BG. Добавь ещё брейнротов</div>` : ''}
-      <label class="field"><span>Твой ник в Roblox</span><input id="drbx" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="20" placeholder="Например, Player_123" value="${esc(state.me.robloxUsername || '')}"></label>
-      ${codeFieldsHtml()}
-      <button class="btn" id="dcreate" ${sum < cat.minTotal ? 'disabled' : ''}>Создать заявку</button>`;
-    const recalc = () => {
-      const kb = knownBonus(box);
-      $('#dget', box).textContent = fmt(sum * (1 + kb.pct / 100));
-      $('#dbonus', box).textContent = kb.text;
-    };
-    watchCode(box, recalc);
-    $('#dback').onclick = () => catalogView(open);
-    $$('[data-rm]', box).forEach((b) => (b.onclick = () => { dep.sel.delete(Number(b.dataset.rm)); dep.sel.size ? summaryView(open) : catalogView(open); }));
-    $('#dcreate').onclick = async (ev) => {
-      ev = { currentTarget: ev.currentTarget }; // после await у события пропадает currentTarget
-      const nick = $('#drbx').value.trim();
-      if (!/^[A-Za-z0-9_]{3,20}$/.test(nick)) return toast('Ник в Roblox: 3–20 символов, латиница, цифры и _', 'err');
-      const createBtn = ev.currentTarget;
-      createBtn.disabled = true;
-      try {
-        const r = await api('/api/deposit/items', {
-          method: 'POST',
-          body: { items: lines.map((l) => ({ itemId: l.it.id, qty: l.n })), robloxUsername: nick, ...codeBody(box) },
-        });
-        state.me.robloxUsername = nick;
-        afterCodes(r.codeKind);
-        dep.sel.clear();
-        haptic('success');
-        toast('Заявка создана. Бот напишет, когда подойдёт очередь');
-        itemsTab();
-      } catch (e) {
-        createBtn.disabled = false;
-        if (e.code === 'deposits_paused') return catalogView(false); // пока выбирал — приём поставили на паузу
-        fail(e);
-      }
-    };
-  }
-
-  function queueView(cur) {
-    const r = cur.request;
-    const box = $('#dep');
-    const active = r.status === 'active';
-    let left = active ? r.secondsLeft : r.etaSeconds;
-    box.innerHTML = `
-      <div class="center" style="padding:6px 0 4px">
-        ${active
-          ? `<div class="queue-num">Твоя очередь!</div>
-             <p>Отправь трейд в Roblox аккаунту <b>${esc(r.tradeAccount || '—')}</b></p>
-             <div class="muted">Осталось</div>`
-          : r.ahead
-            ? `<div class="muted">Ты в очереди</div><div class="queue-num">№${r.position}</div>
-               <p class="hint">Впереди ${r.ahead} ${plural(r.ahead, 'заявка', 'заявки', 'заявок')}. Примерное ожидание:</p>`
-            : `<div class="muted">Ты в очереди</div><div class="queue-num">№1</div>
-               <p class="hint">Ты следующий. Примерное ожидание:</p>`}
-        <div class="timer" id="qtimer">${mmss(left)}</div>
-      </div>
-      ${cur.open === false && !active ? '<div class="note warn">Приём сейчас на паузе, очередь продолжится, когда мы вернёмся.</div>' : ''}
-      <div class="note">Бот напишет в Telegram, когда подойдёт очередь. Это окно можно закрыть.</div>
-      <div style="margin-top:12px">${r.items.map((i) => `<div class="line"><img src="${itemImg(i.image)}" alt=""><div class="grow"><b>${esc(i.name)} ×${i.qty}</b></div>${price(i.price * i.qty)}</div>`).join('')}</div>
-      <div class="total"><span>Ник: ${esc(r.robloxUsername)}</span><b>${COIN}${fmt(r.total)}</b></div>
-      <button class="btn danger" id="dcancel">Отменить заявку</button>`;
-    dep.timers.push(setInterval(() => {
-      left = Math.max(0, left - 1);
-      const el = $('#qtimer');
-      if (el) el.textContent = mmss(left);
-    }, 1000));
-    dep.timers.push(setInterval(async () => {
-      try {
-        const fresh = await api('/api/deposit/current');
-        if (dep.tab !== 'items' || !$('#dep')) return;
-        stopDepTimers();
-        if (fresh.request && ['queued', 'active'].includes(fresh.request.status)) queueView(fresh);
-        else if (fresh.request) finishedView(fresh.request);
-        else catalogView(fresh.open);
-      } catch {}
-    }, 10000));
-    $('#dcancel').onclick = async (ev) => {
-      ev = { currentTarget: ev.currentTarget }; // после await у события пропадает currentTarget
-      if (!(await confirmBox('Отменить заявку на пополнение? Место в очереди пропадёт.', { ok: 'Отменить заявку', cancel: 'Назад' }))) return;
-      ev.currentTarget.disabled = true;
-      try {
-        await api(`/api/deposit/items/${r.id}/cancel`, { method: 'POST', body: {} });
-        stopDepTimers();
-        toast('Заявка отменена');
-        catalogView(cur.open);
-      } catch (e) {
-        ev.currentTarget.disabled = false;
-        fail(e);
-      }
-    };
-  }
-
-  function finishedView(r) {
-    const box = $('#dep');
-    const text = {
-      completed: `Зачислено ${fmt(r.credited)} BG`,
-      cancelled: 'Заявка отменена',
-      expired: 'Время на трейд вышло',
-      rejected: `Заявка отклонена${r.note ? ': ' + r.note : ''}`,
-    }[r.status];
-    box.innerHTML = `
-      <div class="center" style="padding:10px 0"><div class="queue-num" style="font-size:26px">${esc(text || r.status)}</div></div>
-      <button class="btn" id="dnew">Новая заявка</button>`;
-    if (r.status === 'completed') refreshMe().catch(() => {});
-    $('#dnew').onclick = () => catalogView();
   }
 
   // =====================================================================

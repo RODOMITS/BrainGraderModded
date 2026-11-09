@@ -109,6 +109,12 @@ def refresh_original(entry, token, kind):
                 for group in ('active', 'finished')
             }
             value['expires'] = time.time() + 120
+        elif kind == 'deposit':
+            data = original_api('deposit/current', token)
+            if not isinstance(data.get('open'), bool):
+                raise ValueError('Invalid original deposit status')
+            value = dict(open=data['open'], expires=time.time() + 120)
+            delay = 30
         elif kind == 'live':
             data = original_api('home', token)
             value = dict(drops=[original_drop(drop) for drop in data['drops'][:30]],
@@ -766,6 +772,20 @@ def redeem_promo(value, case_id=None):
     return row['reward']
 
 
+def deposit_mode():
+    row = db().execute('SELECT value FROM settings WHERE key=?', ('deposit-mode:' + g.uid,)).fetchone()
+    return row[0] if row else 'original'
+
+
+def deposit_preview():
+    mode = deposit_mode()
+    if mode != 'original':
+        return dict(open=mode == 'on', checking=False)
+    status = original_snapshot('deposit')
+    return dict(open=status is not None and status['open'],
+                checking=status is None and original_status('deposit') == 'loading')
+
+
 def dispatch(path, body):
     c=db()
     parts=path.split('/')
@@ -773,6 +793,8 @@ def dispatch(path, body):
     if post and path in ('admin/balance','admin/grant','admin/giveaway-progress'):
         if 'userId' in body and str(body['userId'])!=g.uid:
             raise Problem('Это действие доступно только для своего аккаунта', 'forbidden',403)
+    if path == 'deposit/current' and not post:
+        return deposit_preview()
     # All payment and withdrawal mutations are rejected, including unknown nested routes.
     if path.startswith('deposit') or (path.startswith('withdraw') and post):
         raise Problem('Пополнение и вывод отключены. Баланс можно изменить в общей админке.', 'payments_disabled',403)
@@ -1061,6 +1083,7 @@ def dispatch(path, body):
                               for row in c.execute('SELECT id,item FROM giveaways ORDER BY id DESC')]
         result['giveawayParticipantOverrides'] = giveaway_participant_overrides()
         result['buttonModes'] = button_modes()
+        result['depositMode'] = deposit_mode()
         if request.args.get('catalog','1')!='0':
             result['catalog']=catalog()
         for r in c.execute('SELECT game,value FROM next_results WHERE user_id=?',(g.uid,)):
@@ -1068,6 +1091,12 @@ def dispatch(path, body):
             if not value.get('item') or visible_item(value['item']):
                 result['nextResults'][r['game']]=value
         return result
+    if path=='admin/deposit-mode' and post:
+        mode = body.get('mode')
+        if mode not in ('original', 'on', 'off'):
+            raise Problem('Выбери режим пополнения брейнротами')
+        c.execute('INSERT OR REPLACE INTO settings VALUES (?,?)', ('deposit-mode:' + g.uid, mode))
+        return dict(ok=True)
     if path=='admin/button-modes' and post:
         game, enabled = body.get('game'), body.get('enabled')
         if game not in ('case', 'upgrade') or type(enabled) is not bool:
