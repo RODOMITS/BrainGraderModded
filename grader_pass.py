@@ -8,7 +8,7 @@ from urllib.parse import urlsplit
 
 MOSCOW = timezone(timedelta(hours=3))
 AUTUMN = dict(name='Осенний сезон', started=True, over=False)
-METRICS = ('manual', 'spend', 'case', 'upgrade', 'upgrade_win', 'dice', 'dice_win', 'mystery')
+METRICS = ('manual', 'visit', 'spend', 'case', 'upgrade', 'upgrade_win', 'dice', 'dice_win', 'mystery')
 QUEST_GROUPS = ('daily', 'weekly')
 SCHEMA = '''
 CREATE TABLE IF NOT EXISTS pass_events(
@@ -40,9 +40,11 @@ def label(value, limit):
 
 
 def metric_for(row):
+    title = row['title'].lower().replace('ё', 'е').strip()
+    if title.rstrip('!.') == 'загляни на сайт':
+        return 'visit'
     if row.get('metric') in METRICS:
         return row['metric']
-    title = row['title'].lower().replace('ё', 'е')
     if re.search(r'потрать|оборот|ставок на', title) and 'bg' in title:
         return 'spend'
     if re.search(r'открой \d+ (платн\w+ )?кейс', title):

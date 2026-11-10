@@ -1055,7 +1055,10 @@ def dispatch(path, body):
     # Payment and other withdrawal routes stay disabled.
     if path.startswith('deposit') or (path.startswith('withdraw') and post):
         raise Problem('Пополнение и вывод отключены. Баланс можно изменить в общей админке.', 'payments_disabled',403)
-    if path=='me': return me()
+    if path == 'me':
+        if not post:
+            record_pass_play('visit', 0)
+        return me()
     if path=='config':
         return dict(config(), dragonExchange=dragon_exchange_config(), **{'pass': {'enabled': True}})
     if path == 'pass' and not post:
@@ -1549,7 +1552,7 @@ def api(path):
     if not isinstance(body,dict): raise Problem('Нужен JSON-объект')
     c=db()
     try:
-        c.execute('BEGIN IMMEDIATE' if request.method=='POST' or path in ('giveaways','mines/current','pass') else 'BEGIN')
+        c.execute('BEGIN IMMEDIATE' if request.method=='POST' or path in ('giveaways','mines/current','pass','me') else 'BEGIN')
         key=body.get('key'); fingerprint=json.dumps(body,sort_keys=True,separators=(',',':'))
         if key is not None:
             if not isinstance(key,str) or not 1<=len(key)<=100: raise Problem('Неверный ключ операции')

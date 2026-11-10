@@ -31,7 +31,7 @@ passPanel.innerHTML = `
   </section>`;
 
 const passMetrics = {
-  manual: 'Вручную', spend: 'Потрачено BG', case: 'Открыто платных кейсов',
+  manual: 'Вручную', visit: 'Вход на сайт', spend: 'Потрачено BG', case: 'Открыто платных кейсов',
   upgrade: 'Попытки апгрейда', upgrade_win: 'Успешные апгрейды',
   dice: 'Игры в Колор Дайс', dice_win: 'Победы в Колор Дайс', mystery: 'Игры в Мистери',
 };
