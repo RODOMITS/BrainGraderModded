@@ -18,6 +18,8 @@ from urllib.parse import parse_qsl
 from urllib.error import HTTPError
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
+import grader_pass
+
 from flask import Flask, Response, g, jsonify, redirect, request, send_from_directory
 
 ROOT = Path(__file__).resolve().parent
@@ -25,7 +27,7 @@ STREAK_SOURCE=(ROOT/'source_streak.json').read_bytes()
 DEFAULT_STREAK=json.loads(STREAK_SOURCE)['track']
 STREAK_VERSION=hashlib.sha256(STREAK_SOURCE).hexdigest()[:12]
 FRONTEND_BUILD = hashlib.sha256(b''.join(
-    (ROOT/'public'/name).read_bytes() for name in ('index.html','app.js','styles.css','sandbox.js','admin.html','admin.js','admin.css','admin-visual.js','ui-audio.js','telegram-web-app.js')
+    (ROOT/'public'/name).read_bytes() for name in ('index.html','app.js','styles.css','sandbox.js','admin.html','admin.js','admin-pass.js','admin.css','admin-visual.js','ui-audio.js','telegram-web-app.js')
     if (ROOT/'public'/name).is_file()
 )).hexdigest()[:12]
 app = Flask(__name__, static_folder=None)
@@ -122,6 +124,13 @@ def refresh_original(entry, token, kind):
         if kind == 'catalog':
             value = fetch_original_catalog(token)
             delay = 300
+        elif kind == 'pass':
+            value = grader_pass.original_definition(original_api('pass', token))
+            delay = 30
+        elif kind == 'dragon':
+            raw = original_api('config', token).get('dragonExchange')
+            value = None if not raw else dict(itemId=integer(raw['dragon']['id']), minimum=number(raw['from'], 1))
+            delay = 300
         elif kind == 'giveaways':
             data = original_api('giveaways', token)
             value = {
@@ -179,7 +188,7 @@ def original_snapshot(kind):
             SHARED_ORIGINAL[kind + '_loading'] = True
             threading.Thread(target=refresh_original, args=(SHARED_ORIGINAL, token, kind), daemon=True).start()
         value = SHARED_ORIGINAL.get(kind)
-        if value and (kind == 'catalog' or value['expires'] > now):
+        if value and (kind in ('catalog', 'pass', 'dragon') or value['expires'] > now):
             return value
     return None
 
@@ -326,6 +335,7 @@ def init_db():
           user_id TEXT NOT NULL REFERENCES users(id), amount REAL NOT NULL,
           PRIMARY KEY(giveaway_id,user_id));
         ''')
+        c.executescript(grader_pass.SCHEMA)
         # Uploaded assets exist only in process memory; discard their previous inventory snapshots on restart.
         c.execute("DELETE FROM inventory WHERE json_extract(item,'$.customSession') IS NOT NULL")
         c.execute("DELETE FROM next_results WHERE json_extract(value,'$.item.customSession') IS NOT NULL")
@@ -456,7 +466,7 @@ def inventory(owned=False):
             continue
         entry = dict(id=row['id'], item=item, status=row['status'], test=bool(row['test']),
                      source=row['source'], createdAt=iso(row['created']),
-                     withdrawable=row['status'] == 'owned' and not row['test'] and not item.get('coins', False))
+                     withdrawable=row['status'] == 'owned' and not row['test'] and row['source'] != 'pass' and not item.get('coins', False))
         if row['withdrawal_id'] is not None:
             entry['withdraw'] = dict(id=row['withdrawal_id'], status='queued')
         items.append(entry)
@@ -482,6 +492,8 @@ def start_fake_withdrawal(body):
     if len(items) != 1 or items[0]['item'].get('coins'):
         raise Problem('Выбери один предмет для вывода')
     item = items[0]
+    if item['source'] == 'pass':
+        raise Problem('Награды Grader Pass нельзя вывести')
     c = db()
     withdrawal = c.execute('INSERT INTO fake_withdrawals(inventory_id,roblox_username,status,created) VALUES (?,?,?,?)',
                            (item['id'], nickname.strip(), 'queued', time.time()))
@@ -748,7 +760,7 @@ def streak_view(checkin=False):
         count=1 if broken else count+1;best=max(best,count);fresh=True
         c.execute('INSERT OR REPLACE INTO streak_progress VALUES (?,?,?,?)',(g.uid,today,count,best))
         reward=configured_streak_reward(cfg,count)
-        c.execute('INSERT INTO streak_rewards VALUES (?,?,?,?,?,0)',(secrets.token_hex(16),g.uid,count,json.dumps(reward),(today+1)*86400-10800))
+        c.execute('INSERT INTO streak_rewards VALUES (?,?,?,?,?,0)',(secrets.token_hex(16),g.uid,count,json.dumps(reward),time.time()+86400))
     pending=[]
     for r in c.execute('SELECT * FROM streak_rewards WHERE user_id=? AND claimed=0 AND expires>? ORDER BY rowid',(g.uid,time.time())):
         reward=json.loads(r['reward'])
@@ -870,6 +882,163 @@ def deposit_preview():
                 checking=status is None and original_status('deposit') == 'loading')
 
 
+def dragon_exchange_config():
+    original = original_snapshot('dragon')
+    dragon = find_item(original['itemId'] if original else 62)
+    if not dragon or dragon.get('coins') or dragon.get('customSession') or dragon['price'] <= 0:
+        return None
+    return {'dragon': dragon, 'from': max(dragon['price'], original['minimum'] if original else dragon['price'])}
+
+
+def exchange_dragons(body):
+    rows = selected(body)
+    cfg = dragon_exchange_config()
+    if not cfg or len(rows) != 1:
+        raise Problem('Выбери один предмет для размена')
+    row = rows[0]
+    item = row['item']
+    dragon = cfg['dragon']
+    if (row['source'] in ('shop', 'pass', 'streak') or item.get('coins') or item.get('customSession') or
+            item['rarity'] == 'og' or item['id'] == dragon['id'] or item['price'] < cfg['from']):
+        raise Problem('Этот предмет нельзя разменять')
+    count, remainder = divmod(round(item['price'] * 100), round(dragon['price'] * 100))
+    if not 1 <= count <= 1000:
+        raise Problem('Можно получить от 1 до 1000 драконов за раз')
+    change = remainder / 100
+    consume(rows, 'exchanged')
+    for _ in range(count):
+        add_item(dragon, 'exchange')
+    db().execute('UPDATE users SET balance=balance+? WHERE id=?', (change, g.uid))
+    return dict(dragons=count, dragon=dragon, change=change, balance=user()['balance'])
+
+
+def pass_config():
+    row = db().execute('SELECT value FROM settings WHERE key=?', ('pass:' + g.uid,)).fetchone()
+    return json.loads(row[0]) if row else dict(rewardsMode='original', tasksMode='original',
+                                               levels=[], daily=[], weekly=[], xpOffset=0, progress={})
+
+
+def pass_track(cfg, original):
+    result = grader_pass.view(db(), g.uid, cfg, original, settle=True)
+    cases = catalog()['cases']
+    for level in result['levels']:
+        reward = level['reward']
+        if reward['kind'] != 'case':
+            continue
+        selected_case = next((cs for cs in cases if cs['id'] == reward.get('caseId')), None)
+        if not selected_case and 'name' in reward:
+            selected_case = next((cs for cs in cases if cs['name'] == reward['name'] or
+                                  cs['image'].split('?')[0] == reward.get('image')), None)
+        if selected_case and selected_case['items']:
+            level['reward'] = dict(reward, caseId=selected_case['id'], name=selected_case['name'],
+                                   image=selected_case['image'])
+        else:
+            level['reward'] = dict(reward, name=reward.get('name', 'Кейс'))
+            level.update(canClaim=False, unavailable=True)
+    return result
+
+
+def pass_view():
+    result = pass_track(pass_config(), original_snapshot('pass'))
+    return dict(result, originalStatus=original_status('pass'))
+
+
+def admin_pass():
+    cfg = pass_config()
+    original = original_snapshot('pass')
+    return dict(config=cfg, original=original, status=original_status('pass'),
+                cases=[dict(id=cs['id'], name=cs['name']) for cs in catalog()['cases']],
+                view=grader_pass.view(db(), g.uid, cfg, original))
+
+
+def save_pass(body):
+    cfg = pass_config()
+    old = dict(cfg)
+    try:
+        for field in ('rewardsMode', 'tasksMode'):
+            if body[field] not in ('original', 'custom'):
+                raise ValueError('Выбери источник')
+            cfg[field] = body[field]
+        cfg['levels'] = grader_pass.levels(body['levels'])
+        for group in grader_pass.QUEST_GROUPS:
+            cfg[group] = grader_pass.quests(body[group])
+        total_xp = grader_pass.whole(body['xp']) if 'xp' in body else None
+    except (KeyError, TypeError, ValueError, AttributeError) as error:
+        raise Problem('Проверь уровни и задания. ' + (str(error) if isinstance(error, ValueError) else 'Неверный формат.')) from error
+    case_ids = {cs['id'] for cs in catalog()['cases']}
+    if any(row['reward']['kind'] == 'case' and row['reward']['caseId'] not in case_ids for row in cfg['levels']):
+        raise Problem('Кейс награды отсутствует в каталоге')
+    original = original_snapshot('pass')
+    current = grader_pass.view(db(), g.uid, cfg, original)
+    active_periods = {current[group]['period'] for group in grader_pass.QUEST_GROUPS if current[group]}
+    cfg['progress'] = {period: values.copy() for period, values in cfg['progress'].items() if period in active_periods}
+    edits = body.get('progress', {})
+    if not isinstance(edits, dict):
+        raise Problem('Неверный прогресс заданий')
+    for group in grader_pass.QUEST_GROUPS:
+        values = edits.get(group)
+        if values is None:
+            continue
+        entry = current[group]
+        if (not isinstance(values, dict) or not entry or cfg['tasksMode'] != old['tasksMode'] or
+                values.get('period') != entry['period'] or
+                not isinstance(values.get('counts'), dict)):
+            raise Problem('Задания обновились. Открой вкладку пасса заново.', 'pass_tasks_changed', 409)
+        changes = values['counts']
+        for quest in entry['quests']:
+            if quest['id'] in changes:
+                key = cfg['tasksMode'] + ':' + quest['id']
+                counts = cfg['progress'].setdefault(entry['period'], {})
+                try:
+                    if changes[quest['id']] is None:
+                        counts.pop(key, None)
+                    else:
+                        counts[key] = grader_pass.whole(changes[quest['id']], 0, quest['goal'])
+                except ValueError as error:
+                    raise Problem('Прогресс задания вне допустимого диапазона') from error
+    grader_pass.view(db(), g.uid, cfg, original, settle=True)
+    if total_xp is not None:
+        cfg['xpOffset'] = total_xp - grader_pass.view(db(), g.uid, dict(cfg, xpOffset=0), original)['xp']
+    db().execute('INSERT OR REPLACE INTO settings VALUES (?,?)', ('pass:' + g.uid, json.dumps(cfg)))
+    return admin_pass()
+
+
+def record_pass_play(game, value, plays=1, wins=0):
+    db().execute('INSERT INTO pass_events VALUES (?,?,?,?,?,?)',
+                 (g.uid, game, time.time(), round(value * 100), plays, wins))
+    cfg = pass_config()
+    original = original_snapshot('pass')
+    if cfg['tasksMode'] == 'custom' or original:
+        grader_pass.view(db(), g.uid, cfg, original, settle=True)
+
+
+def claim_pass(body):
+    level = integer(body.get('level'), 1, 100)
+    row = next((row for row in pass_view()['levels'] if row['level'] == level), None)
+    if not row or not row['canClaim']:
+        raise Problem('Эту награду сейчас нельзя забрать', 'pass_reward_unavailable', 409)
+    reward = row['reward']
+    got = []
+    case_info = None
+    if reward['kind'] == 'coins':
+        got.append(dict(kind='coins', amount=reward['amount']))
+    else:
+        cs = case(reward['caseId'])
+        if not cs['items']:
+            raise Problem('В наградном кейсе нет предметов')
+        case_info = dict(name=cs['name'])
+        for drop in RNG.choices(cs['items'], weights=[item['weight'] for item in cs['items']], k=reward['count']):
+            item = {key: value for key, value in drop.items() if key != 'weight'}
+            if item.get('coins'):
+                got.append(dict(kind='coins', amount=item['price']))
+            else:
+                got.append(dict(kind='item', item=item, inventoryId=add_item(item, 'pass')))
+    total = sum(entry['amount'] for entry in got if entry['kind'] == 'coins')
+    db().execute('UPDATE users SET balance=balance+? WHERE id=?', (total, g.uid))
+    db().execute('INSERT INTO pass_claims VALUES (?,?,?)', (g.uid, level, reward['badge']))
+    return dict(level=level, got=got, case=case_info, badge=reward['badge'], balance=user()['balance'])
+
+
 def dispatch(path, body):
     c=db()
     parts=path.split('/')
@@ -887,7 +1056,14 @@ def dispatch(path, body):
     if path.startswith('deposit') or (path.startswith('withdraw') and post):
         raise Problem('Пополнение и вывод отключены. Баланс можно изменить в общей админке.', 'payments_disabled',403)
     if path=='me': return me()
-    if path=='config': return config()
+    if path=='config':
+        return dict(config(), dragonExchange=dragon_exchange_config(), **{'pass': {'enabled': True}})
+    if path == 'pass' and not post:
+        return pass_view()
+    if path == 'pass/claim' and post:
+        return claim_pass(body)
+    if path == 'admin/pass':
+        return save_pass(body) if post else admin_pass()
     if path=='mines/current' and not post:
         row=mines_current()
         return dict(game=mines_view(row) if row else None)
@@ -974,7 +1150,11 @@ def dispatch(path, body):
             else:
                 iid = add_item(item, dict(kind='case', caseId=cs['id'], caseName=cs['name'], caseImage=cs['image']), test)
                 drops.append(dict(item=item, inventoryId=iid))
+        if not test and not promo and not cs.get('freeKind') and cost > 0:
+            record_pass_play('case', cost, n)
         return dict(drops=drops,balance=user()['balance'],testBalance=user()['testBalance'],test=test)
+    if path == 'inventory/exchange-dragons' and post:
+        return exchange_dragons(body)
     if post and path in ('inventory/sell','inventory/sell-all','test/sell'):
         test=path=='test/sell'
         rows=[i for i in inventory(True) if i['test']==test] if path.endswith('sell-all') or (test and not body.get('ids')) else selected(body,True)
@@ -1009,6 +1189,7 @@ def dispatch(path, body):
         won=roll<chance
         consume(rows,'upgraded')
         c.execute('UPDATE users SET upgrades=upgrades+1 WHERE id=?',(g.uid,))
+        record_pass_play('upgrade', sum(row['item']['price'] for row in rows), wins=int(won))
         return dict(won=won,chance=target['chance'],roll=roll,target=target,inventoryIds=[add_item(target,'upgrade')] if won else [])
     if path in ('mystery/info','mystery') and post:
         row=selected(body)[0]; value=row['item']['price']; pool=[x for x in catalog()['items'] if not x.get('coins') and value/3<=x['price']<=value*3]
@@ -1017,6 +1198,7 @@ def dispatch(path, body):
         rig=take_next_result('mystery')
         it=rig['item'] if rig else RNG.choice(pool)
         consume([row],'mystery')
+        record_pass_play('mystery', value)
         return dict(item=it,inventoryId=add_item(it,'mystery'),shuffle=[x['image'] for x in pool]+[it['image']],balance=user()['balance'])
     if path=='dice/my' and not post:
         return [json.loads(r[0]) for r in c.execute("SELECT payload FROM history WHERE user_id=? AND kind='dice' ORDER BY id DESC LIMIT 20",(g.uid,))]
@@ -1046,6 +1228,7 @@ def dispatch(path, body):
                 prize=rig['item'] if rig and rig.get('item') else row['item']
                 won.extend(add_item(prize,'dice') for _ in range(mult-1))
                 winnings+=prize['price']*(mult-1)
+        record_pass_play('dice', value, wins=int(bool(mult)))
         return dict(dice=dice,color=color,hits=hits,mult=mult,rainbow=bonus,wonIds=won,net=winnings if mult else -value)
     if path=='home': return home()
     if path=='giveaways' and not post:
@@ -1366,7 +1549,7 @@ def api(path):
     if not isinstance(body,dict): raise Problem('Нужен JSON-объект')
     c=db()
     try:
-        c.execute('BEGIN IMMEDIATE' if request.method=='POST' or path in ('giveaways','mines/current') else 'BEGIN')
+        c.execute('BEGIN IMMEDIATE' if request.method=='POST' or path in ('giveaways','mines/current','pass') else 'BEGIN')
         key=body.get('key'); fingerprint=json.dumps(body,sort_keys=True,separators=(',',':'))
         if key is not None:
             if not isinstance(key,str) or not 1<=len(key)<=100: raise Problem('Неверный ключ операции')
@@ -1455,7 +1638,7 @@ def custom_image(token,item_id):
 def health():
     db().execute('SELECT 1').fetchone()
     if request.args.get('original') == '1':
-        kinds = ('live', 'giveaways')
+        kinds = ('live', 'giveaways', 'pass')
         for kind in kinds:
             original_snapshot(kind)
         return jsonify(ok=True, build=FRONTEND_BUILD, original={kind: original_status(kind) for kind in kinds})
@@ -1497,7 +1680,7 @@ def static(name): return send_from_directory(ROOT/'public',name)
 
 init_db()
 if __name__=='__main__':
-    required = ['index.html', 'admin.html', 'admin.js', 'admin-visual.js', 'admin.css', 'ui-audio.js', 'app.js', 'styles.css', 'sandbox.js', 'og-sound.js', 'telegram-web-app.js']
+    required = ['index.html', 'admin.html', 'admin.js', 'admin-pass.js', 'admin-visual.js', 'admin.css', 'ui-audio.js', 'app.js', 'styles.css', 'sandbox.js', 'og-sound.js', 'telegram-web-app.js']
     missing = [name for name in required if not (ROOT / 'public' / name).is_file()]
     if missing:
         raise SystemExit('Missing frontend files in /app/public: ' + ', '.join(missing)

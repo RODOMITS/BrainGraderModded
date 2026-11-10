@@ -97,7 +97,7 @@ $('resetCatalog').onclick=async()=>{try{await api('admin/catalog/reset',{});awai
 function fillItems(id,query=''){const select=$(id),old=select.value;select.replaceChildren(...adminCatalog.filter(i=>(id!=='liveItem'||!i.customSession)&&i.name.toLowerCase().includes(query.toLowerCase())).map(i=>option(i.id,i.name+' · '+i.price+' BG')));if([...select.options].some(o=>o.value===old))select.value=old;}
 // Group existing forms into compact, keyboard-accessible tabs without duplicating them.
 const sections=[...document.querySelectorAll('body > section,body > .grid > section')];
-const groups=[['quick','Главное',[0,1,3]],['live','Лайв-дропы',[]],['custom','Свои предметы',[2]],['catalog','Каталог',[5]],['other','Розыгрыш и промо',[4,6,10]],['buttons','Управление кнопками',[7,8]],['referrals','Рефералы',[9]],['deposit','Пополнения',[11]]];
+const groups=[['quick','Главное',[0,1,3]],['live','Лайв-дропы',[]],['custom','Свои предметы',[2]],['catalog','Каталог',[5]],['other','Розыгрыш и промо',[4,6,10]],['buttons','Управление кнопками',[7,8]],['referrals','Рефералы',[9]],['deposit','Пополнения',[11]],['pass','Grader Pass',[]]];
 const nav=document.createElement('nav');nav.className='admin-tabs';nav.setAttribute('aria-label','Разделы админки');
 const host=document.createElement('main');host.className='admin-panels';
 document.querySelector('body > .grid').before(nav,host);

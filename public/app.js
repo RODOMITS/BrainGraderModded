@@ -483,6 +483,7 @@
     cases: '<path d="M3 9h18v11H3z"/><path d="M5 9V5h14v4"/><path d="M10 13h4"/>',
     upgrade: '<circle cx="12" cy="12" r="9"/><path d="M12 16V8"/><path d="m8.5 11.5 3.5-3.5 3.5 3.5"/>',
     gift: '<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M5 12v8h14v-8"/><path d="M12 8v12"/><path d="M12 8c-1.5-3-5-4-6-2s2 2.6 6 2c4 .6 7 0 6-2s-4.5-1-6 2z"/>',
+    pass: '<path d="M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2.5a2.5 2.5 0 0 0 0 5V17a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2.5a2.5 2.5 0 0 0 0-5z"/><path d="m12 8.6.9 1.9 2.1.3-1.5 1.5.4 2.1-1.9-1-1.9 1 .4-2.1-1.5-1.5 2.1-.3z"/>',
     mines: '<path d="M8 3h8l5 7-9 11L3 10zM3 10h18M8 3l4 18 4-18"/>',
     dice: '<rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8" cy="8" r="1.3"/><circle cx="16" cy="8" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="8" cy="16" r="1.3"/><circle cx="16" cy="16" r="1.3"/>',
     mystery: '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9.6 9.6a2.4 2.4 0 1 1 3.4 2.2c-.6.3-1 .8-1 1.5v.6"/><path d="M12 16.8h.01"/>',
@@ -498,8 +499,9 @@
         { id: 'upgrade', label: 'Апгрейдер', href: '#/upgrade', icon: 'upgrade' },
         { id: 'mystery', label: 'Мистери', href: '#/mystery', icon: 'mystery', show: () => state.cfg?.mystery?.enabled !== false },
         { id: 'dice', label: 'Колор Дайс', href: '#/dice', icon: 'dice', show: () => !!state.cfg?.dice?.enabled },
+        { id: 'pass', label: 'Grader Pass', href: '#/pass', icon: 'pass', badge: 'NEW' },
         { id: 'mines', label: 'Мины', href: '#/mines', icon: 'mines', badge: 'NEW', show: () => prefs.modded && prefs.minesEnabled },
-        { id: 'giveaways', label: 'Розыгрыши', href: '#/giveaways', icon: 'gift', badge: 'NEW' },
+        { id: 'giveaways', label: 'Розыгрыши', href: '#/giveaways', icon: 'gift' },
       ],
     },
     {
@@ -520,6 +522,7 @@
     if (path.startsWith('/upgrade')) return 'upgrade';
     if (path.startsWith('/mystery')) return 'mystery';
     if (path.startsWith('/dice')) return 'dice';
+    if (path.startsWith('/pass')) return 'pass';
     if (path.startsWith('/mines')) return 'mines';
     if (path.startsWith('/giveaways')) return 'giveaways';
     if (path.startsWith('/referrals') || path.startsWith('/partner')) return 'referrals';
@@ -805,7 +808,7 @@
     closeMenu();
     stopTimers();
     newRender();
-    const tab = path.startsWith('/upgrade') ? 'upgrade' : path.startsWith('/mystery') ? 'mystery' : path.startsWith('/dice') ? 'dice' : path.startsWith('/mines') ? 'mines' : path.startsWith('/giveaways') ? 'giveaways' : path.startsWith('/profile') ? 'profile' : path.startsWith('/referrals') ? 'referrals' : path.startsWith('/partner') ? 'partner' : path.startsWith('/faq') ? 'faq' : 'home';
+    const tab = path.startsWith('/upgrade') ? 'upgrade' : path.startsWith('/mystery') ? 'mystery' : path.startsWith('/pass') ? 'pass' : path.startsWith('/dice') ? 'dice' : path.startsWith('/mines') ? 'mines' : path.startsWith('/giveaways') ? 'giveaways' : path.startsWith('/profile') ? 'profile' : path.startsWith('/referrals') ? 'referrals' : path.startsWith('/partner') ? 'partner' : path.startsWith('/faq') ? 'faq' : 'home';
     const m = /^\/case\/(\d+)$/.exec(path);
     view.dataset.page = m ? 'case' : tab; // для раскладки на компьютере
     drawTopnav();
@@ -819,6 +822,7 @@
     if (m) return renderCase(Number(m[1]));
     if (tab === 'upgrade') return renderUpgrade(new URLSearchParams(qs || ''));
     if (tab === 'mystery') return renderMystery(new URLSearchParams(qs || ''));
+    if (tab === 'pass') return renderPass();
     if (tab === 'dice') return renderDice();
     if (tab === 'mines') return renderMines();
     if (tab === 'giveaways') return renderGiveaways();
@@ -947,6 +951,7 @@
         <div class="drops-strip hidden" id="dropsStrip" aria-label="Последние дропы"></div>
       </section>
       <section class="promo-card hidden" id="promoCard"></section>
+      ${state.cfg?.pass?.enabled ? `<a class="pass-banner" href="#/pass"><span class="gp-fire small">${PASS_FIRE}<img src="/img/pass-griffin.webp" alt=""></span><span class="grow"><b>GRADER PASS</b><span>Осенний сезон · задания и награды</span></span><span class="pb-go">›</span></a>` : ''}
       <div id="cases"><h2>Кейсы</h2><div class="case-grid">${'<div class="skeleton"></div>'.repeat(4)}</div></div>`;
     const loadHome = async (animate) => {
       try {
@@ -2755,7 +2760,50 @@
   const AU_COLORS = ['#e8732a', '#c8401f', '#f0b429', '#b5541c', '#d9902f'];
   const AU_MAPLE = (c) => `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M32 2 37 14 45 10 43 22 53 20 47 29 55 32 42 39 44 46 33 43 33 58 31 58 31 43 20 46 22 39 9 32 17 29 11 20 21 22 19 10 27 14Z" fill="${c}"/><path d="M32 12V50M32 30 22 22M32 30 42 22M32 38 18 32M32 38 46 32" stroke="rgba(0,0,0,.18)" stroke-width="1.4" fill="none" stroke-linecap="round"/></svg>`;
   const AU_OAK = (c) => `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M32 4C40 8 38 13 44 14 50 15 47 21 51 24 56 28 49 32 51 37 53 43 45 43 43 48 41 53 35 52 33 58H31C29 52 23 53 21 48 19 43 11 43 13 37 15 32 8 28 13 24 17 21 14 15 20 14 26 13 24 8 32 4Z" fill="${c}"/><path d="M32 10V56M32 24 24 19M32 24 40 19M32 34 21 30M32 34 43 30M32 44 25 41M32 44 39 41" stroke="rgba(0,0,0,.18)" stroke-width="1.4" fill="none" stroke-linecap="round"/></svg>`;
-  const AU_SPOTS = [['.case-card', 'tr'], ['.promo-card', 'tr'], ['.gw-empty', 'tl'], ['.mys-stage', 'tr'], ['.cd-stage', 'tr']];
+  const AU_BIRCH = (c) => `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M32 3C46 14 50 30 44 44 40 53 35 57 33 61H31C29 57 24 53 20 44 14 30 18 14 32 3Z" fill="${c}"/><path d="M32 8V58M32 22 25 17M32 22 39 17M32 33 23 27M32 33 41 27M32 44 25 39M32 44 39 39" stroke="rgba(0,0,0,.2)" stroke-width="1.4" fill="none" stroke-linecap="round"/></svg>`;
+  const AU_SHAPES = [AU_MAPLE, AU_OAK, AU_BIRCH];
+  // Осеннее дерево: ствол с ветками + пышная крона: тёмная основа → средний слой → светлый → блики (смещены влево-вверх, как от солнца).
+  // Кружки раскиданы псевдослучайно, но по seed — дерево всегда одинаковое.
+  const AU_TREE = (pal, seed = 7) => {
+    let z = seed;
+    const r = () => ((z = (z * 16807) % 2147483647) / 2147483647);
+    const blob = (cx, cy, rx, ry, n, rmin, rmax, col) => Array.from({ length: n }, () => {
+      const a = r() * Math.PI * 2;
+      const d = Math.sqrt(r());
+      return `<circle cx="${(cx + Math.cos(a) * rx * d).toFixed(1)}" cy="${(cy + Math.sin(a) * ry * d).toFixed(1)}" r="${(rmin + r() * (rmax - rmin)).toFixed(1)}" fill="${col}"/>`;
+    }).join('');
+    return `<svg viewBox="0 0 200 300" preserveAspectRatio="xMidYMax meet" aria-hidden="true">
+    <ellipse cx="100" cy="297" rx="62" ry="5" fill="${pal[1]}" opacity=".35"/>
+    <path d="M88 300C92 258 94 228 88 200 82 180 66 168 48 158L54 150C72 160 85 168 93 180 95 158 93 132 97 106H106C109 132 107 156 109 180 117 164 132 154 150 146L155 154C137 164 122 176 115 198 108 228 110 258 114 300Z" fill="#3b2417"/>
+    ${blob(100, 94, 66, 58, 16, 22, 30, pal[0])}${blob(94, 86, 56, 48, 14, 16, 24, pal[1])}${blob(86, 76, 44, 38, 12, 12, 18, pal[2])}${blob(80, 66, 34, 28, 10, 5, 10, pal[3])}
+  </svg>`;
+  };
+  const AU_PAL = [['#8c2a12', '#c8401f', '#e8732a', '#f0b429'], ['#9a4a12', '#d9631e', '#f0a03a', '#ffd166'], ['#6e1f14', '#a8321c', '#d9542a', '#ef8f3a']];
+  // сцена над кейсами на главной: закат, холмы, ряд деревьев, листья на земле и пара падающих листьев
+  const AU_SCENE = () => {
+    const tree = (x, h, k, n, d = '') => `<span class="as-tree${d}" style="left:${x}%;height:${h}%">${AU_TREE(AU_PAL[k], 5 + n * 6)}</span>`;
+    const ground = Array.from({ length: 14 }, (_, i) => `<span class="as-gl" style="left:${(i * 7.3 + 2) % 98}%;bottom:${(i * 5) % 12}px;transform:rotate(${i * 47}deg)">${AU_SHAPES[i % 3](AU_COLORS[i % AU_COLORS.length])}</span>`).join('');
+    const fall = [12, 38, 63, 86].map((x, i) => `<span class="as-fall" style="left:${x}%;animation-delay:-${i * 1.7}s;animation-duration:${6 + i}s">${AU_SHAPES[i % 3](AU_COLORS[(i + 1) % AU_COLORS.length])}</span>`).join('');
+    return `<div class="au-scene" aria-hidden="true">
+      <span class="as-sun"></span>
+      <svg class="as-hills" viewBox="0 0 400 60" preserveAspectRatio="none"><path d="M0 40C40 22 80 30 120 24S200 8 250 20 330 34 400 18V60H0Z" fill="#3a1d14" opacity=".8"/><path d="M0 50C50 36 110 46 170 38S280 30 330 42 380 40 400 36V60H0Z" fill="#2a160f"/></svg>
+      ${tree(-3, 96, 0, 1)}${tree(13, 64, 1, 2)}${tree(30, 48, 2, 3)}${tree(66, 52, 1, 4)}${tree(80, 72, 2, 5)}${tree(92, 92, 0, 6)}${tree(21, 40, 0, 7, ' d')}${tree(40, 34, 2, 8, ' d')}${tree(57, 38, 0, 9, ' d')}
+      <span class="as-ground"></span>${ground}${fall}
+    </div>`;
+  };
+  // фон всей страницы (под содержимым): тёплое «солнце», дальние холмы и тёмный осенний лес по низу экрана, туман
+  const AU_BG = () => {
+    const dark = [['#24100b', '#341710', '#432014', '#552a17'], ['#2a130d', '#3d1c10', '#512613', '#673319']];
+    const row = [[-30, 70, 0], [70, 110, 1], [150, 60, 0], [240, 95, 1], [330, 55, 0], [420, 85, 1], [520, 60, 0], [600, 100, 1], [700, 65, 0], [790, 90, 1], [880, 115, 0], [960, 70, 1]];
+    const trees = row.map(([x, h, k], n) => AU_TREE(dark[k], 3 + n * 13).replace('<svg ', `<svg x="${x}" y="${200 - h * 1.5}" width="${h}" height="${h * 1.5}" `)).join('');
+    return `<div id="auBg" aria-hidden="true">
+    <span class="ab-sun"></span>
+    <svg class="ab-hills" viewBox="0 0 400 80" preserveAspectRatio="none"><path d="M0 44C60 20 110 34 170 26S280 6 340 24 390 30 400 26V80H0Z" fill="#2a1510" opacity=".55"/><path d="M0 60C70 44 120 56 200 48S320 40 400 52V80H0Z" fill="#1d100c" opacity=".8"/></svg>
+    <svg class="ab-forest" viewBox="0 0 1000 200" preserveAspectRatio="xMidYMax slice">${trees}</svg>
+    <span class="ab-fog"></span>
+  </div>`;
+  };
+  const AU_SPOTS = [['.case-card', 'tr'], ['.promo-card', 'tr'], ['.gw-empty', 'tl'], ['.mys-stage', 'tr'], ['.cd-stage', 'tr'], ['.pass-banner', 'tr']];
   let auObs = null;
   let auQueued = false;
   function auDecorate() {
@@ -2767,9 +2815,12 @@
         if (el.querySelector(':scope > .au-leaf')) continue;
         if (getComputedStyle(el).position === 'static') el.style.position = 'relative';
         const c = AU_COLORS[k % AU_COLORS.length];
-        el.insertAdjacentHTML('beforeend', `<span class="au-leaf ${corner}">${k % 2 ? AU_MAPLE(c) : AU_OAK(c)}</span>`);
+        el.insertAdjacentHTML('beforeend', `<span class="au-leaf ${corner}">${AU_SHAPES[k % 3](c)}</span>`);
       }
     }
+    // сцена с деревьями — над кейсами на главной (одна)
+    const cases = view.querySelector('#cases');
+    if (cases && !cases.previousElementSibling?.classList.contains('au-scene')) cases.insertAdjacentHTML('beforebegin', AU_SCENE());
   }
   function autumn(on) {
     document.documentElement.classList.toggle('autumn', on);
@@ -2777,19 +2828,25 @@
       auObs?.disconnect();
       auObs = null;
       $('#auLayer')?.remove();
-      $$('.au-leaf, .au-logo').forEach((el) => el.remove());
+      $('#auBg')?.remove();
+      $$('.au-leaf, .au-logo, .au-scene').forEach((el) => el.remove());
       return;
     }
+    if (!$('#auBg')) document.body.insertAdjacentHTML('afterbegin', AU_BG());
     if (!$('#auLayer')) {
-      // 9 листьев: разные места, размеры, скорость и цвет; задержки отрицательные — с первой секунды уже летят
-      const leaves = Array.from({ length: 9 }, (_, i) => {
-        const c = AU_COLORS[i % AU_COLORS.length];
-        const left = [6, 18, 31, 44, 57, 69, 81, 92, 50][i];
-        const size = [26, 20, 30, 18, 24, 28, 19, 23, 16][i];
-        const dur = [17, 22, 19, 25, 18, 21, 24, 20, 27][i];
-        return `<div class="au-fall" style="left:${left}%;width:${size}px;animation-duration:${dur}s;animation-delay:-${(i * 2.7) % dur}s"><i style="animation-duration:${3 + (i % 3)}s">${i % 2 ? AU_MAPLE(c) : AU_OAK(c)}</i></div>`;
+      // 20 листьев: 3 формы, разные места, размеры, скорость, цвет и глубина (дальние — мельче, бледнее, медленнее).
+      // На телефоне часть скрыта (.m-off), чтобы не мешать и не грузить. Задержки отрицательные — с первой секунды уже летят.
+      const N = 20;
+      const leaves = Array.from({ length: N }, (_, i) => {
+        const far = i % 3 === 2;
+        const c = AU_COLORS[(i * 2) % AU_COLORS.length];
+        const left = (i * 37 + 5) % 97;
+        const size = far ? 12 + (i % 4) * 2 : 18 + ((i * 7) % 15);
+        const dur = far ? 26 + (i % 5) * 2 : 14 + ((i * 5) % 11);
+        const spin = i % 4 === 1 ? ' spin' : '';
+        return `<div class="au-fall${far ? ' far' : ''}${i >= 12 ? ' m-off' : ''}" style="left:${left}%;width:${size}px;animation-duration:${dur}s;animation-delay:-${((i * 3.1) % dur).toFixed(1)}s"><i class="${spin}" style="animation-duration:${2.6 + (i % 4) * 0.7}s">${AU_SHAPES[i % 3](c)}</i></div>`;
       }).join('');
-      const pile = (side) => `<span class="au-pile ${side}">${AU_MAPLE(AU_COLORS[0])}${AU_OAK(AU_COLORS[2])}${AU_MAPLE(AU_COLORS[1])}</span>`;
+      const pile = (side) => `<span class="au-pile ${side}">${AU_MAPLE(AU_COLORS[0])}${AU_OAK(AU_COLORS[2])}${AU_BIRCH(AU_COLORS[3])}${AU_MAPLE(AU_COLORS[1])}${AU_OAK(AU_COLORS[4])}</span>`;
       document.body.insertAdjacentHTML('beforeend', `<div id="auLayer" aria-hidden="true">${leaves}<div class="au-glow"></div>${pile('l')}${pile('r')}</div>`);
     }
     const logo = document.querySelector('.topbar a[aria-label="На главную"]');
@@ -2916,6 +2973,105 @@
     state.timers.push(gwTimer);
   }
   let gwTimer = null;
+
+  const PASS_FIRE = '<i class="pf pf1"></i><i class="pf pf2"></i><i class="pf pf3"></i><i class="pf pf4"></i><i class="pf pf5"></i>';
+  async function renderPass(tabArg, retried = false) {
+    const t = state.render;
+    view.innerHTML = '<div class="gp-wrap"><div class="skeleton" style="height:180px"></div><div class="skeleton" style="height:140px;margin-top:12px"></div></div>';
+    let d;
+    try {
+      d = await api('/api/pass');
+      if (!retried && d.originalStatus === 'loading' && (d.rewardsUnavailable || d.tasksUnavailable)) {
+        setTimeout(() => !stale(t) && renderPass(tabArg, true), 1250);
+        return;
+      }
+    } catch (e) {
+      return fail(e);
+    }
+    if (stale(t)) return;
+    if (!d.enabled) {
+      view.innerHTML = '<div class="empty">Grader Pass сейчас выключен<a class="btn" href="#/">К кейсам</a></div>';
+      return;
+    }
+    const tab = tabArg || state.passTab || 'daily';
+    const left = (iso) => {
+      if (!iso) return '—';
+      const ms = Math.max(0, new Date(iso).getTime() - Date.now());
+      const dd = Math.floor(ms / 864e5), h = Math.floor((ms % 864e5) / 36e5), m = Math.floor((ms % 36e5) / 6e4);
+      return dd ? `${dd} д ${h} ч` : h ? `${h} ч ${m} мин` : `${m} мин`;
+    };
+    const pct = !d.maxLevel ? 0 : d.level >= d.maxLevel ? 100 : Math.min(100, Math.round((d.levelXp / d.levelNeed) * 100));
+    const rewardIcon = (r) => (r.kind === 'case'
+      ? `<img src="${esc(r.image || '/img/chest.svg')}" alt="">`
+      : '<img class="gp-coin" src="/img/coin.webp" alt="">');
+    const rewardName = (r) => (r.kind === 'case' ? `${esc(r.name)}${r.count > 1 ? ` ×${r.count}` : ''}` : `${fmt(r.amount)} BG`);
+    const lvl = (l) => {
+      const st = l.claimed ? 'claimed' : l.canClaim ? 'ready' : 'locked';
+      return `<div class="gp-lvl ${st}${l.level === d.level + 1 ? ' next' : ''}${l.reward.badge ? ' final' : ''}" data-lvl="${l.level}">
+        <div class="gp-lnum">${l.level}</div>
+        <div class="gp-rw">${rewardIcon(l.reward)}</div>
+        <div class="gp-rname">${rewardName(l.reward)}</div>
+        ${l.reward.badge ? '<div class="gp-badge">🔥 значок сезона</div>' : ''}
+        ${l.claimed ? '<div class="gp-state ok">✓ забрано</div>' : l.canClaim ? `<button class="btn small gp-claim" data-claim="${l.level}">Забрать</button>` : `<div class="gp-state">${l.unavailable ? 'Кейс недоступен' : `🔒 ${fmt(l.xp)} XP`}</div>`}
+      </div>`;
+    };
+    const quest = (q) => {
+      const p = Math.min(100, Math.round((q.progress / q.goal) * 100));
+      return `<div class="gp-q${q.done ? ' done' : ''}">
+        <div class="gp-qtop"><span class="gp-qt">${q.done ? '✅ ' : ''}${esc(q.title)}</span><span class="gp-xp">+${q.xp} XP</span></div>
+        <div class="gp-bar"><i style="width:${p}%"></i></div>
+        <div class="gp-qp muted">${fmt(q.progress)} / ${fmt(q.goal)}${q.unit ? ' ' + esc(q.unit) : ''}</div>
+      </div>`;
+    };
+    const qs = tab === 'weekly' ? d.weekly : d.daily;
+    const ready = d.levels.filter((l) => l.canClaim).length;
+    view.innerHTML = `<div class="gp-wrap">
+      <section class="gp-hero">
+        <span class="gp-fire">${PASS_FIRE}<img class="gp-griffin" src="/img/pass-griffin.webp" alt=""></span>
+        <div class="gp-head">
+          <div class="gp-brand">GRADER PASS</div>
+          <div class="gp-season">${esc(d.season.name)} 🍂</div>
+          ${d.badge ? '<div class="gp-badge">🔥 Значок сезона получен</div>' : ''}
+          <div class="gp-ends muted">${d.season.over ? `Сезон закончился · забрать награды — ещё ${left(d.season.claimUntil)}` : d.season.started ? (d.season.end ? `До конца сезона ${left(d.season.end)}` : 'Сезон открыт') : 'Сезон скоро начнётся'}</div>
+        </div>
+      </section>
+      <section class="gp-progress">
+        <div class="gp-level"><span class="muted">Уровень</span><b>${d.level}</b><span class="muted">из ${d.maxLevel}</span></div>
+        <div class="grow">
+          <div class="gp-bar big"><i style="width:${pct}%"></i></div>
+          <div class="gp-xpline"><span>${!d.maxLevel ? 'Награды пока недоступны' : d.level >= d.maxLevel ? 'Все уровни пройдены! 🔥' : `${fmt(d.levelXp)} / ${fmt(d.levelNeed)} XP до ${d.level + 1}-го уровня`}</span><span class="muted">всего ${fmt(d.xp)} XP</span></div>
+        </div>
+      </section>
+      ${ready ? `<div class="gp-ready">🎁 Можно забрать наград: <b>${ready}</b></div>` : ''}
+      <h2>Награды</h2>
+      ${d.rewardsUnavailable ? '<div class="empty">Оригинальные награды пока недоступны</div>' : ''}
+      <div class="gp-track" id="gpTrack">${d.levels.map(lvl).join('')}</div>
+      <div class="gp-tabs"><button class="${tab === 'daily' ? 'on' : ''}" data-tab="daily">Ежедневные</button><button class="${tab === 'weekly' ? 'on' : ''}" data-tab="weekly">Недельные</button></div>
+      <section class="gp-quests">
+        ${!qs && d.tasksUnavailable ? '<div class="empty">Оригинальные задания пока недоступны</div>' : qs ? `<div class="gp-reset muted">${tab === 'weekly' ? 'Новые задания через' : 'Обновятся через'} ${left(qs.endsAt)}</div>${qs.quests.map(quest).join('') || '<div class="empty">Нет заданий</div>'}` : '<div class="empty">Задания появятся, когда начнётся сезон</div>'}
+      </section>
+      <div class="note gp-note">⭐ Ещё опыт: <b>1 XP за каждые 10 BG</b> в кейсах, апгрейде, Колор Дайсе и Мистери (бесплатные кейсы не считаются).<br>Брейнротов из наград пасса нельзя вывести — их можно продать, поставить в апгрейд, мистери или дайс.</div>
+    </div>`;
+    // прокрутить ленту к текущему уровню
+    const cur = $(`#gpTrack [data-lvl="${Math.min(d.maxLevel, Math.max(1, d.level))}"]`);
+    if (cur) { const tr = $('#gpTrack'); tr.scrollLeft = Math.max(0, cur.getBoundingClientRect().left - tr.getBoundingClientRect().left - 8); }
+    $$('[data-tab]', view).forEach((b) => (b.onclick = () => { state.passTab = b.dataset.tab; renderPass(b.dataset.tab); }));
+    $$('[data-claim]', view).forEach((b) => (b.onclick = async () => {
+      b.disabled = true;
+      try {
+        const r = await api('/api/pass/claim', { method: 'POST', body: { level: Number(b.dataset.claim), key: newKey() } });
+        haptic('success');
+        const items = r.got.map((g) => (g.kind === 'coins' ? `<div class="line"><img class="gp-coin" src="/img/coin.webp" alt=""><div class="grow"><b>${fmt(g.amount)} BG</b><span class="muted"> на баланс</span></div></div>`
+          : `<div class="line"><img src="${itemImg(g.item.image)}" alt=""><div class="grow"><b>${esc(g.item.name)}</b></div>${price(g.item.price)}</div>`)).join('');
+        const hasItems = r.got.some((g) => g.kind === 'item');
+        openSheet(`Награда ${r.level}-го уровня`, h(`<div class="gp-got">${r.case ? `<p class="muted center">Из кейса «${esc(r.case.name)}»:</p>` : ''}${items}${r.badge ? '<p class="center">🔥 <b>Значок сезона</b> — ты прошёл весь Осенний сезон!</p>' : ''}${hasItems ? '<p class="hint center">Брейнроты — в инвентаре. Вывести их нельзя, но можно продать, поставить в апгрейд или мистери.</p>' : ''}</div>`));
+        if (typeof r.balance === 'number') setBalance(r.balance);
+      } catch (e) {
+        fail(e);
+      }
+      if (!stale(t)) renderPass(state.passTab);
+    }));
+  }
 
   async function renderDice() {
     const t = state.render;
@@ -3673,7 +3829,7 @@
     const from = Math.max(1, Math.min(n - 3, r.days - 6));
     const win = r.track.slice(from - 1, from + 6);
     const big = r.track.filter((t) => t.kind !== 'coins' && t.day >= Math.max(1,n-6) && t.day <= n+60);
-    const today = r.pending.find((p) => p.day === n && !p.claimed) || null;
+    const pending = r.pending.filter((p) => !p.claimed).sort((a, b) => b.day - a.day);
     const body = h(`<div class="streak-sheet">
       <div class="s-head">${streakFlame(78)}<div class="s-num">${n}</div><div class="s-lbl">${plural(n, 'день', 'дня', 'дней')} подряд</div>
         ${r.broken ? '<p class="s-sub warn-t">Серия прервалась — пропустил день. Начинаем заново</p>' : `<p class="s-sub">Заходи каждый день и забирай награды. ${r.resetOnMiss ? 'Пропустишь день — серия начнётся сначала.' : 'При пропуске дня прогресс сохраняется.'} Рекорд: ${r.best}</p>`}</div>
@@ -3683,32 +3839,35 @@
       <div id="sClaim"></div>
       ${big.length ? '<h3 class="s-h">Большие награды</h3>' : ''}
       <div class="s-big">${big.map((t) => `<div class="s-bigrow ${t.day <= n ? 'past' : ''}"><span class="s-bd">День ${t.day}</span>${streakRewardIcon(t)}<div class="grow"><b>${t.kind === 'case' ? 'Кейс «' + esc(t.name) + '»' : esc(t.name)}</b><span class="muted">${price(t.price)} · награда за вход</span></div></div>`).join('')}</div>
-      <p class="hint">Новый день начинается в 00:00 по Москве. Забери награду до конца дня. После последнего дня список наград повторяется, а серия продолжает расти.</p>
+      <p class="hint">Новый день начинается в 00:00 по Москве. На получение каждой награды есть до 24 часов. После последнего дня список наград повторяется, а серия продолжает расти.</p>
     </div>`);
     const s = openSheet('Серия заходов', body);
-    drawStreakClaim(today, s);
+    const claims = $('#sClaim', body);
+    if (!pending.length) claims.innerHTML = '<div class="s-next">Возвращайся завтра за новой наградой 🔥</div>';
+    for (const reward of pending) {
+      const box = document.createElement('div');
+      box.className = 's-claim';
+      claims.append(box);
+      drawStreakClaim(reward, s, box, pending.length > 1);
+    }
   }
 
-  function drawStreakClaim(p, sheet) {
-    const box = $('#sClaim');
-    if (!box) return;
-    if (!p) {
-      box.innerHTML = '<div class="s-next">Награду за сегодня ты уже забрал. Возвращайся завтра 🔥</div>';
-      return;
-    }
+  function drawStreakClaim(p, sheet, box, labeled) {
     const left = Math.max(0, new Date(p.expiresAt) - Date.now());
     const what = p.kind === 'coins' ? `${fmt(p.amount)} BG` : p.kind === 'case' ? `кейс «${esc(p.name)}»` : `«${esc(p.name)}»`;
+    const tag = labeled ? `<div class="s-day">Награда дня ${p.day}</div>` : '';
     if (p.canClaim) {
-      box.innerHTML = `<button class="btn s-btn" id="sGo">Забрать ${what}</button><p class="hint center">До 00:00 МСК · осталось ${hms(left)}</p>`;
+      box.innerHTML = `${tag}<button class="btn s-btn" data-claim-streak>Забрать ${what}</button><p class="hint center">Осталось ${hms(left)}</p>`;
     } else {
-      box.innerHTML = `<div class="s-need">Чтобы забрать ${what}, пополни баланс от <b>${fmt(p.need)} BG</b> — пополнено ${fmt(p.deposited)} BG. До 00:00 МСК · осталось ${hms(left)}</div>
-        <div class="btn-row"><button class="btn s-btn" id="sDep">Пополнить</button><button class="btn ghost" id="sRe">Я пополнил — проверить</button></div>`;
-      $('#sDep', box).onclick = () => { sheet.close(); openDeposit(); };
-      $('#sRe', box).onclick = async () => { await streakCheckin(); sheet.close(); openStreak(); };
+      box.innerHTML = `${tag}<div class="s-need">Чтобы забрать ${what}, пополни баланс от <b>${fmt(p.need)} BG</b> — пополнено ${fmt(p.deposited)} BG. Осталось ${hms(left)}</div>
+        <div class="btn-row"><button class="btn s-btn" data-streak-deposit>Пополнить</button><button class="btn ghost" data-streak-check>Я пополнил — проверить</button></div>`;
+      $('[data-streak-deposit]', box).onclick = () => { sheet.close(); openDeposit(); };
+      $('[data-streak-check]', box).onclick = async () => { await streakCheckin(); sheet.close(); openStreak(); };
       return;
     }
-    $('#sGo', box).onclick = async (ev) => {
-      ev.currentTarget.disabled = true;
+    $('[data-claim-streak]', box).onclick = async (ev) => {
+      const button = ev.currentTarget;
+      button.disabled = true;
       try {
         const res = await api('/api/streak/claim', { method: 'POST', body: { id: p.id, key: newKey() } });
         setBalance(res.balance);
@@ -3723,7 +3882,7 @@
       } catch (e) {
         fail(e);
         if (e.code === 'need_deposit') { await streakCheckin(); }
-        ev.currentTarget && (ev.currentTarget.disabled = false);
+        button.disabled = false;
       }
     };
   }
@@ -3763,7 +3922,7 @@
         { id: 'mystery', q: 'Как работает мистери?', a: `<p>Кладёшь своего брейнрота — получаешь случайного другого: дешевле или дороже, от ⅓ до ×${fmt(c.mystery.mult)} его цены.</p>` },
       ] }] : []),
       ...(f.streak ? [{ group: 'Серия заходов', items: [
-        { id: 'streak', q: 'Что такое серия заходов?', a: '<p>Заходи каждый день — огонёк в шапке растёт, и за дни подряд даются награды. Пропустил день — серия начинается заново. Награду нужно забрать за 24 ч, а для дорогих — пополнить баланс.</p>' },
+        { id: 'streak', q: 'Что такое серия заходов?', a: '<p>Заходи каждый день — огонёк в шапке растёт, и за дни подряд даются награды. Пропустил день — серия начинается заново. Каждую награду можно забрать в течение 24 часов после входа.</p>' },
       ] }] : []),
     ];
     return list.filter((g) => g.items.length);
@@ -3962,12 +4121,20 @@
 
   function itemActions(it) {
     const canWithdraw = state.cfg.withdrawEnabled && it.withdrawable;
+    const dx = state.cfg.dragonExchange;
+    const canExchange = dx && !it.test && !it.item.customSession && !it.item.coins &&
+      !['shop', 'pass', 'streak'].includes(it.source) && it.item.rarity !== 'og' &&
+      it.item.id !== dx.dragon.id && it.item.price >= dx.from;
+    const dragons = canExchange ? Math.floor(Math.round(it.item.price * 100) / Math.round(dx.dragon.price * 100)) : 0;
+    const change = dragons ? (Math.round(it.item.price * 100) - dragons * Math.round(dx.dragon.price * 100)) / 100 : 0;
     const body = h(`
       <div>
         <div class="result-card rar-${esc(it.item.rarity)}" ${it.item.rarity === 'og' ? '' : 'style="box-shadow:none;border-color:var(--ridge-2)"'}>${ogTag(it.item)}
           <img src="${itemImgBig(it.item.image)}" alt=""><b>${esc(it.item.name)}</b>${price(it.item.price)}
         </div>
         <button class="btn" data-a="withdraw" ${canWithdraw ? '' : 'disabled'}>Вывести в Roblox</button>
+        ${it.source === 'pass' ? '<p class="hint center">Награду Grader Pass можно продать или поставить в игре.</p>' : ''}
+        ${dragons > 0 && dragons <= 1000 ? `<button class="btn ghost" data-a="dragons" style="margin-top:8px">🐉 Разменять на ${dragons} × ${esc(dx.dragon.name)}${change ? ` + ${fmt(change)} BG` : ''}</button>` : ''}
         <div class="btn-row" style="margin-top:8px">
           <button class="btn ghost" data-a="sell">Продать за ${price(it.item.price)}</button>
           <button class="btn ghost" data-a="upgrade">Апгрейд</button>
@@ -3992,6 +4159,22 @@
     $('[data-a=upgrade]', body).onclick = () => {
       s.close();
       location.hash = `#/upgrade?item=${it.id}`;
+    };
+    const exchange = $('[data-a=dragons]', body);
+    if (exchange) exchange.onclick = async () => {
+      const confirmed = await confirmBox(`Разменять «${it.item.name}» на ${dragons} × ${dx.dragon.name}${change ? ` и ${fmt(change)} BG` : ''}?`, { ok: 'Разменять', cancel: 'Отмена' });
+      if (!confirmed) return;
+      exchange.disabled = true;
+      try {
+        const result = await api('/api/inventory/exchange-dragons', { method: 'POST', body: { ids: [it.id], key: newKey() } });
+        setBalance(result.balance);
+        toast(`Получено ${result.dragons} × ${result.dragon.name}${result.change ? ` и ${fmt(result.change)} BG` : ''}`);
+        s.close();
+        renderProfile();
+      } catch (error) {
+        fail(error);
+        exchange.disabled = false;
+      }
     };
     $('[data-a=withdraw]', body).onclick = () => withdrawSheet(it);
   }

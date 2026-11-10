@@ -11,3 +11,12 @@ button{transition:background .16s,border-color .16s,opacity .16s,transform .16s}
 
 #promoList { margin-top: 16px; }
 #promoList summary { cursor: pointer; padding: 8px 0; }
+
+#panel-pass > section { grid-column: 1 / -1; }
+#passRefresh { width: auto; margin: 0 0 8px; }
+#passForm h3 { margin-top: 24px; }
+.pass-admin-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr)); gap: 12px; align-items: end; }
+.pass-admin-grid label { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.pass-admin-grid :is(input, select) { margin-top: 6px; }
+.pass-admin-grid input[type="checkbox"] { display: block; width: 20px; min-height: 20px; accent-color: var(--crystal); }
+.pass-admin-row { margin: 10px 0; padding: 12px; border: 1px solid var(--ridge); border-radius: 12px; }
