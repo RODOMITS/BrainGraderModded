@@ -849,6 +849,12 @@
       <h1>Овнерская админка</h1>
       <p data-online role="status">Загружаю онлайн…</p>
       <ul data-players></ul>
+      <details class="owner-roster">
+        <summary>Все игроки</summary>
+        <ul data-roster></ul>
+        <p data-roster-status role="status"></p>
+        <button type="button" class="btn ghost" data-roster-more hidden>Показать ещё</button>
+      </details>
       <h2>Скример</h2>
       <form>
         <label>Игрок онлайн<select name="username" required><option value="">Выбери игрока</option></select></label>
@@ -861,6 +867,37 @@
     const form = $('form', page);
     const picker = form.elements.username;
     const status = $('[data-result]', page);
+    const roster = $('.owner-roster', page);
+    const rosterList = $('[data-roster]', roster);
+    const rosterStatus = $('[data-roster-status]', roster);
+    const more = $('[data-roster-more]', roster);
+    let nextPlayer = '';
+    async function loadPlayers() {
+      if (more.disabled || nextPlayer === null) return;
+      more.disabled = true;
+      rosterStatus.textContent = 'Загружаю…';
+      try {
+        const data = await api('/api/owner/players?' + new URLSearchParams({ after: nextPlayer }));
+        for (const player of data.players) {
+          const row = document.createElement('li');
+          const account = player.id.startsWith('tg:') ? 'ID ' + player.id.slice(3) : 'Гость';
+          row.textContent = [player.name, player.username && '@' + player.username,
+            account, player.online ? 'онлайн' : 'офлайн'].filter(Boolean).join(' · ');
+          rosterList.append(row);
+        }
+        nextPlayer = data.next;
+        more.hidden = nextPlayer === null;
+        rosterStatus.textContent = rosterList.childElementCount ? '' : 'Игроков пока нет.';
+      } catch (error) {
+        rosterStatus.textContent = error.message;
+        more.textContent = 'Повторить';
+        more.hidden = false;
+      } finally {
+        more.disabled = false;
+      }
+    }
+    roster.ontoggle = () => { if (roster.open && nextPlayer === '') loadPlayers(); };
+    more.onclick = loadPlayers;
     async function refresh() {
       if (!page.isConnected) return;
       try {
