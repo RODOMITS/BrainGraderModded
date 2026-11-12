@@ -908,23 +908,25 @@
     let nextPlayer = '';
     function playerRow(player, online) {
       const row = document.createElement('li');
-      const link = document.createElement('a');
-      const id = player.id.slice(3);
       const username = /^[a-z0-9_]{1,32}$/i.test(player.username) ? player.username : '';
-      link.textContent = username ? 'https://t.me/' + username : player.name;
-      link.href = username ? 'https://t.me/' + username : 'tg://user?id=' + encodeURIComponent(id);
-      link.target = '_blank';
-      link.rel = 'noopener';
-      if (username && TG?.openTelegramLink) {
-        link.onclick = event => {
-          event.preventDefault();
-          TG.openTelegramLink(link.href);
-        };
+      const profile = document.createElement(username ? 'a' : 'div');
+      profile.textContent = player.name;
+      if (username) {
+        profile.href = 'https://t.me/' + username;
+        profile.textContent = profile.href;
+        profile.target = '_blank';
+        profile.rel = 'noopener';
+        if (TG?.openTelegramLink) {
+          profile.onclick = event => {
+            event.preventDefault();
+            TG.openTelegramLink(profile.href);
+          };
+        }
       }
       const badge = document.createElement('span');
       badge.className = online ? 'owner-player-online' : 'muted';
       badge.textContent = online ? 'Онлайн' : 'Офлайн';
-      row.append(link, badge);
+      row.append(profile, badge);
       return row;
     }
     async function loadPlayers() {
