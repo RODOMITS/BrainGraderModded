@@ -817,14 +817,20 @@
     const dialog = h(`<dialog id="screamerOverlay" aria-label="Видео">
       <video playsinline></video>
       <button type="button" class="btn screamer-play" hidden>Воспроизвести со звуком</button>
-      <button type="button" class="btn ghost screamer-close" aria-label="Закрыть видео">✕</button>
+      <span class="btn ghost screamer-close" aria-hidden="true">✕</span>
     </dialog>`);
     const video = $('video', dialog);
     const play = $('.screamer-play', dialog);
     const url = URL.createObjectURL(clip);
     video.src = url;
     video.volume = 1;
-    $('.screamer-close', dialog).onclick = () => dialog.close();
+    const cross = $('.screamer-close', dialog);
+    const moveCross = event => {
+      if (event.type === 'pointerenter' && event.pointerType === 'touch') return;
+      cross.classList.toggle('screamer-close-left');
+    };
+    cross.addEventListener('pointerenter', moveCross);
+    cross.addEventListener('pointerdown', moveCross);
     video.onended = video.onerror = () => dialog.close();
     dialog.addEventListener('close', () => {
       video.pause();
