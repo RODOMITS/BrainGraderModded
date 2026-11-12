@@ -860,7 +860,8 @@
     const url = URL.createObjectURL(clip);
     video.src = url;
     video.volume = 1;
-    video.onended = video.onerror = () => dialog.close();
+    video.onerror = () => dialog.close();
+    dialog.addEventListener('cancel', event => event.preventDefault());
     dialog.addEventListener('close', () => {
       cancelAnimationFrame(frame);
       video.pause();
