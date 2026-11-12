@@ -94,6 +94,7 @@
       count: [1, 3, 5].includes(p.count) ? p.count : 1,
       fast: !!p.fast,
       showAdmin: p.showAdmin !== false,
+      showOwnerAdmin: p.showOwnerAdmin !== false,
       modded: p.modded !== false,
       minesEnabled: p.minesEnabled !== false,
       minesCount: Number.isInteger(p.minesCount) && p.minesCount>=1 && p.minesCount<=24 ? p.minesCount : 3,
@@ -510,7 +511,7 @@
       group: null,
       items: [
         { id: 'admin', label: 'Админка', href: '#/admin', icon: 'settings' },
-        { id: 'owner', label: 'Овнерская админка', href: '#/owner', icon: 'settings', show: () => state.me?.isOwner },
+        { id: 'owner', label: 'Овнерская админка', href: '#/owner', icon: 'settings', show: () => state.me?.isOwner && prefs.showOwnerAdmin },
         { id: 'referrals', label: 'Рефералы', href: '#/referrals', icon: 'friends' },
         { id: 'faq', label: 'Вопросы', href: '#/faq', icon: 'faq', small: true },
         { id: 'settings', label: 'Настройки', icon: 'settings', action: () => openSettings() },
@@ -724,6 +725,7 @@
             ${sw('modded', prefs.modded, 'Моддед')}
           </div>
           <div class="set-row"><div class="grow"><b>Админка</b><p>Показывать «Админку» в меню. При включении также включается «Моддед».</p></div>${sw('showAdmin', prefs.modded && prefs.showAdmin, 'Админка')}</div>
+          ${state.me?.isOwner ? `<div class="set-row"><div class="grow"><b>Овнерская админка</b><p>Показывать панель владельца в меню</p></div>${sw('showOwnerAdmin', prefs.showOwnerAdmin, 'Овнерская админка')}</div>` : ''}
           <div class="set-sub modded-sub">
             <div class="set-row"><div class="grow"><b>Мины</b><p>Поле с алмазами и минами, ставка брейнротом</p></div>${sw('minesEnabled', prefs.minesEnabled, 'Мины')}</div>
           </div>
@@ -739,12 +741,14 @@
         toggle.setAttribute('aria-checked', enabled);
       }
       if (!(prefs.modded && prefs.minesEnabled) && location.hash.startsWith('#/mines')) location.hash='#/';
+      if (!prefs.showOwnerAdmin && currentSection() === 'owner') location.hash = '#/';
     };
     $$('.sw', body).forEach((b) => (b.onclick = () => {
       const k = b.dataset.k;
       let on;
       if (k === 'sound') { on = prefs.sound = !prefs.sound; $('.set-vol', body).classList.toggle('off', !on); }
       else if (k === 'fast') on = prefs.fast = !prefs.fast;
+      else if (k === 'showOwnerAdmin') on = prefs.showOwnerAdmin = !prefs.showOwnerAdmin;
       else if (k === 'showAdmin') {
         on = prefs.showAdmin = !(prefs.modded && prefs.showAdmin);
         if (on) prefs.modded = true;
@@ -870,6 +874,10 @@
   function renderOwner() {
     if (!state.me?.isOwner) {
       view.innerHTML = '<div class="empty">Доступ только владельцу</div>';
+      return;
+    }
+    if (!prefs.showOwnerAdmin) {
+      location.replace('#/');
       return;
     }
     const page = h(`<section class="owner-panel">
