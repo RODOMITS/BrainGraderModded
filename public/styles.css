@@ -2007,8 +2007,3 @@ html.autumn h2::after { content: ' 🍂'; font-size: .8em; }
 #screamerOverlay button { position: absolute; width: auto; }
 #screamerOverlay button[hidden] { display: none; }
 .screamer-play { top: 50%; left: 50%; transform: translate(-50%, -50%); }
-.screamer-close {
-  position: absolute; top: max(12px, env(safe-area-inset-top)); right: 12px;
-  width: auto; cursor: default; user-select: none;
-}
-.screamer-close-left { right: auto; left: 12px; }
