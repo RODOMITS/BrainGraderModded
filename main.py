@@ -1564,13 +1564,20 @@ def require_owner():
 def site_presence():
     c = db()
     now = time.time()
+    body = request.get_json(silent=True) or {}
+    active_id = body.get('activeVideoId') if isinstance(body, dict) else None
+    active = False
     with c:
         c.execute('''INSERT INTO site_presence VALUES (?,?,?)
             ON CONFLICT(user_id) DO UPDATE SET username=excluded.username, seen=excluded.seen''',
                   (g.uid, g.username, now))
         delivery = c.execute('''UPDATE screamers SET delivered=1
             WHERE target=? AND expires>? AND delivered=0 RETURNING id''', (g.uid, now)).fetchone()
-    return jsonify(videoId=delivery['id'] if delivery else None)
+        if isinstance(active_id, str):
+            active = bool(c.execute('''UPDATE screamers SET expires=?
+                WHERE target=? AND id=? AND delivered=1 AND expires>?''',
+                (now + 120, g.uid, active_id, now)).rowcount)
+    return jsonify(videoId=delivery['id'] if delivery else None, active=active, build=FRONTEND_BUILD)
 
 
 @app.get('/api/owner/online')
@@ -1641,6 +1648,15 @@ def screamer_video(video_id):
     response.headers['Cache-Control'] = 'private, no-store'
     response.headers['X-Content-Type-Options'] = 'nosniff'
     return response
+
+
+@app.post('/api/owner/screamer/stop')
+def owner_stop_screamer():
+    require_owner()
+    c = db()
+    with c:
+        stopped = c.execute('DELETE FROM screamers').rowcount
+    return jsonify(stopped=stopped)
 
 
 @app.route('/api/<path:path>',methods=['GET','POST'])

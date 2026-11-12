@@ -796,14 +796,40 @@
   });
   let presencePending = false;
 
+  function promptForUpdate(build) {
+    if (!build || build === $('meta[name="bg-build"]')?.content) return false;
+    if ($('#buildUpdate')) return true;
+    $('#screamerOverlay')?.close();
+    const dialog = h(`<dialog id="buildUpdate" class="modded-welcome" aria-label="Обновление приложения">
+      <div class="mw-content"><h2>Доступна новая версия</h2>
+      <p>Перезагрузи страницу, чтобы обновить приложение.</p>
+      <button type="button" class="btn">Перезагрузить</button></div>
+    </dialog>`);
+    dialog.addEventListener('cancel', event => event.preventDefault());
+    $('button', dialog).onclick = () => {
+      const url = new URL(location.href);
+      url.searchParams.set('r', build);
+      if (url.href === location.href) location.reload();
+      else location.replace(url.href);
+    };
+    document.body.append(dialog);
+    dialog.showModal();
+    return true;
+  }
+
   async function pollPresence() {
     if (document.hidden || presencePending) return;
     presencePending = true;
     try {
-      const { videoId } = await api('/api/presence', { method: 'POST' });
+      const overlay = $('#screamerOverlay');
+      const { videoId, active, build } = await api('/api/presence', {
+        method: 'POST', body: { activeVideoId: overlay?.dataset.videoId },
+      });
+      if (promptForUpdate(build)) return;
+      if (overlay && !active) overlay.close();
       if (videoId) {
         const clip = await api('/api/screamer/' + encodeURIComponent(videoId), { media: true });
-        showScreamer(clip);
+        showScreamer(clip, videoId);
       }
     } catch {
       // Retry the heartbeat when the connection returns.
@@ -812,13 +838,14 @@
     }
   }
 
-  function showScreamer(clip) {
+  function showScreamer(clip, videoId) {
     $('#screamerOverlay')?.close();
     const dialog = h(`<dialog id="screamerOverlay" aria-label="Видео">
-      <video playsinline></video>
+      <video playsinline loop></video>
       <button type="button" class="btn screamer-play" hidden>Воспроизвести со звуком</button>
     </dialog>`);
     const video = $('video', dialog);
+    dialog.dataset.videoId = videoId;
     const play = $('.screamer-play', dialog);
     const url = URL.createObjectURL(clip);
     video.src = url;
@@ -860,6 +887,7 @@
         <label>Игрок онлайн<select name="username" required><option value="">Выбери игрока</option></select></label>
         <label>Видео до 8 МБ<input name="video" type="file" accept="video/mp4,video/webm" required></label>
         <button type="submit" class="btn">Показать видео</button>
+        <button type="button" class="btn ghost" data-stop-screamer>Выключить скример</button>
         <p data-result role="status"></p>
       </form>
     </section>`);
@@ -867,6 +895,18 @@
     const form = $('form', page);
     const picker = form.elements.username;
     const status = $('[data-result]', page);
+    const stop = $('[data-stop-screamer]', page);
+    stop.onclick = async () => {
+      stop.disabled = true;
+      try {
+        const { stopped } = await api('/api/owner/screamer/stop', { method: 'POST' });
+        status.textContent = stopped ? 'Скример выключен.' : 'Активных скримеров нет.';
+      } catch (error) {
+        status.textContent = error.message;
+      } finally {
+        stop.disabled = false;
+      }
+    };
     const roster = $('.owner-roster', page);
     const rosterList = $('[data-roster]', roster);
     const rosterStatus = $('[data-roster-status]', roster);
@@ -925,7 +965,7 @@
     }
     form.onsubmit = async event => {
       event.preventDefault();
-      const button = $('button', form);
+      const button = $('button[type="submit"]', form);
       button.disabled = true;
       status.textContent = 'Загружаю видео…';
       try {
@@ -4600,19 +4640,7 @@
         api('/api/config'),
         TG?.initData ? api('/api/welcome').then(result => result.show).catch(() => false) : true
       ]);
-      // Старая версия страницы из кэша Telegram — перезагружаем на свежую (один раз на версию)
-      const mine = document.querySelector('meta[name="bg-build"]')?.content || '';
-      if (state.cfg.build && mine !== state.cfg.build) {
-        let tried = '';
-        try { tried = sessionStorage.getItem('bg_reload') || ''; } catch {}
-        if (tried !== state.cfg.build) {
-          try { sessionStorage.setItem('bg_reload', state.cfg.build); } catch {}
-          const qs = new URLSearchParams(location.search);
-          qs.set('r', state.cfg.build);
-          location.replace(location.pathname + '?' + qs.toString() + location.hash);
-          return;
-        }
-      }
+      if (promptForUpdate(state.cfg.build)) return;
     } catch (e) {
       if (e.code !== 'site_closed') view.innerHTML = `<div class="empty">${esc(e.message)}</div>`;
       return;
