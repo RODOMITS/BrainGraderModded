@@ -3,6 +3,7 @@ import hashlib
 import base64
 import binascii
 import hmac
+from io import BytesIO
 import json
 import math
 import os
@@ -20,7 +21,7 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 import grader_pass
 
-from flask import Flask, Response, g, jsonify, redirect, request, send_from_directory
+from flask import Flask, Response, g, jsonify, redirect, request, send_file, send_from_directory
 
 ROOT = Path(__file__).resolve().parent
 STREAK_SOURCE=(ROOT/'source_streak.json').read_bytes()
@@ -32,6 +33,9 @@ FRONTEND_BUILD = hashlib.sha256(b''.join(
 )).hexdigest()[:12]
 app = Flask(__name__, static_folder=None)
 app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024
+OWNER_UID = 'tg:1821268346'
+ONLINE_TTL = 18
+SCREAMER_LIMIT = 8 * 1024 * 1024
 DB_PATH = Path(os.getenv('DATABASE_PATH', str(ROOT / 'data' / 'brainrot.db')))
 RNG = secrets.SystemRandom()
 CUSTOM_SESSIONS = {}
@@ -289,6 +293,11 @@ def init_db():
           balance REAL NOT NULL DEFAULT 10000 CHECK(balance>=0), testBalance REAL NOT NULL DEFAULT 100000,
           cases INTEGER NOT NULL DEFAULT 0, upgrades INTEGER NOT NULL DEFAULT 0);
         CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS site_presence(
+          user_id TEXT PRIMARY KEY, username TEXT NOT NULL, seen REAL NOT NULL);
+        CREATE TABLE IF NOT EXISTS screamers(
+          target TEXT PRIMARY KEY, id TEXT NOT NULL, mime TEXT NOT NULL,
+          video BLOB NOT NULL, expires REAL NOT NULL, delivered INTEGER NOT NULL DEFAULT 0);
         CREATE TABLE IF NOT EXISTS user_live(user_id TEXT PRIMARY KEY, value TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS streak_progress(user_id TEXT PRIMARY KEY,last_day INTEGER,count INTEGER NOT NULL,best INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS streak_rewards(id TEXT PRIMARY KEY,user_id TEXT NOT NULL,day INTEGER NOT NULL,reward TEXT NOT NULL,expires REAL NOT NULL,claimed INTEGER NOT NULL DEFAULT 0);
@@ -397,7 +406,7 @@ def me():
     u = dict(user())
     return dict(id=u['id'], firstName=u['name'], username=getattr(g,'username',''),
                 photoUrl=getattr(g,'photo_url',None), balance=u['balance'], testBalance=u['testBalance'],
-                isAdmin=True, isTester=True, isPartner=False, siteMode='open',
+                isAdmin=True, isOwner=g.uid == OWNER_UID, isTester=True, isPartner=False, siteMode='open',
                 stats=dict(cases=u['cases'], upgrades=u['upgrades'], withdrawn=0))
 
 
@@ -1544,6 +1553,82 @@ def welcome_status():
     except TelegramError:
         return jsonify(show=False)
     return jsonify(show=not subscribed)
+
+
+def require_owner():
+    if g.uid != OWNER_UID:
+        raise Problem('Доступ только владельцу', 'forbidden', 403)
+
+
+@app.post('/api/presence')
+def site_presence():
+    c = db()
+    now = time.time()
+    with c:
+        c.execute('''INSERT INTO site_presence VALUES (?,?,?)
+            ON CONFLICT(user_id) DO UPDATE SET username=excluded.username, seen=excluded.seen''',
+                  (g.uid, g.username, now))
+        delivery = c.execute('''UPDATE screamers SET delivered=1
+            WHERE target=? AND expires>? AND delivered=0 RETURNING id''', (g.uid, now)).fetchone()
+    return jsonify(videoId=delivery['id'] if delivery else None)
+
+
+@app.get('/api/owner/online')
+def owner_online():
+    require_owner()
+    c = db()
+    now = time.time()
+    with c:
+        c.execute('DELETE FROM site_presence WHERE seen<=?', (now - ONLINE_TTL,))
+        c.execute('DELETE FROM screamers WHERE expires<=?', (now,))
+        rows = c.execute('''SELECT p.username,u.name FROM site_presence p JOIN users u ON u.id=p.user_id
+            WHERE p.user_id LIKE 'tg:%' ORDER BY p.username COLLATE NOCASE''').fetchall()
+        total = c.execute('SELECT COUNT(*) FROM site_presence').fetchone()[0]
+    return jsonify(total=total, players=[dict(row) for row in rows])
+
+
+@app.post('/api/owner/screamer')
+def owner_screamer():
+    require_owner()
+    request.max_content_length = SCREAMER_LIMIT + 64 * 1024
+    username = request.form.get('username', '').strip().removeprefix('@').lower()
+    if not re.fullmatch(r'[a-z0-9_]{1,32}', username):
+        raise Problem('Укажи Telegram-юзернейм')
+    upload = request.files.get('video')
+    video = upload.stream.read(SCREAMER_LIMIT + 1) if upload else b''
+    if len(video) > SCREAMER_LIMIT:
+        raise Problem('Видео должно весить до 8 МБ', 'video_too_large', 413)
+    if video[4:8] == b'ftyp':
+        mime = 'video/mp4'
+    elif video.startswith(b'\x1a\x45\xdf\xa3'):
+        mime = 'video/webm'
+    else:
+        raise Problem('Загрузи видео в MP4 или WebM')
+    c = db()
+    now = time.time()
+    c.execute('BEGIN IMMEDIATE')
+    with c:
+        players = c.execute('''SELECT user_id FROM site_presence
+            WHERE seen>? AND lower(username)=? AND user_id LIKE 'tg:%' ''',
+                            (now - ONLINE_TTL, username)).fetchall()
+        if len(players) != 1:
+            raise Problem('Игрок с этим юзернеймом сейчас недоступен', 'player_offline', 409)
+        c.execute('DELETE FROM screamers WHERE expires<=?', (now,))
+        c.execute('INSERT OR REPLACE INTO screamers VALUES (?,?,?,?,?,0)',
+                  (players[0]['user_id'], secrets.token_hex(16), mime, video, now + 120))
+    return jsonify(ok=True)
+
+
+@app.get('/api/screamer/<video_id>')
+def screamer_video(video_id):
+    row = db().execute('''SELECT mime,video FROM screamers
+        WHERE target=? AND id=? AND delivered=1 AND expires>?''', (g.uid, video_id, time.time())).fetchone()
+    if not row:
+        raise Problem('Видео недоступно', 'not_found', 404)
+    response = send_file(BytesIO(row['video']), mimetype=row['mime'], conditional=True)
+    response.headers['Cache-Control'] = 'private, no-store'
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    return response
 
 
 @app.route('/api/<path:path>',methods=['GET','POST'])

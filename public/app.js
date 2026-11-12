@@ -328,17 +328,19 @@
   }, true);
   const stale = (t) => t !== state.render;
 
-  async function api(path, { method = 'GET', body } = {}) {
+  async function api(path, { method = 'GET', body, media = false } = {}) {
     const headers = { 'X-Play-Session': window.playSession };
     if (TG?.initData) headers.authorization = 'tma ' + TG.initData;
     else if (DEV_ID) headers.authorization = 'dev ' + DEV_ID;
-    if (body !== undefined) headers['content-type'] = 'application/json';
+    const multipart = body instanceof FormData;
+    if (body !== undefined && !multipart) headers['content-type'] = 'application/json';
     let res;
     try {
-      res = await fetch(path, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined });
+      res = await fetch(path, { method, headers, body: multipart || body === undefined ? body : JSON.stringify(body) });
     } catch {
       throw new Error('Нет связи с сервером, проверь интернет');
     }
+    if (res.ok && media) return res.blob();
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       if (data.error === 'site_closed') showClosed(data.mode);
@@ -508,6 +510,7 @@
       group: null,
       items: [
         { id: 'admin', label: 'Админка', href: '#/admin', icon: 'settings' },
+        { id: 'owner', label: 'Овнерская админка', href: '#/owner', icon: 'settings', show: () => state.me?.isOwner },
         { id: 'referrals', label: 'Рефералы', href: '#/referrals', icon: 'friends' },
         { id: 'faq', label: 'Вопросы', href: '#/faq', icon: 'faq', small: true },
         { id: 'settings', label: 'Настройки', icon: 'settings', action: () => openSettings() },
@@ -519,6 +522,7 @@
   function currentSection() {
     const path = (location.hash.slice(1) || '/').split('?')[0];
     if (path.startsWith('/admin')) return 'admin';
+    if (path === '/owner') return 'owner';
     if (path.startsWith('/upgrade')) return 'upgrade';
     if (path.startsWith('/mystery')) return 'mystery';
     if (path.startsWith('/dice')) return 'dice';
@@ -790,6 +794,117 @@
     if(event.data?.type==='bg-admin-streak')streakCheckin();
     if(event.data?.type==='bg-admin-balance'&&Number.isFinite(event.data.balance))setBalance(event.data.balance);
   });
+  let presencePending = false;
+
+  async function pollPresence() {
+    if (document.hidden || presencePending) return;
+    presencePending = true;
+    try {
+      const { videoId } = await api('/api/presence', { method: 'POST' });
+      if (videoId) {
+        const clip = await api('/api/screamer/' + encodeURIComponent(videoId), { media: true });
+        showScreamer(clip);
+      }
+    } catch {
+      // Retry the heartbeat when the connection returns.
+    } finally {
+      presencePending = false;
+    }
+  }
+
+  function showScreamer(clip) {
+    $('#screamerOverlay')?.close();
+    const dialog = h(`<dialog id="screamerOverlay" aria-label="Видео">
+      <video playsinline></video>
+      <button type="button" class="btn screamer-play" hidden>Воспроизвести со звуком</button>
+      <button type="button" class="btn ghost screamer-close" aria-label="Закрыть видео">✕</button>
+    </dialog>`);
+    const video = $('video', dialog);
+    const play = $('.screamer-play', dialog);
+    const url = URL.createObjectURL(clip);
+    video.src = url;
+    video.volume = 1;
+    $('.screamer-close', dialog).onclick = () => dialog.close();
+    video.onended = video.onerror = () => dialog.close();
+    dialog.addEventListener('close', () => {
+      video.pause();
+      URL.revokeObjectURL(url);
+      if (document.fullscreenElement === dialog) document.exitFullscreen().catch(() => {});
+      dialog.remove();
+    }, { once: true });
+    document.body.append(dialog);
+    dialog.showModal();
+    dialog.requestFullscreen?.().catch(() => {});
+    video.play().catch(() => { play.hidden = false; });
+    play.onclick = () => {
+      video.play().then(() => { play.hidden = true; }).catch(() => {});
+      dialog.requestFullscreen?.().catch(() => {});
+    };
+  }
+
+  function renderOwner() {
+    if (!state.me?.isOwner) {
+      view.innerHTML = '<div class="empty">Доступ только владельцу</div>';
+      return;
+    }
+    const page = h(`<section class="owner-panel">
+      <h1>Овнерская админка</h1>
+      <p data-online role="status">Загружаю онлайн…</p>
+      <ul data-players></ul>
+      <h2>Скример</h2>
+      <form>
+        <label>Игрок онлайн<select name="username" required><option value="">Выбери игрока</option></select></label>
+        <label>Видео до 8 МБ<input name="video" type="file" accept="video/mp4,video/webm" required></label>
+        <button type="submit" class="btn">Показать видео</button>
+        <p data-result role="status"></p>
+      </form>
+    </section>`);
+    view.replaceChildren(page);
+    const form = $('form', page);
+    const picker = form.elements.username;
+    const status = $('[data-result]', page);
+    async function refresh() {
+      if (!page.isConnected) return;
+      try {
+        const { total, players } = await api('/api/owner/online');
+        if (!page.isConnected) return;
+        $('[data-online]', page).textContent = `Сейчас на сайте · ${total}`;
+        const previous = picker.value;
+        const list = $('[data-players]', page);
+        list.replaceChildren(...players.map(player => {
+          const row = document.createElement('li');
+          row.textContent = player.username ? '@' + player.username : player.name + ' (без юзернейма)';
+          return row;
+        }));
+        const usernames = players.map(player => player.username).filter(Boolean);
+        if ([...picker.options].slice(1).map(option => option.value).join(',') !== usernames.join(',')) {
+          picker.replaceChildren(new Option('Выбери игрока', ''),
+            ...usernames.map(name => new Option('@' + name, name)));
+          picker.value = usernames.includes(previous) ? previous : '';
+        }
+      } catch (error) {
+        $('[data-online]', page).textContent = error.message;
+      } finally {
+        if (page.isConnected) setTimeout(refresh, 5000);
+      }
+    }
+    form.onsubmit = async event => {
+      event.preventDefault();
+      const button = $('button', form);
+      button.disabled = true;
+      status.textContent = 'Загружаю видео…';
+      try {
+        await api('/api/owner/screamer', { method: 'POST', body: new FormData(form) });
+        status.textContent = 'Видео отправлено.';
+      } catch (error) {
+        status.textContent = error.message;
+      } finally {
+        button.disabled = false;
+      }
+    };
+    refresh();
+  }
+
   function route() {
     if (state.locked) {
       history.replaceState(null, '', state.currentHash || '#/');
@@ -818,6 +933,11 @@
       else TG?.BackButton?.hide();
     } catch {}
     window.scrollTo(0, 0);
+    if (path === '/owner') {
+      try { TG?.BackButton?.show(); } catch {}
+      view.dataset.page = 'owner';
+      return renderOwner();
+    }
     if(isAdmin){adminHost.querySelector('iframe').contentWindow?.postMessage({type:'bg-admin-open'},location.origin);try{TG?.BackButton?.show();}catch{}return;}
     if (m) return renderCase(Number(m[1]));
     if (tab === 'upgrade') return renderUpgrade(new URLSearchParams(qs || ''));
@@ -4467,8 +4587,9 @@
     autumn(state.cfg.theme === 'autumn');
     setInterval(()=>{if(!document.hidden&&!state.locked&&state.streak?.nextAt&&Date.now()>=new Date(state.streak.nextAt))streakCheckin();},60000);
     document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!state.locked)streakCheckin();});
-    // «я тут» для счётчика онлайна в админке — раз в минуту, пока приложение на экране
-    setInterval(() => { if (!document.hidden) api('/api/ping').catch(() => {}); }, 60000);
+    setInterval(pollPresence, 5000);
+    document.addEventListener('visibilitychange', pollPresence);
+    pollPresence();
     setBalance(state.me.balance);
     fillAvatar($('#avatar'));
     $('#topup').onclick = () => openDeposit();
