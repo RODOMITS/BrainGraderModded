@@ -835,13 +835,16 @@
     dialog.addEventListener('close', () => {
       video.pause();
       URL.revokeObjectURL(url);
+      if (document.fullscreenElement === dialog) document.exitFullscreen().catch(() => {});
       dialog.remove();
     }, { once: true });
     document.body.append(dialog);
     dialog.showModal();
+    dialog.requestFullscreen?.().catch(() => {});
     video.play().catch(() => { play.hidden = false; });
     play.onclick = () => {
       video.play().then(() => { play.hidden = true; }).catch(() => {});
+      dialog.requestFullscreen?.().catch(() => {});
     };
   }
 
