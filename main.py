@@ -345,6 +345,10 @@ def init_db():
           PRIMARY KEY(giveaway_id,user_id));
         ''')
         c.executescript(grader_pass.SCHEMA)
+        c.execute('BEGIN IMMEDIATE')
+        if 'captions' not in {row['name'] for row in c.execute('PRAGMA table_info(screamers)')}:
+            c.execute("ALTER TABLE screamers ADD COLUMN captions TEXT NOT NULL DEFAULT '[]'")
+        c.commit()
         # Uploaded assets exist only in process memory; discard their previous inventory snapshots on restart.
         c.execute("DELETE FROM inventory WHERE json_extract(item,'$.customSession') IS NOT NULL")
         c.execute("DELETE FROM next_results WHERE json_extract(value,'$.item.customSession') IS NOT NULL")
@@ -1572,12 +1576,13 @@ def site_presence():
             ON CONFLICT(user_id) DO UPDATE SET username=excluded.username, seen=excluded.seen''',
                   (g.uid, g.username, now))
         delivery = c.execute('''UPDATE screamers SET delivered=1
-            WHERE target=? AND expires>? AND delivered=0 RETURNING id''', (g.uid, now)).fetchone()
+            WHERE target=? AND expires>? AND delivered=0 RETURNING id,captions''', (g.uid, now)).fetchone()
         if isinstance(active_id, str):
             active = bool(c.execute('''UPDATE screamers SET expires=?
                 WHERE target=? AND id=? AND delivered=1 AND expires>?''',
                 (now + 120, g.uid, active_id, now)).rowcount)
-    return jsonify(videoId=delivery['id'] if delivery else None, active=active, build=FRONTEND_BUILD)
+    return jsonify(videoId=delivery['id'] if delivery else None, active=active, build=FRONTEND_BUILD,
+                   captions=json.loads(delivery['captions']) if delivery else [])
 
 
 @app.get('/api/owner/online')
@@ -1615,6 +1620,9 @@ def owner_screamer():
     if not re.fullmatch(r'[a-z0-9_]{1,32}', username):
         raise Problem('Укажи Telegram-юзернейм')
     upload = request.files.get('video')
+    captions = [request.form.get(f'caption{i}', '').strip() for i in range(1, 4)]
+    if any(len(caption) > 80 for caption in captions):
+        raise Problem('Каждая надпись должна быть не длиннее 80 символов')
     video = upload.stream.read(SCREAMER_LIMIT + 1) if upload else b''
     if len(video) > SCREAMER_LIMIT:
         raise Problem('Видео должно весить до 8 МБ', 'video_too_large', 413)
@@ -1634,8 +1642,10 @@ def owner_screamer():
         if len(players) != 1:
             raise Problem('Игрок с этим юзернеймом сейчас недоступен', 'player_offline', 409)
         c.execute('DELETE FROM screamers WHERE expires<=?', (now,))
-        c.execute('INSERT OR REPLACE INTO screamers VALUES (?,?,?,?,?,0)',
-                  (players[0]['user_id'], secrets.token_hex(16), mime, video, now + 120))
+        c.execute('''INSERT OR REPLACE INTO screamers (target,id,mime,video,expires,captions)
+                     VALUES (?,?,?,?,?,?)''',
+                  (players[0]['user_id'], secrets.token_hex(16), mime, video, now + 120,
+                   json.dumps([caption for caption in captions if caption])))
     return jsonify(ok=True)
 
 

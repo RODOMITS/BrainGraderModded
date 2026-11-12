@@ -806,14 +806,14 @@
     presencePending = true;
     try {
       const overlay = $('#screamerOverlay');
-      const { videoId, active, build } = await api('/api/presence', {
+      const { videoId, active, build, captions } = await api('/api/presence', {
         method: 'POST', body: { activeVideoId: overlay?.dataset.videoId },
       });
       if (promptForUpdate(build)) return;
       if (overlay && !active) overlay.close();
       if (videoId) {
         const clip = await api('/api/screamer/' + encodeURIComponent(videoId), { media: true });
-        showScreamer(clip, videoId);
+        showScreamer(clip, videoId, captions);
       }
     } catch {
       // Retry the heartbeat when the connection returns.
@@ -822,13 +822,39 @@
     }
   }
 
-  function showScreamer(clip, videoId) {
+  function showScreamer(clip, videoId, captions = []) {
     $('#screamerOverlay')?.close();
     const dialog = h(`<dialog id="screamerOverlay" aria-label="Видео">
       <video playsinline loop></video>
       <button type="button" class="btn screamer-play" hidden>Воспроизвести со звуком</button>
     </dialog>`);
     const video = $('video', dialog);
+    const labels = captions.map((caption, index) => {
+      const label = document.createElement('div');
+      label.className = 'screamer-caption';
+      label.textContent = caption;
+      label.style.color = ['#fff36a', '#74f9df', '#ff9bd9'][index];
+      dialog.append(label);
+      return label;
+    });
+    let frame;
+    const start = performance.now();
+    function bounce(distance, limit) {
+      if (limit <= 0) return 0;
+      const step = distance % (2 * limit);
+      return Math.min(step, 2 * limit - step);
+    }
+    function animate(now) {
+      const seconds = (now - start) / 1000;
+      labels.forEach((label, index) => {
+        const width = dialog.clientWidth - label.offsetWidth;
+        const height = dialog.clientHeight - label.offsetHeight;
+        const x = bounce(seconds * (95 + index * 28) + width * index / 3, width);
+        const y = bounce(seconds * (80 + index * 19) + height * (index + 1) / 4, height);
+        label.style.transform = `translate(${x}px, ${y}px)`;
+      });
+      frame = requestAnimationFrame(animate);
+    }
     dialog.dataset.videoId = videoId;
     const play = $('.screamer-play', dialog);
     const url = URL.createObjectURL(clip);
@@ -836,6 +862,7 @@
     video.volume = 1;
     video.onended = video.onerror = () => dialog.close();
     dialog.addEventListener('close', () => {
+      cancelAnimationFrame(frame);
       video.pause();
       URL.revokeObjectURL(url);
       if (document.fullscreenElement === dialog) document.exitFullscreen().catch(() => {});
@@ -843,6 +870,7 @@
     }, { once: true });
     document.body.append(dialog);
     dialog.showModal();
+    if (labels.length) frame = requestAnimationFrame(animate);
     dialog.requestFullscreen?.().catch(() => {});
     video.play().catch(() => { play.hidden = false; });
     play.onclick = () => {
@@ -877,6 +905,9 @@
       <form>
         <label>Игрок онлайн<select name="username" required><option value="">Выбери игрока</option></select></label>
         <label>Видео до 8 МБ<input name="video" type="file" accept="video/mp4,video/webm" required></label>
+        <label>Надпись 1 <input name="caption1" maxlength="80" placeholder="Необязательно"></label>
+        <label>Надпись 2 <input name="caption2" maxlength="80" placeholder="Необязательно"></label>
+        <label>Надпись 3 <input name="caption3" maxlength="80" placeholder="Необязательно"></label>
         <div class="btn-row">
           <button type="submit" class="btn">Показать видео</button>
           <button type="button" class="btn ghost" data-stop-screamer>Выключить скример</button>
