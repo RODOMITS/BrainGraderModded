@@ -911,7 +911,7 @@
       const link = document.createElement('a');
       const id = player.id.slice(3);
       const username = /^[a-z0-9_]{1,32}$/i.test(player.username) ? player.username : '';
-      link.textContent = username ? '@' + username : player.name;
+      link.textContent = username ? 'https://t.me/' + username : player.name;
       link.href = username ? 'https://t.me/' + username : 'tg://user?id=' + encodeURIComponent(id);
       link.target = '_blank';
       link.rel = 'noopener';
