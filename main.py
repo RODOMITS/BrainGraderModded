@@ -1600,7 +1600,7 @@ def owner_players():
     rows = db().execute('''SELECT u.id,u.name,
             COALESCE(p.username,'') AS username, p.user_id IS NOT NULL AS online
         FROM users u LEFT JOIN site_presence p ON p.user_id=u.id AND p.seen>?
-        WHERE u.id>? ORDER BY u.id LIMIT 51''',
+        WHERE u.id>? AND u.id GLOB 'tg:*' ORDER BY u.id LIMIT 51''',
         (time.time() - ONLINE_TTL, request.args.get('after', ''))).fetchall()
     return jsonify(players=[dict(row) for row in rows[:50]],
                    next=rows[49]['id'] if len(rows) > 50 else None)

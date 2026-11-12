@@ -920,7 +920,7 @@
         const data = await api('/api/owner/players?' + new URLSearchParams({ after: nextPlayer }));
         for (const player of data.players) {
           const row = document.createElement('li');
-          const account = player.id.startsWith('tg:') ? 'ID ' + player.id.slice(3) : 'Гость';
+          const account = 'ID ' + player.id.slice(3);
           row.textContent = [player.name, player.username && '@' + player.username,
             account, player.online ? 'онлайн' : 'офлайн'].filter(Boolean).join(' · ');
           rosterList.append(row);
