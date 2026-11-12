@@ -874,22 +874,28 @@
     }
     const page = h(`<section class="owner-panel">
       <h1>Овнерская админка</h1>
-      <p data-online role="status">Загружаю онлайн…</p>
-      <ul data-players></ul>
-      <details class="owner-roster">
+      <section class="owner-card">
+        <h2>Сейчас на сайте <span data-online role="status">…</span></h2>
+        <ul data-players></ul>
+      </section>
+      <details class="owner-card owner-roster">
         <summary>Все игроки</summary>
         <ul data-roster></ul>
         <p data-roster-status role="status"></p>
         <button type="button" class="btn ghost" data-roster-more hidden>Показать ещё</button>
       </details>
+      <section class="owner-card">
       <h2>Скример</h2>
       <form>
         <label>Игрок онлайн<select name="username" required><option value="">Выбери игрока</option></select></label>
         <label>Видео до 8 МБ<input name="video" type="file" accept="video/mp4,video/webm" required></label>
-        <button type="submit" class="btn">Показать видео</button>
-        <button type="button" class="btn ghost" data-stop-screamer>Выключить скример</button>
+        <div class="btn-row">
+          <button type="submit" class="btn">Показать видео</button>
+          <button type="button" class="btn ghost" data-stop-screamer>Выключить скример</button>
+        </div>
         <p data-result role="status"></p>
       </form>
+      </section>
     </section>`);
     view.replaceChildren(page);
     const form = $('form', page);
@@ -912,20 +918,36 @@
     const rosterStatus = $('[data-roster-status]', roster);
     const more = $('[data-roster-more]', roster);
     let nextPlayer = '';
+    function playerRow(player, online) {
+      const row = document.createElement('li');
+      const link = document.createElement('a');
+      const id = player.id.slice(3);
+      const username = /^[a-z0-9_]{1,32}$/i.test(player.username) ? player.username : '';
+      link.textContent = username ? '@' + username : player.name;
+      link.href = username ? 'https://t.me/' + username : 'tg://user?id=' + encodeURIComponent(id);
+      link.target = '_blank';
+      link.rel = 'noopener';
+      if (username && TG?.openTelegramLink) {
+        link.onclick = event => {
+          event.preventDefault();
+          TG.openTelegramLink(link.href);
+        };
+      }
+      const badge = document.createElement('span');
+      badge.className = online ? 'owner-player-online' : 'muted';
+      badge.textContent = online ? 'Онлайн' : 'Офлайн';
+      row.append(link, badge);
+      return row;
+    }
     async function loadPlayers() {
       if (more.disabled || nextPlayer === null) return;
       more.disabled = true;
       rosterStatus.textContent = 'Загружаю…';
       try {
         const data = await api('/api/owner/players?' + new URLSearchParams({ after: nextPlayer }));
-        for (const player of data.players) {
-          const row = document.createElement('li');
-          const account = 'ID ' + player.id.slice(3);
-          row.textContent = [player.name, player.username && '@' + player.username,
-            account, player.online ? 'онлайн' : 'офлайн'].filter(Boolean).join(' · ');
-          rosterList.append(row);
-        }
+        rosterList.append(...data.players.map(player => playerRow(player, player.online)));
         nextPlayer = data.next;
+        more.textContent = 'Показать ещё';
         more.hidden = nextPlayer === null;
         rosterStatus.textContent = rosterList.childElementCount ? '' : 'Игроков пока нет.';
       } catch (error) {
@@ -943,14 +965,10 @@
       try {
         const { total, players } = await api('/api/owner/online');
         if (!page.isConnected) return;
-        $('[data-online]', page).textContent = `Сейчас на сайте · ${total}`;
+        $('[data-online]', page).textContent = total;
         const previous = picker.value;
         const list = $('[data-players]', page);
-        list.replaceChildren(...players.map(player => {
-          const row = document.createElement('li');
-          row.textContent = player.username ? '@' + player.username : player.name + ' (без юзернейма)';
-          return row;
-        }));
+        list.replaceChildren(...players.map(player => playerRow(player, true)));
         const usernames = players.map(player => player.username).filter(Boolean);
         if ([...picker.options].slice(1).map(option => option.value).join(',') !== usernames.join(',')) {
           picker.replaceChildren(new Option('Выбери игрока', ''),

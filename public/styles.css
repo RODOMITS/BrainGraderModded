@@ -1990,8 +1990,19 @@ html.autumn h2::after { content: ' 🍂'; font-size: .8em; }
   .gp-fire .pf { animation: none; }
 }
 
-.owner-panel { max-width: 600px; margin: auto; }
-.owner-panel ul { padding-left: 24px; max-height: 180px; overflow: auto; }
+.owner-panel { display: grid; gap: 14px; max-width: 720px; margin: auto; }
+.owner-panel h1, .owner-panel h2 { margin: 0; }
+.owner-card { padding: 18px; border: 1px solid var(--ridge); border-radius: 16px; background: var(--stone); }
+.owner-card h2 { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.owner-card summary { cursor: pointer; font-weight: 700; }
+.owner-card ul { list-style: none; margin: 10px 0 0; padding: 0; max-height: 240px; overflow: auto; }
+.owner-card li { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--ridge); }
+.owner-card li:last-child { border-bottom: 0; }
+.owner-card li a { min-width: 0; overflow-wrap: anywhere; color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+.owner-card li span { flex: none; font-size: .8rem; }
+.owner-player-online, .owner-card [data-online] { color: #52e79d; }
+.owner-card [data-online] { font-size: .9rem; }
+.owner-card [role="status"]:empty { display: none; }
 .owner-panel form { display: grid; gap: 12px; }
 .owner-panel label { display: grid; gap: 6px; }
 .owner-panel :is(input, select) {

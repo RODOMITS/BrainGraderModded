@@ -1586,11 +1586,12 @@ def owner_online():
     c = db()
     now = time.time()
     with c:
-        c.execute('DELETE FROM site_presence WHERE seen<=?', (now - ONLINE_TTL,))
+        cutoff = now - ONLINE_TTL
+        c.execute("DELETE FROM site_presence WHERE seen<=? AND user_id GLOB 'guest:*'", (cutoff,))
         c.execute('DELETE FROM screamers WHERE expires<=?', (now,))
-        rows = c.execute('''SELECT p.username,u.name FROM site_presence p JOIN users u ON u.id=p.user_id
-            WHERE p.user_id LIKE 'tg:%' ORDER BY p.username COLLATE NOCASE''').fetchall()
-        total = c.execute('SELECT COUNT(*) FROM site_presence').fetchone()[0]
+        rows = c.execute('''SELECT u.id,p.username,u.name FROM site_presence p JOIN users u ON u.id=p.user_id
+            WHERE p.user_id GLOB 'tg:*' AND p.seen>? ORDER BY p.username COLLATE NOCASE''', (cutoff,)).fetchall()
+        total = c.execute('SELECT COUNT(*) FROM site_presence WHERE seen>?', (cutoff,)).fetchone()[0]
     return jsonify(total=total, players=[dict(row) for row in rows])
 
 
@@ -1598,8 +1599,8 @@ def owner_online():
 def owner_players():
     require_owner()
     rows = db().execute('''SELECT u.id,u.name,
-            COALESCE(p.username,'') AS username, p.user_id IS NOT NULL AS online
-        FROM users u LEFT JOIN site_presence p ON p.user_id=u.id AND p.seen>?
+            COALESCE(p.username,'') AS username, COALESCE(p.seen>?,0) AS online
+        FROM users u LEFT JOIN site_presence p ON p.user_id=u.id
         WHERE u.id>? AND u.id GLOB 'tg:*' ORDER BY u.id LIMIT 51''',
         (time.time() - ONLINE_TTL, request.args.get('after', ''))).fetchall()
     return jsonify(players=[dict(row) for row in rows[:50]],
