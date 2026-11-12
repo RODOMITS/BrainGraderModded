@@ -427,7 +427,10 @@ def catalog():
                     image='/img/custom/rodomits.webp', freeKind=None,
                     items=[dict(itemId=item_id) for item_id in (*RODOMITS_DROPS, HORSEMAN_ID)])
     apply_case_rarity_weights(dict(items=items, cases=[rodomits]))
-    return dict(items=items, cases=[rodomits, *cases])
+    last_standard = max((index for index, cs in enumerate(cases)
+                         if (cs.get('category') or 'standard') == 'standard'), default=len(cases) - 1)
+    cases.insert(last_standard + 1, rodomits)
+    return dict(items=items, cases=cases)
 
 
 def user():
