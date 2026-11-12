@@ -391,6 +391,15 @@ def base_catalog():
     return json.loads(db().execute("SELECT value FROM settings WHERE key='catalog'").fetchone()[0])
 
 
+HORSEMAN_ID = 600_000_001
+RODOMITS_CASE_ID = 600_000_001
+RODOMITS_DROPS = (45, 3245, 3243, 42, 41)
+
+
+def custom_content_enabled():
+    return request.headers.get('X-Custom-Content') == '1'
+
+
 def catalog():
     data = base_catalog()
     session = custom_session()
@@ -399,7 +408,26 @@ def catalog():
             data = json.loads(json.dumps(session['catalog']))
         known = {item['id'] for item in data['items']}
         data['items'].extend(dict(item) for item in session['items'] if item['id'] not in known)
-    return data
+    items = [item for item in data['items'] if item['id'] != HORSEMAN_ID]
+    cases = [cs for cs in data['cases'] if cs['id'] != RODOMITS_CASE_ID]
+    if not custom_content_enabled():
+        cases = [dict(cs, items=[drop for drop in cs['items'] if drop['itemId'] != HORSEMAN_ID])
+                 for cs in cases if any(drop['itemId'] != HORSEMAN_ID for drop in cs['items'])]
+        return dict(items=items, cases=cases)
+
+    horseman = dict(id=HORSEMAN_ID, name='Headless Horseman', price=74500, rarity='og',
+                    image='/img/custom/horseman.webp')
+    items.append(horseman)
+    known = {item['id'] for item in items}
+    missing = set(RODOMITS_DROPS) - known
+    if missing:
+        source = json.loads((ROOT / 'source_catalog.json').read_text(encoding='utf-8-sig'))
+        items.extend(item for item in source['items'] if item['id'] in missing)
+    rodomits = dict(id=RODOMITS_CASE_ID, name='RODOMITS', price=20000, category='standard',
+                    image='/img/custom/rodomits.webp', freeKind=None,
+                    items=[dict(itemId=item_id) for item_id in (*RODOMITS_DROPS, HORSEMAN_ID)])
+    apply_case_rarity_weights(dict(items=items, cases=[rodomits]))
+    return dict(items=items, cases=[rodomits, *cases])
 
 
 def user():
@@ -1084,6 +1112,8 @@ def dispatch(path, body):
         row=mines_current()
         return dict(game=mines_view(row) if row else None)
     if path=='mines/start' and post:
+        if not custom_content_enabled():
+            raise Problem('Включи кастомный контент в настройках', 'custom_content_disabled', 403)
         if mines_current(): raise Problem('Сначала заверши текущую игру')
         count=integer(body.get('mines'),1,24); rows=selected(body)
         if len(rows)!=1: raise Problem('Выбери одного брейнрота для ставки')
@@ -1774,7 +1804,7 @@ def health():
 
 @app.get('/img/<path:name>')
 def image(name):
-    if name in ['logo.svg','coin.webp']:
+    if name in ['logo.svg','coin.webp','custom/horseman.webp','custom/rodomits.webp']:
         return send_from_directory(ROOT/'public'/'img',name)
     if '..' in name or any(ch not in 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/_-.' for ch in name):
         raise Problem('Неверный путь',status=404)

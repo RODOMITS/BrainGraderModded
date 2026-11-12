@@ -95,7 +95,7 @@
       fast: !!p.fast,
       showAdmin: p.showAdmin !== false,
       showOwnerAdmin: p.showOwnerAdmin !== false,
-      minesEnabled: p.minesEnabled !== false,
+      customContent: p.customContent === true,
       minesCount: Number.isInteger(p.minesCount) && p.minesCount>=1 && p.minesCount<=24 ? p.minesCount : 3,
       sound: p.sound !== false,
       volume: Number.isFinite(v) ? Math.min(100, Math.max(0, Math.round(v))) : 60,
@@ -329,7 +329,7 @@
   const stale = (t) => t !== state.render;
 
   async function api(path, { method = 'GET', body, media = false } = {}) {
-    const headers = { 'X-Play-Session': window.playSession };
+    const headers = { 'X-Play-Session': window.playSession, 'X-Custom-Content': prefs.customContent ? '1' : '0' };
     if (TG?.initData) headers.authorization = 'tma ' + TG.initData;
     else if (DEV_ID) headers.authorization = 'dev ' + DEV_ID;
     const multipart = body instanceof FormData;
@@ -502,7 +502,7 @@
         { id: 'mystery', label: 'Мистери', href: '#/mystery', icon: 'mystery', show: () => state.cfg?.mystery?.enabled !== false },
         { id: 'dice', label: 'Колор Дайс', href: '#/dice', icon: 'dice', show: () => !!state.cfg?.dice?.enabled },
         { id: 'pass', label: 'Grader Pass', href: '#/pass', icon: 'pass', badge: 'NEW' },
-        { id: 'mines', label: 'Мины', href: '#/mines', icon: 'mines', badge: 'NEW', show: () => prefs.minesEnabled },
+        { id: 'mines', label: 'Мины', href: '#/mines', icon: 'mines', badge: 'NEW', show: () => prefs.customContent },
         { id: 'giveaways', label: 'Розыгрыши', href: '#/giveaways', icon: 'gift' },
       ],
     },
@@ -721,13 +721,12 @@
         <section class="set-group">
           <div class="set-row"><div class="grow"><b>Админка</b><p>Показывать «Админку» в меню.</p></div>${sw('showAdmin', prefs.showAdmin, 'Админка')}</div>
           ${state.me?.isOwner ? `<div class="set-row"><div class="grow"><b>Овнерская админка</b><p>Показывать панель владельца в меню</p></div>${sw('showOwnerAdmin', prefs.showOwnerAdmin, 'Овнерская админка')}</div>` : ''}
-          <div class="set-row"><div class="grow"><b>Мины</b><p>Поле с алмазами и минами, ставка брейнротом</p></div>${sw('minesEnabled', prefs.minesEnabled, 'Мины')}</div>
+          <div class="set-row"><div class="grow"><b>Кастомный контент</b><p>Мины, Headless Horseman и кейс RODOMITS</p></div>${sw('customContent', prefs.customContent, 'Кастомный контент')}</div>
         </section>
       </div>`);
     openSheet('Настройки', body);
     const save = () => {
       savePrefs(); applyStreamer(); syncSpeedSound(); applyAdminVisibility(); drawTopnav();
-      if (!prefs.minesEnabled && location.hash.startsWith('#/mines')) location.hash='#/';
       if (!prefs.showOwnerAdmin && currentSection() === 'owner') location.hash = '#/';
     };
     $$('.sw', body).forEach((b) => (b.onclick = () => {
@@ -737,7 +736,7 @@
       else if (k === 'fast') on = prefs.fast = !prefs.fast;
       else if (k === 'showOwnerAdmin') on = prefs.showOwnerAdmin = !prefs.showOwnerAdmin;
       else if (k === 'showAdmin') on = prefs.showAdmin = !prefs.showAdmin;
-      else if (k === 'minesEnabled') on = prefs.minesEnabled = !prefs.minesEnabled;
+      else if (k === 'customContent') on = prefs.customContent = !prefs.customContent;
       else if (k === 'sm') { on = sm.on = !sm.on; $('#smSub', body).classList.toggle('off', !on); }
       else if (k === 'hover') on = sm.hover = !sm.hover;
       else if (k.startsWith('hide:')) { const id = k.slice(5); on = sm.hide[id] = !sm.hide[id]; }
@@ -745,6 +744,12 @@
       b.setAttribute('aria-checked', on);
       tick();
       save();
+      if (k === 'customContent') {
+        adminHost?.remove();
+        adminHost = null;
+        if (!prefs.customContent && currentSection() === 'mines') location.hash = '#/';
+        else route();
+      }
       if (k === 'sound' && on) sfx.tick();
     }));
     const vol = $('#setVol', body);
@@ -2761,8 +2766,8 @@
   })();
 
   async function renderMines() {
-    if (!prefs.minesEnabled) {
-      view.innerHTML='<div class="empty">Включи «Мины» в настройках раздела «Моддед»</div>';
+    if (!prefs.customContent) {
+      view.innerHTML='<div class="empty">Включи «Кастомный контент» в настройках</div>';
       return;
     }
     const t=state.render;
