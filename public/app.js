@@ -95,7 +95,6 @@
       fast: !!p.fast,
       showAdmin: p.showAdmin !== false,
       showOwnerAdmin: p.showOwnerAdmin !== false,
-      modded: p.modded !== false,
       minesEnabled: p.minesEnabled !== false,
       minesCount: Number.isInteger(p.minesCount) && p.minesCount>=1 && p.minesCount<=24 ? p.minesCount : 3,
       sound: p.sound !== false,
@@ -109,7 +108,7 @@
     };
   })();
   const savePrefs = () => { try { localStorage.setItem('bg_prefs', JSON.stringify(prefs)); } catch {} };
-  const applyAdminVisibility = () => document.documentElement.classList.toggle('admin-concealed', !(prefs.modded && prefs.showAdmin));
+  const applyAdminVisibility = () => document.documentElement.classList.toggle('admin-concealed', !prefs.showAdmin);
   applyAdminVisibility();
 
   // ---------- Звуки: синтезируем на лету, без файлов. Мягкие щелчки ленты и короткие аккорды ----------
@@ -503,7 +502,7 @@
         { id: 'mystery', label: 'Мистери', href: '#/mystery', icon: 'mystery', show: () => state.cfg?.mystery?.enabled !== false },
         { id: 'dice', label: 'Колор Дайс', href: '#/dice', icon: 'dice', show: () => !!state.cfg?.dice?.enabled },
         { id: 'pass', label: 'Grader Pass', href: '#/pass', icon: 'pass', badge: 'NEW' },
-        { id: 'mines', label: 'Мины', href: '#/mines', icon: 'mines', badge: 'NEW', show: () => prefs.modded && prefs.minesEnabled },
+        { id: 'mines', label: 'Мины', href: '#/mines', icon: 'mines', badge: 'NEW', show: () => prefs.minesEnabled },
         { id: 'giveaways', label: 'Розыгрыши', href: '#/giveaways', icon: 'gift' },
       ],
     },
@@ -719,28 +718,16 @@
             </div>
           </div>
         </section>
-        <section class="set-group ${prefs.modded ? '' : 'modded-off'}" id="moddedSettings">
-          <div class="set-row main">
-            <div class="grow"><b>Моддед</b><p>Дополнительные возможности</p></div>
-            ${sw('modded', prefs.modded, 'Моддед')}
-          </div>
-          <div class="set-row"><div class="grow"><b>Админка</b><p>Показывать «Админку» в меню. При включении также включается «Моддед».</p></div>${sw('showAdmin', prefs.modded && prefs.showAdmin, 'Админка')}</div>
+        <section class="set-group">
+          <div class="set-row"><div class="grow"><b>Админка</b><p>Показывать «Админку» в меню.</p></div>${sw('showAdmin', prefs.showAdmin, 'Админка')}</div>
           ${state.me?.isOwner ? `<div class="set-row"><div class="grow"><b>Овнерская админка</b><p>Показывать панель владельца в меню</p></div>${sw('showOwnerAdmin', prefs.showOwnerAdmin, 'Овнерская админка')}</div>` : ''}
-          <div class="set-sub modded-sub">
-            <div class="set-row"><div class="grow"><b>Мины</b><p>Поле с алмазами и минами, ставка брейнротом</p></div>${sw('minesEnabled', prefs.minesEnabled, 'Мины')}</div>
-          </div>
+          <div class="set-row"><div class="grow"><b>Мины</b><p>Поле с алмазами и минами, ставка брейнротом</p></div>${sw('minesEnabled', prefs.minesEnabled, 'Мины')}</div>
         </section>
       </div>`);
     openSheet('Настройки', body);
     const save = () => {
       savePrefs(); applyStreamer(); syncSpeedSound(); applyAdminVisibility(); drawTopnav();
-      $('#moddedSettings',body).classList.toggle('modded-off',!prefs.modded);
-      for (const [key, enabled] of [['modded', prefs.modded], ['showAdmin', prefs.modded && prefs.showAdmin]]) {
-        const toggle = $(`[data-k="${key}"]`, body);
-        toggle.classList.toggle('on', enabled);
-        toggle.setAttribute('aria-checked', enabled);
-      }
-      if (!(prefs.modded && prefs.minesEnabled) && location.hash.startsWith('#/mines')) location.hash='#/';
+      if (!prefs.minesEnabled && location.hash.startsWith('#/mines')) location.hash='#/';
       if (!prefs.showOwnerAdmin && currentSection() === 'owner') location.hash = '#/';
     };
     $$('.sw', body).forEach((b) => (b.onclick = () => {
@@ -749,14 +736,7 @@
       if (k === 'sound') { on = prefs.sound = !prefs.sound; $('.set-vol', body).classList.toggle('off', !on); }
       else if (k === 'fast') on = prefs.fast = !prefs.fast;
       else if (k === 'showOwnerAdmin') on = prefs.showOwnerAdmin = !prefs.showOwnerAdmin;
-      else if (k === 'showAdmin') {
-        on = prefs.showAdmin = !(prefs.modded && prefs.showAdmin);
-        if (on) prefs.modded = true;
-      }
-      else if (k === 'modded') {
-        on = prefs.modded = !prefs.modded;
-        if (on) prefs.showAdmin = true;
-      }
+      else if (k === 'showAdmin') on = prefs.showAdmin = !prefs.showAdmin;
       else if (k === 'minesEnabled') on = prefs.minesEnabled = !prefs.minesEnabled;
       else if (k === 'sm') { on = sm.on = !sm.on; $('#smSub', body).classList.toggle('off', !on); }
       else if (k === 'hover') on = sm.hover = !sm.hover;
@@ -2749,7 +2729,7 @@
   })();
 
   async function renderMines() {
-    if (!(prefs.modded && prefs.minesEnabled)) {
+    if (!prefs.minesEnabled) {
       view.innerHTML='<div class="empty">Включи «Мины» в настройках раздела «Моддед»</div>';
       return;
     }
@@ -4687,7 +4667,7 @@
     addEventListener('hashchange', route);
     route();
     // Keep the admin document ready so opening it does not navigate away or reload its catalogue.
-    if(prefs.modded&&prefs.showAdmin)setTimeout(prepareAdmin,1500);
+    if(prefs.showAdmin)setTimeout(prepareAdmin,1500);
     if (showWelcome) await showModdedWelcome();
     streakCheckin();
   }

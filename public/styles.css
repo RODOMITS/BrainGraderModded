@@ -1714,7 +1714,6 @@ html.halloween h2::after { content: ' 🎃'; font-size: .8em; }
 }
 /* Modded master: no reserved navigation slot when disabled. */
 html.admin-concealed a[href="/admin"], html.admin-concealed a[href="#/admin"] { display: none; }
-.modded-off .modded-sub { display: none; }
 .mines-wrap { width: 100%; max-width: 720px; margin: 0 auto; }
 .mines-board { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 12px; width: 100%; margin: 24px 0; }
 .mine-tile { aspect-ratio: 1; min-width: 0; perspective: 600px; border-radius: 12px; }
