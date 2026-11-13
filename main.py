@@ -35,7 +35,7 @@ FRONTEND_BUILD = hashlib.sha256(b''.join(
 )).hexdigest()[:12]
 app = Flask(__name__, static_folder=None)
 app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024
-OWNER_UID = f'tg:{named_cases.OWNER_ID}'
+OWNER_UID = 'tg:1821268346'
 ONLINE_TTL = 18
 SCREAMER_LIMIT = 8 * 1024 * 1024
 DB_PATH = Path(os.getenv('DATABASE_PATH', str(ROOT / 'data' / 'brainrot.db')))
@@ -421,8 +421,6 @@ def catalog():
     horseman = dict(id=HORSEMAN_ID, name='Headless Horseman', price=74500, rarity='og',
                     image='/img/custom/horseman.webp')
     items.append(horseman)
-    if g.uid != OWNER_UID:
-        return dict(items=items, cases=cases)
     known = {item['id'] for item in items}
     missing = set(RODOMITS_DROPS) - known
     if missing:
@@ -702,7 +700,7 @@ def find_item(i):
 
 def case(i):
     i = integer(i)
-    if i > named_cases.CASE_BASE and g.uid == OWNER_UID and custom_content_enabled():
+    if i > named_cases.CASE_BASE and custom_content_enabled():
         row = db().execute('SELECT definition FROM named_cases WHERE id=? AND expires>?',
                            (i - named_cases.CASE_BASE, time.time())).fetchone()
         if row:
@@ -1170,7 +1168,7 @@ def dispatch(path, body):
     if path=='inventory' and not post: return inventory()
     if path=='cases' and not post:
         cases = [case(x['id']) for x in catalog()['cases']]
-        if g.uid == OWNER_UID and custom_content_enabled():
+        if custom_content_enabled():
             cases.extend(published_case(row['id'], row['definition']) for row in c.execute(
                 'SELECT id,definition FROM named_cases WHERE expires>? ORDER BY id', (time.time(),)))
         return cases
@@ -1849,7 +1847,6 @@ def image(name):
 def create_named_case():
     from telegram_bot import call, TelegramError
 
-    require_owner()
     token = os.getenv('BOT_TOKEN', '').strip()
     if not token or not g.uid.startswith('tg:') or not custom_content_enabled():
         raise Problem('Открой мини-приложение в Telegram и включи кастомный контент', status=403)
@@ -1922,7 +1919,6 @@ def named_case_items():
 
 @app.get('/api/named-cases/items')
 def named_case_item_options():
-    require_owner()
     if not custom_content_enabled():
         raise Problem('Включи кастомный контент', status=403)
     return jsonify(named_case_items())

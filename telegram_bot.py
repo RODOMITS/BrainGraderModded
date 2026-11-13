@@ -131,7 +131,7 @@ def case_payment_update(token, app_url, database_path, update):
         elif payload:
             uid = message['from']['id']
             order = (named_cases.lookup(conn, payload, uid)
-                     if uid == named_cases.OWNER_ID and not named_cases.active_case(conn, f'tg:{uid}') else None)
+                     if not named_cases.active_case(conn, f'tg:{uid}') else None)
     if query:
         answer = dict(pre_checkout_query_id=query['id'], ok=allowed)
         if not allowed:

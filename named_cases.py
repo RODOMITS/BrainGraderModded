@@ -6,7 +6,6 @@ import time
 from urllib.request import Request, urlopen
 
 STARS = 15
-OWNER_ID = 1821268346
 WEEK = 168 * 3600
 CASE_BASE = 610_000_000
 PREFIX = 'named_'
@@ -66,7 +65,7 @@ def active_case(conn, author):
 
 def authorize(conn, query):
     uid = query['from']['id']
-    if uid != OWNER_ID or query['currency'] != 'XTR' or query['total_amount'] != STARS:
+    if query['currency'] != 'XTR' or query['total_amount'] != STARS:
         return False
     now = time.time()
     row = lookup(conn, query['invoice_payload'], query['from']['id'])
