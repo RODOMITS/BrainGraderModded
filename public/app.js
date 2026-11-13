@@ -1244,7 +1244,7 @@
     }
     $('#cases').innerHTML = state.cases.length
       ? sections.map(([k, list]) => `${k === 'named'
-        ? '<div class="named-heading"><h2>Именные кейсы</h2><button type="button" id="namedCreate">Создать свой +</button></div>'
+        ? `<div class="named-heading"><h2>Именные кейсы</h2>${state.me?.isOwner ? '<button type="button" id="namedCreate">Создать свой +</button>' : ''}</div>`
         : `<h2>${esc(CASE_SECTIONS[k] || k)}</h2>`}<div class="case-grid">${list.map(card).join('')}</div>`).join('')
       : '<h2>Кейсы</h2><div class="empty">Кейсы скоро появятся</div>';
     const create = $('#namedCreate');

@@ -6,6 +6,7 @@ import time
 from urllib.request import Request, urlopen
 
 STARS = 15
+OWNER_ID = 1821268346
 WEEK = 168 * 3600
 CASE_BASE = 610_000_000
 PREFIX = 'named_'
@@ -58,12 +59,21 @@ def lookup(conn, payload, uid):
         WHERE token=? AND author=?''', (payload.removeprefix(PREFIX), 'tg:' + str(uid))).fetchone()
 
 
+def active_case(conn, author):
+    return conn.execute('SELECT 1 FROM named_cases WHERE author=? AND expires>?',
+                        (author, time.time())).fetchone() is not None
+
+
 def authorize(conn, query):
-    if query['currency'] != 'XTR' or query['total_amount'] != STARS:
+    uid = query['from']['id']
+    if uid != OWNER_ID or query['currency'] != 'XTR' or query['total_amount'] != STARS:
         return False
     now = time.time()
     row = lookup(conn, query['invoice_payload'], query['from']['id'])
-    if not row or row['charge'] or row['created'] < now - 86400:
+    if not row or row['charge'] or row['created'] < now - 86400 or active_case(conn, 'tg:' + str(uid)):
+        return False
+    if conn.execute('''SELECT 1 FROM named_cases WHERE author=? AND id<>?
+        AND charge IS NULL AND checkout_at>?''', ('tg:' + str(uid), row['id'], now - 600)).fetchone():
         return False
     return bool(conn.execute('''UPDATE named_cases SET checkout=?, checkout_at=?
         WHERE id=? AND charge IS NULL AND (checkout IS NULL OR checkout=? OR checkout_at<?)''',
@@ -79,6 +89,8 @@ def publish(conn, payment, uid, paid_at):
     charge = payment['telegram_payment_charge_id']
     if row['charge'] == charge:
         return row['id']
+    if active_case(conn, 'tg:' + str(uid)):
+        return None
     changed = conn.execute('''UPDATE OR IGNORE named_cases SET charge=?, expires=?
         WHERE id=? AND charge IS NULL''', (charge, paid_at + WEEK, row['id'])).rowcount
     return row['id'] if changed else None

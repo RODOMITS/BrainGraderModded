@@ -35,7 +35,7 @@ FRONTEND_BUILD = hashlib.sha256(b''.join(
 )).hexdigest()[:12]
 app = Flask(__name__, static_folder=None)
 app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024
-OWNER_UID = 'tg:1821268346'
+OWNER_UID = f'tg:{named_cases.OWNER_ID}'
 ONLINE_TTL = 18
 SCREAMER_LIMIT = 8 * 1024 * 1024
 DB_PATH = Path(os.getenv('DATABASE_PATH', str(ROOT / 'data' / 'brainrot.db')))
@@ -1847,6 +1847,7 @@ def image(name):
 def create_named_case():
     from telegram_bot import call, TelegramError
 
+    require_owner()
     token = os.getenv('BOT_TOKEN', '').strip()
     if not token or not g.uid.startswith('tg:') or not custom_content_enabled():
         raise Problem('Открой мини-приложение в Telegram и включи кастомный контент', status=403)
@@ -1879,6 +1880,8 @@ def create_named_case():
     now = time.time()
     with c:
         c.execute('BEGIN IMMEDIATE')
+        if named_cases.active_case(c, g.uid):
+            raise Problem('У тебя уже есть активный именной кейс', status=409)
         key = 'named-cover:' + g.uid
         last = c.execute('SELECT value FROM settings WHERE key=?', (key,)).fetchone()
         if last and now - float(last[0]) < 30:
@@ -1898,6 +1901,9 @@ def create_named_case():
                       items=[dict(item, weight=drop['weight']) for item, drop in zip(items, weights['items'])])
     order = secrets.token_urlsafe(24)
     with c:
+        c.execute('BEGIN IMMEDIATE')
+        if named_cases.active_case(c, g.uid):
+            raise Problem('У тебя уже есть активный именной кейс', status=409)
         c.execute('DELETE FROM named_cases WHERE charge IS NULL AND created<?', (now - 7 * 86400,))
         c.execute('INSERT INTO named_cases(author,token,definition,cover,created) VALUES (?,?,?,?,?)',
                   (g.uid, order, json.dumps(definition), cover, now))
@@ -1914,6 +1920,7 @@ def named_case_items():
 
 @app.get('/api/named-cases/items')
 def named_case_item_options():
+    require_owner()
     if not custom_content_enabled():
         raise Problem('Включи кастомный контент', status=403)
     return jsonify(named_case_items())
