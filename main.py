@@ -421,6 +421,8 @@ def catalog():
     horseman = dict(id=HORSEMAN_ID, name='Headless Horseman', price=74500, rarity='og',
                     image='/img/custom/horseman.webp')
     items.append(horseman)
+    if g.uid != OWNER_UID:
+        return dict(items=items, cases=cases)
     known = {item['id'] for item in items}
     missing = set(RODOMITS_DROPS) - known
     if missing:
@@ -700,7 +702,7 @@ def find_item(i):
 
 def case(i):
     i = integer(i)
-    if i > named_cases.CASE_BASE and custom_content_enabled():
+    if i > named_cases.CASE_BASE and g.uid == OWNER_UID and custom_content_enabled():
         row = db().execute('SELECT definition FROM named_cases WHERE id=? AND expires>?',
                            (i - named_cases.CASE_BASE, time.time())).fetchone()
         if row:
@@ -1168,7 +1170,7 @@ def dispatch(path, body):
     if path=='inventory' and not post: return inventory()
     if path=='cases' and not post:
         cases = [case(x['id']) for x in catalog()['cases']]
-        if custom_content_enabled():
+        if g.uid == OWNER_UID and custom_content_enabled():
             cases.extend(published_case(row['id'], row['definition']) for row in c.execute(
                 'SELECT id,definition FROM named_cases WHERE expires>? ORDER BY id', (time.time(),)))
         return cases
