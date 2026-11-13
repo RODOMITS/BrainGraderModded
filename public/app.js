@@ -1237,9 +1237,88 @@
       if (!groups.has(k)) groups.set(k, []);
       groups.get(k).push(c);
     }
+    const sections = [...groups].filter(([key]) => key !== 'named');
+    if (groups.has('named')) {
+      const platinum = sections.findIndex(([key]) => key === 'platina');
+      sections.splice(platinum < 0 ? sections.length : platinum, 0, ['named', groups.get('named')]);
+    }
     $('#cases').innerHTML = state.cases.length
-      ? [...groups].map(([k, list]) => `<h2>${esc(CASE_SECTIONS[k] || k)}</h2><div class="case-grid">${list.map(card).join('')}</div>`).join('')
+      ? sections.map(([k, list]) => `${k === 'named'
+        ? '<div class="named-heading"><h2>Именные кейсы</h2><button type="button" id="namedCreate">Создать свой +</button></div>'
+        : `<h2>${esc(CASE_SECTIONS[k] || k)}</h2>`}<div class="case-grid">${list.map(card).join('')}</div>`).join('')
       : '<h2>Кейсы</h2><div class="empty">Кейсы скоро появятся</div>';
+    const create = $('#namedCreate');
+    if (create) create.onclick = openNamedCaseCreator;
+  }
+
+  async function openNamedCaseCreator() {
+    if (!TG?.initData) return toast('Открой мини-приложение в Telegram');
+    const form = h(`<form class="named-form">
+      <label>Название<input name="name" maxlength="40" required></label>
+      <label>Цена крутки в BG<input name="price" type="number" min="1" max="1000000000" required></label>
+      <label>Обложка<input name="cover" type="file" accept="image/png,image/jpeg,image/webp" required></label>
+      <label>Описание<textarea name="description" maxlength="300" rows="3" required></textarea></label>
+      <label>Найти брейнрота<input type="search" data-search placeholder="Название предмета"></label>
+      <div class="named-options" data-options></div>
+      <p class="muted" data-selected>Выбери от 2 до 20 предметов</p>
+      <p class="muted">Кейс появится в общем каталоге на 168 часов после оплаты. Обложка проверяется перед оплатой.</p>
+      <button type="submit" class="btn" disabled>Создать (15⭐)</button>
+      <p data-status role="status"></p>
+    </form>`);
+    openSheet('Именной кейс', form);
+    const options = $('[data-options]', form);
+    const search = $('[data-search]', form);
+    const status = $('[data-status]', form);
+    const selected = $('[data-selected]', form);
+    const submit = $('button[type="submit"]', form);
+    const drops = new Set();
+    let items;
+    try {
+      items = await api('/api/named-cases/items');
+    } catch (error) {
+      status.textContent = error.message;
+      return;
+    }
+    const draw = () => {
+      const term = search.value.trim().toLowerCase();
+      options.innerHTML = items.filter(item => item.name.toLowerCase().includes(term)).map(item => `
+        <label><input type="checkbox" value="${item.id}" ${drops.has(item.id) ? 'checked' : ''}>
+        <img src="${itemImg(item.image)}" loading="lazy" alt=""><span>${esc(item.name)} · ${fmt(item.price)} BG</span></label>`).join('');
+    };
+    search.oninput = draw;
+    options.onchange = event => {
+      const input = event.target;
+      const id = Number(input.value);
+      if (input.checked && drops.size >= 20) {
+        input.checked = false;
+        return;
+      }
+      if (input.checked) drops.add(id);
+      else drops.delete(id);
+      selected.textContent = `Выбрано: ${drops.size} / 20`;
+      submit.disabled = drops.size < 2;
+    };
+    draw();
+    form.onsubmit = async event => {
+      event.preventDefault();
+      submit.disabled = true;
+      status.textContent = 'Проверяю обложку…';
+      const body = new FormData(form);
+      for (const id of drops) body.append('drop', id);
+      try {
+        const { url } = await api('/api/named-cases', { method: 'POST', body });
+        const link = document.createElement('a');
+        link.href = url;
+        link.textContent = 'Перейти к оплате в боте';
+        status.replaceChildren(link);
+        submit.hidden = true;
+        TG.openTelegramLink(url);
+      } catch (error) {
+        if (!submit.hidden) status.textContent = error.message;
+      } finally {
+        submit.disabled = drops.size < 2;
+      }
+    };
   }
 
   // =====================================================================
@@ -1802,6 +1881,7 @@
       </div>
       ${cs.freeKind ? '<div class="free-box hidden" id="freeBox"></div>' : ''}
       <button class="btn open-btn" id="open"></button>
+      ${cs.description ? `<p class="named-description">${esc(cs.description)}</p>` : ''}
       ${cs.freeKind ? '' : '<button class="link-btn promo-open" id="promoOpen">Открыть по промокоду</button>'}
       <h2>Что внутри</h2>
       <div class="items">${cs.items.map((i) => itemCard(i)).join('')}</div>`;

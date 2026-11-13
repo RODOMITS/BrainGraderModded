@@ -20,6 +20,8 @@ from urllib.error import HTTPError
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 import grader_pass
+import named_cases
+from PIL import Image
 
 from flask import Flask, Response, g, jsonify, redirect, request, send_file, send_from_directory
 
@@ -345,6 +347,7 @@ def init_db():
           PRIMARY KEY(giveaway_id,user_id));
         ''')
         c.executescript(grader_pass.SCHEMA)
+        c.executescript(named_cases.SCHEMA)
         c.execute('BEGIN IMMEDIATE')
         if 'captions' not in {row['name'] for row in c.execute('PRAGMA table_info(screamers)')}:
             c.execute("ALTER TABLE screamers ADD COLUMN captions TEXT NOT NULL DEFAULT '[]'")
@@ -409,7 +412,7 @@ def catalog():
         known = {item['id'] for item in data['items']}
         data['items'].extend(dict(item) for item in session['items'] if item['id'] not in known)
     items = [item for item in data['items'] if item['id'] != HORSEMAN_ID]
-    cases = [cs for cs in data['cases'] if cs['id'] != RODOMITS_CASE_ID]
+    cases = [cs for cs in data['cases'] if cs['id'] < named_cases.CASE_BASE and cs['id'] != RODOMITS_CASE_ID]
     if not custom_content_enabled():
         cases = [dict(cs, items=[drop for drop in cs['items'] if drop['itemId'] != HORSEMAN_ID])
                  for cs in cases if any(drop['itemId'] != HORSEMAN_ID for drop in cs['items'])]
@@ -423,14 +426,12 @@ def catalog():
     if missing:
         source = json.loads((ROOT / 'source_catalog.json').read_text(encoding='utf-8-sig'))
         items.extend(item for item in source['items'] if item['id'] in missing)
-    rodomits = dict(id=RODOMITS_CASE_ID, name='RODOMITS', price=20000, category='standard',
+    rodomits = dict(id=RODOMITS_CASE_ID, name='RODOMITS', price=20000, category='named',
+                    description='Именной кейс RODOMITS.',
                     image='/img/custom/rodomits.webp', freeKind=None,
                     items=[dict(itemId=item_id) for item_id in (*RODOMITS_DROPS, HORSEMAN_ID)])
     apply_case_rarity_weights(dict(items=items, cases=[rodomits]))
-    last_standard = max((index for index, cs in enumerate(cases)
-                         if (cs.get('category') or 'standard') == 'standard'), default=len(cases) - 1)
-    cases.insert(last_standard + 1, rodomits)
-    return dict(items=items, cases=cases)
+    return dict(items=items, cases=[*cases, rodomits])
 
 
 def user():
@@ -698,12 +699,24 @@ def find_item(i):
 
 
 def case(i):
+    i = integer(i)
+    if i > named_cases.CASE_BASE and custom_content_enabled():
+        row = db().execute('SELECT definition FROM named_cases WHERE id=? AND expires>?',
+                           (i - named_cases.CASE_BASE, time.time())).fetchone()
+        if row:
+            return published_case(i - named_cases.CASE_BASE, row['definition'])
     cat = catalog()
-    cs = next((x for x in cat['cases'] if x['id']==integer(i)), None)
+    cs = next((x for x in cat['cases'] if x['id']==i), None)
     if not cs:
         raise Problem('Кейс не найден', 'not_found',404)
     pool = {x['id']:x for x in cat['items']}
     return dict(cs, items=[dict(pool[x['itemId']],weight=x['weight']) for x in cs['items']], itemsCount=len(cs['items']))
+
+
+def published_case(row_id, definition):
+    data = json.loads(definition)
+    return dict(data, id=named_cases.CASE_BASE + row_id, category='named', freeKind=None,
+                image=f'/img/named/{row_id}.png', itemsCount=len(data['items']))
 
 
 def config():
@@ -1153,7 +1166,12 @@ def dispatch(path, body):
     if path in ('ping','diag'): return dict(ok=True)
     if path=='avatar': raise Problem('Нет аватара','not_found',404)
     if path=='inventory' and not post: return inventory()
-    if path=='cases' and not post: return [case(x['id']) for x in catalog()['cases']]
+    if path=='cases' and not post:
+        cases = [case(x['id']) for x in catalog()['cases']]
+        if custom_content_enabled():
+            cases.extend(published_case(row['id'], row['definition']) for row in c.execute(
+                'SELECT id,definition FROM named_cases WHERE expires>? ORDER BY id', (time.time(),)))
+        return cases
     if path.startswith('cases/') and len(parts)==2 and not post: return case(parts[1])
     if path.startswith('cases/') and path.endswith('/free') and not post:
         cs=case(parts[1]); r=c.execute('SELECT until FROM cooldown WHERE user_id=? AND case_id=?',(g.uid,cs['id'])).fetchone()
@@ -1508,6 +1526,10 @@ def dispatch(path, body):
         return dict(ok=True,ids=[add_item(it,'admin',uid=uid) for _ in range(qty)])
     if path=='admin/catalog' and post:
         body = {k:v for k,v in body.items() if k!='key'}
+        if isinstance(body.get('cases'), list):
+            for cs in body['cases']:
+                if isinstance(cs, dict) and cs.get('id') == RODOMITS_CASE_ID:
+                    cs['category'] = 'standard'
         validate_catalog(body)
         if any(item.get('customSession') for item in body['items']):
             custom_session(create=True)['catalog']=body
@@ -1807,11 +1829,94 @@ def health():
 
 @app.get('/img/<path:name>')
 def image(name):
+    match = re.fullmatch(r'named/([0-9]{1,9})\.png', name)
+    if match:
+        row = db().execute('SELECT cover FROM named_cases WHERE id=? AND expires>?',
+                           (int(match[1]), time.time())).fetchone()
+        if not row:
+            raise Problem('Обложка недоступна', 'not_found', 404)
+        return Response(row['cover'], mimetype='image/png', headers={'Cache-Control': 'no-store'})
     if name in ['logo.svg','coin.webp','custom/horseman.webp','custom/rodomits.webp']:
         return send_from_directory(ROOT/'public'/'img',name)
     if '..' in name or any(ch not in 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/_-.' for ch in name):
         raise Problem('Неверный путь',status=404)
     return redirect('https://brainrotgrader.com/img/'+name,302)
+
+
+@app.post('/api/named-cases')
+def create_named_case():
+    from telegram_bot import call, TelegramError
+
+    token = os.getenv('BOT_TOKEN', '').strip()
+    if not token or not g.uid.startswith('tg:') or not custom_content_enabled():
+        raise Problem('Открой мини-приложение в Telegram и включи кастомный контент', status=403)
+    name = request.form.get('name', '').strip()
+    description = request.form.get('description', '').strip()
+    if not 1 <= len(name) <= 40 or not 1 <= len(description) <= 300:
+        raise Problem('Название до 40 символов, описание до 300')
+    price = integer(request.form.get('price'))
+    ids = list(dict.fromkeys(integer(value) for value in request.form.getlist('drop')))
+    if not 2 <= len(ids) <= 20:
+        raise Problem('Выбери от 2 до 20 предметов')
+    pool = {item['id']: item for item in named_case_items()}
+    if any(item_id not in pool for item_id in ids):
+        raise Problem('Один из предметов отсутствует в общем каталоге')
+    upload = request.files.get('cover')
+    try:
+        if not upload:
+            raise ValueError
+        with Image.open(upload.stream) as img:
+            if img.format not in ('PNG', 'JPEG', 'WEBP') or img.width * img.height > 4_000_000 or getattr(img, 'n_frames', 1) != 1:
+                raise ValueError
+            img = img.convert('RGBA')
+            img.thumbnail((768, 768))
+            output = BytesIO()
+            img.save(output, 'PNG')
+        cover = output.getvalue()
+    except (OSError, ValueError, Image.DecompressionBombError):
+        raise Problem('Загрузи обычную PNG, JPEG или WebP до 4 мегапикселей') from None
+    c = db()
+    now = time.time()
+    with c:
+        c.execute('BEGIN IMMEDIATE')
+        key = 'named-cover:' + g.uid
+        last = c.execute('SELECT value FROM settings WHERE key=?', (key,)).fetchone()
+        if last and now - float(last[0]) < 30:
+            raise Problem('Подожди 30 секунд перед новой проверкой', status=429)
+        c.execute('INSERT OR REPLACE INTO settings VALUES (?,?)', (key, str(now)))
+    try:
+        named_cases.check_cover(cover)
+        bot = call(token, 'getMe', {}, timeout=5)
+    except ValueError as error:
+        raise Problem(str(error)) from None
+    except TelegramError:
+        raise Problem('Бот временно недоступен', status=503) from None
+    items = [pool[item_id] for item_id in ids]
+    weights = dict(items=[dict(itemId=item_id) for item_id in ids])
+    apply_case_rarity_weights(dict(items=items, cases=[weights]))
+    definition = dict(name=name, description=description, price=price,
+                      items=[dict(item, weight=drop['weight']) for item, drop in zip(items, weights['items'])])
+    order = secrets.token_urlsafe(24)
+    with c:
+        c.execute('DELETE FROM named_cases WHERE charge IS NULL AND created<?', (now - 7 * 86400,))
+        c.execute('INSERT INTO named_cases(author,token,definition,cover,created) VALUES (?,?,?,?,?)',
+                  (g.uid, order, json.dumps(definition), cover, now))
+    return jsonify(url='https://t.me/' + bot['username'] + '?start=' + named_cases.PREFIX + order)
+
+
+def named_case_items():
+    source = original_snapshot('catalog') or json.loads((ROOT / 'source_catalog.json').read_text(encoding='utf-8-sig'))
+    items = [item for item in source['items'] if not item.get('coins') and item['id'] != HORSEMAN_ID]
+    items.append(dict(id=HORSEMAN_ID, name='Headless Horseman', price=74500, rarity='og',
+                      image='/img/custom/horseman.webp'))
+    return sorted(items, key=lambda item: item['price'])
+
+
+@app.get('/api/named-cases/items')
+def named_case_item_options():
+    if not custom_content_enabled():
+        raise Problem('Включи кастомный контент', status=403)
+    return jsonify(named_case_items())
 
 
 @app.get('/fonts/<path:name>')

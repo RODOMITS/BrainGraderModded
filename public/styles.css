@@ -2023,3 +2023,22 @@ html.autumn h2::after { content: ' 🍂'; font-size: .8em; }
 #screamerOverlay button { position: absolute; width: auto; }
 #screamerOverlay button[hidden] { display: none; }
 .screamer-play { z-index: 1; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+
+.named-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.named-heading button { color: var(--crystal); background: transparent; border: 0; padding: 8px 0; font: inherit; font-weight: 700; cursor: pointer; }
+.named-form { display: grid; gap: 12px; }
+.named-form > label { display: grid; gap: 6px; }
+.named-form :is(input:not([type="checkbox"]), textarea) {
+  width: 100%; min-width: 0; padding: 10px; border: 1px solid var(--ridge);
+  border-radius: 10px; background: var(--stone); color: var(--text); font: inherit;
+}
+.named-options { max-height: 220px; overflow: auto; border: 1px solid var(--ridge); border-radius: 10px; }
+.named-options label { display: flex; align-items: center; gap: 10px; padding: 6px 10px; cursor: pointer; }
+.named-options label + label { border-top: 1px solid var(--ridge); }
+.named-options img { width: 36px; height: 36px; object-fit: contain; }
+.named-form p { margin: 0; }
+.named-description {
+  margin: 8px 0; padding: 10px 12px; border: 1px solid var(--ridge);
+  border-radius: 10px; background: var(--stone); color: var(--muted);
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}

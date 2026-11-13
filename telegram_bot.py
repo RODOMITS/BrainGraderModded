@@ -3,6 +3,7 @@
 Bot API: https://core.telegram.org/bots/api#getupdates
 """
 from html import escape
+from contextlib import closing
 import hashlib
 import json
 import logging
@@ -12,6 +13,7 @@ import secrets
 import sqlite3
 import threading
 import time
+import named_cases
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
@@ -108,6 +110,57 @@ def welcome(token, app_url, message):
         call(token, 'sendMessage', payload)
 
 
+def case_payment_update(token, app_url, database_path, update):
+    query = update.get('pre_checkout_query')
+    message = update.get('message', {})
+    payment = message.get('successful_payment')
+    text = message.get('text', '').split()
+    payload = text[1] if len(text) == 2 and text[0].split('@')[0] == '/start' else ''
+    if not (query or payment or payload.startswith(named_cases.PREFIX) or text == ['/paysupport']):
+        return False
+    if not query and message.get('chat', {}).get('type') != 'private':
+        return True
+    with closing(sqlite3.connect(database_path, timeout=4)) as conn, conn:
+        conn.row_factory = sqlite3.Row
+        if query:
+            conn.execute('BEGIN IMMEDIATE')
+            allowed = named_cases.authorize(conn, query)
+        elif payment:
+            conn.execute('BEGIN IMMEDIATE')
+            case_id = named_cases.publish(conn, payment, message['from']['id'], message['date'])
+        elif payload:
+            order = named_cases.lookup(conn, payload, message['from']['id'])
+    if query:
+        answer = dict(pre_checkout_query_id=query['id'], ok=allowed)
+        if not allowed:
+            answer['error_message'] = 'Этот заказ недоступен или уже оплачен.'
+        call(token, 'answerPreCheckoutQuery', answer, timeout=5)
+        return True
+    chat_id = message['chat']['id']
+    if payment:
+        if case_id:
+            call(token, 'sendMessage', {
+                'chat_id': chat_id, 'text': 'Кейс опубликован на 168 часов. Включи кастомный контент, чтобы увидеть его.',
+                'reply_markup': {'inline_keyboard': [[{'text': 'Открыть кейс', 'web_app': {
+                    'url': app_url.split('#', 1)[0] + '#/case/' + str(named_cases.CASE_BASE + case_id),
+                }}]]},
+            }, timeout=5)
+        else:
+            call(token, 'sendMessage', {'chat_id': chat_id, 'text': 'Платёж получен, но заказ не опубликован. Напиши /paysupport.'})
+    elif payload and order and not order['charge'] and order['created'] >= time.time() - 86400:
+        call(token, 'sendInvoice', {
+            'chat_id': chat_id, 'title': 'Именной кейс',
+            'description': 'Публикация именного кейса в Brainrot Grader MODDED на 168 часов.',
+            'payload': payload, 'currency': 'XTR', 'start_parameter': payload,
+            'prices': [{'label': 'Публикация кейса', 'amount': named_cases.STARS}],
+        }, timeout=5)
+    else:
+        reply = ('По оплате напиши @RODOMITS и приложи квитанцию Telegram.'
+                 if not payload else 'Заказ недоступен или уже оплачен. Неоплаченный заказ действует сутки.')
+        call(token, 'sendMessage', {'chat_id': chat_id, 'text': reply}, timeout=5)
+    return True
+
+
 def polling(token, app_url, database_path):
     # Scope the saved position to this bot, without storing its token.
     key = 'telegram_offset_' + hashlib.sha256(token.encode()).hexdigest()[:16]
@@ -118,12 +171,13 @@ def polling(token, app_url, database_path):
     while True:
         try:
             updates = call(token, 'getUpdates', {
-                'offset': offset, 'timeout': 25, 'allowed_updates': ['message'],
+                'offset': offset, 'timeout': 25, 'allowed_updates': ['message', 'pre_checkout_query'],
             })
             for update in updates:
-                if 'message' in update:
+                if 'message' in update or 'pre_checkout_query' in update:
                     try:
-                        welcome(token, app_url, update['message'])
+                        if not case_payment_update(token, app_url, database_path, update):
+                            welcome(token, app_url, update['message'])
                     except TelegramError as error:
                         # A blocked/deleted chat must not hold up every other user.
                         if error.code not in (400, 403):
