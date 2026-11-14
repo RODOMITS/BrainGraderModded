@@ -1009,6 +1009,7 @@
     const dropForm = $('[data-drop-form]', page);
     dropForm.elements.date.value = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Moscow' }).format(new Date());
     const loadStats = async () => {
+      if (!page.isConnected) return;
       const box = $('[data-owner-stats]', page);
       try {
         const s = await api('/api/owner/stats');
@@ -1017,10 +1018,11 @@
           ['Средний онлайн за 24 ч', s.averageOnline == null ? '—' : fmt(Math.round(s.averageOnline * 10) / 10)],
           ['Средний онлайн · 09:00–21:00 МСК', s.daytimeOnline == null ? '—' : fmt(Math.round(s.daytimeOnline * 10) / 10)],
           [`Участников ${s.channel}`, s.channelMembers ?? '—'],
-          ['Доля подписанных среди всех игроков', !s.players ? '—' : s.checked < s.players ? 'Считается…' : fmt(s.percent) + '%'],
+          ['Доля подписанных среди всех игроков', !s.players ? '—' : s.checked < s.players ? 'Проверка идёт' : fmt(s.percent) + '%'],
           ['Открыто кейсов', s.cases], ['Апгрейдов', s.upgrades],
         ].map(([title, value]) => `<div><b>${esc(typeof value === 'number' ? fmt(value) : value)}</b><small>${esc(title)}</small></div>`).join('')}</div>
-        ${s.checked < s.players ? '<small class="muted">Бот проверяет подписки всех аккаунтов из базы, включая старых игроков.</small>' : ''}`;
+        ${s.checked < s.players ? `<small class="muted">Проверено ${fmt(s.checked)} из ${fmt(s.players)} игроков</small>` : ''}`;
+        if (s.checked < s.players) setTimeout(loadStats, 30000);
       } catch (error) {
         box.textContent = error.message;
       }
