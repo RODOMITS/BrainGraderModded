@@ -1993,7 +1993,7 @@ html.autumn h2::after { content: ' 🍂'; font-size: .8em; }
 .owner-panel { display: grid; gap: 14px; max-width: 720px; margin: auto; }
 .owner-panel > * { min-width: 0; }
 @media (min-width: 900px) {
-  .owner-panel { max-width: 1080px; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+  .owner-panel { max-width: 1080px; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; }
   .owner-panel > h1,
   .owner-panel > :has(> [data-owner-stats]),
   .owner-panel > :has(> [data-drop-form]) { grid-column: 1 / -1; }
