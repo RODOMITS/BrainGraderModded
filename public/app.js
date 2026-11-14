@@ -2342,6 +2342,7 @@
     $('#go').disabled = !up.target || up.spinning;
     $$('#upSeg button').forEach((b) => b.classList.toggle('on', b.dataset.t === up.tab));
     if (lists) drawUpList();
+    else if (up.view !== 'shop' && up.selected.length && up.data) drawRight();
     else markRight();
   }
 
@@ -2464,17 +2465,18 @@
       if (!families.has(target.id)) families.set(target.id, []);
       families.get(target.id).push(target);
     }
-    const targets = [...families.values()].map(family => family.find(it => !it.mutation) || family[0])
+    const displayed = family => family.find(it => sameVariant(it, up.target))
+      || family.find(it => !it.mutation) || family[0];
+    const targets = [...families.values()].map(displayed)
       .sort((a, b) => a.price - b.price || a.id - b.id);
     const select = target => {
       up.target = target;
       up.preset = up.data.presets.find(p => sameVariant(p.target, target))?.label || null;
       tick();
       drawUpgrade({ lists: false });
-      markRight();
     };
-    paint(`t|${up.data.inputValue}|${qy}|${targets.length}`, `<div class="items">${targets
-      .map(it => `<button class="item rar-${esc(it.rarity)}" data-id="${it.id}">${ogTag(it)}${itemPicture(it)}
+    paint(`t|${qy}|${JSON.stringify([...families])}|${up.target?.id}|${up.target?.mutation}`, `<div class="items">${targets
+      .map(it => `<button class="item rar-${esc(it.rarity)}" data-id="${it.id}" data-mutation="${it.mutation || ''}">${ogTag(it)}${itemPicture(it)}
         <div class="n">${esc(it.name)}</div>${price(it.price)}<small class="muted">${fmt(it.chance)}%</small>
         ${families.get(it.id).length > 1 ? mutationPicker(it) : ''}</button>`).join('') ||
         '<div class="empty">Ничего не нашлось</div>'}</div>`, ev => {
@@ -2482,7 +2484,7 @@
       if (!button || up.spinning || !up.data) return;
       const family = families.get(Number(button.dataset.id));
       if (ev.target.closest('[data-mutation-picker]')) chooseMutation(family, select);
-      else select(family.find(it => !it.mutation) || family[0]);
+      else select(displayed(family));
     });
     markRight();
   }
@@ -2490,7 +2492,9 @@
     const box = $('#upList');
     if (!box) return;
     const id = up.target?.id;
-    for (const b of box.querySelectorAll('.item[data-id]')) b.classList.toggle('sel', Number(b.dataset.id) === id);
+    for (const b of box.querySelectorAll('.item[data-id]')) {
+      b.classList.toggle('sel', Number(b.dataset.id) === id && (b.dataset.mutation || '') === (up.target?.mutation || ''));
+    }
   }
 
   function chooseMutation(variants, onPick) {
