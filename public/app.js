@@ -2434,7 +2434,7 @@
         .sort((a, b) => a.price - b.price || a.id - b.id);
       paint(`shop|${qy}`, `<div class="shop-warn">⚠️ <b>Брейнротов из магазина нельзя вывести.</b> Купленного можно поставить в апгрейд, сыграть в мистери или продать за ту же цену. А то, что выиграешь в апгрейде, выводится как обычно.</div>
         <div class="items">${list
-          .map((it) => `<button class="item rar-${esc(it.rarity)}" data-id="${it.id}">${ogTag(it)}${itemPicture(it)}<div class="n">${esc(it.name)}</div>${price(it.price)}<small class="buy-lbl">Купить</small>${it.mutations?.length ? mutationPicker : ''}</button>`)
+          .map((it) => `<button class="item rar-${esc(it.rarity)}" data-id="${it.id}">${ogTag(it)}${itemPicture(it)}<div class="n">${esc(it.name)}</div>${price(it.price)}<small class="buy-lbl">Купить</small>${it.mutations?.length ? mutationPicker(it) : ''}</button>`)
           .join('') || '<div class="empty">Ничего не нашлось</div>'}</div>`, (ev) => {
         const b = ev.target.closest('.item[data-id]');
         if (!b) return;
@@ -2476,7 +2476,7 @@
     paint(`t|${up.data.inputValue}|${qy}|${targets.length}`, `<div class="items">${targets
       .map(it => `<button class="item rar-${esc(it.rarity)}" data-id="${it.id}">${ogTag(it)}${itemPicture(it)}
         <div class="n">${esc(it.name)}</div>${price(it.price)}<small class="muted">${fmt(it.chance)}%</small>
-        ${families.get(it.id).length > 1 ? mutationPicker : ''}</button>`).join('') ||
+        ${families.get(it.id).length > 1 ? mutationPicker(it) : ''}</button>`).join('') ||
         '<div class="empty">Ничего не нашлось</div>'}</div>`, ev => {
       const button = ev.target.closest('.item[data-id]');
       if (!button || up.spinning || !up.data) return;
@@ -2509,7 +2509,10 @@
     });
   }
 
-  const mutationPicker = '<span class="mutation-picker" data-mutation-picker title="Выбрать мутацию"><img src="/img/mutations/default.webp" alt="Мутации"></span>';
+  const mutationPicker = item => {
+    const key = item.mutation || 'default';
+    return `<span class="mutation-picker" data-mutation-picker title="Выбрать мутацию"><img src="${mutationIcon(key)}" alt="${mutationName(key)}"></span>`;
+  };
 
   async function buyShop(it) {
     if (!it || up.spinning) return;
