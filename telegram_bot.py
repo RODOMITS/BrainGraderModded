@@ -237,6 +237,37 @@ def notify_presence(token, database_path, owner, ttl):
         time.sleep(5)
 
 
+def refresh_subscriptions(token, database_path):
+    after = ''
+    while True:
+        delay = 1
+        try:
+            with closing(sqlite3.connect(database_path, timeout=5)) as conn:
+                row = conn.execute("""SELECT u.id FROM users u
+                    LEFT JOIN channel_checks c ON c.user_id=u.id
+                    WHERE u.id GLOB 'tg:*' AND u.id>? AND (c.checked IS NULL OR c.checked<?)
+                    ORDER BY u.id LIMIT 1""", (after, time.time() - 86400,)).fetchone()
+                if row:
+                    uid = row[0]
+                    after = uid
+                    checked = time.time()
+                    subscribed = is_channel_subscriber(token, int(uid[3:]))
+                    with conn:
+                        conn.execute("""INSERT INTO channel_checks VALUES (?,?,?)
+                            ON CONFLICT(user_id) DO UPDATE SET subscribed=excluded.subscribed,checked=excluded.checked
+                            WHERE excluded.checked>=channel_checks.checked""", (uid, int(subscribed), checked))
+                else:
+                    after = ''
+                    delay = 60
+        except TelegramError as error:
+            delay = max(60, error.retry_after)
+            log.warning('Channel membership check failed (%s).', error.code)
+        except sqlite3.Error:
+            delay = 60
+            log.warning('Could not refresh channel membership statistics.')
+        time.sleep(delay)
+
+
 def start_bot(database_path, owner, online_ttl):
     token = os.getenv('BOT_TOKEN', '').strip()
     if not token:
@@ -251,3 +282,5 @@ def start_bot(database_path, owner, online_ttl):
                      name='telegram-polling', daemon=True).start()
     threading.Thread(target=notify_presence, args=(token, database_path, owner, online_ttl),
                      name='presence-reminders', daemon=True).start()
+    threading.Thread(target=refresh_subscriptions, args=(token, database_path),
+                     name='channel-membership', daemon=True).start()
