@@ -364,6 +364,8 @@ def init_db():
         CREATE TABLE IF NOT EXISTS cooldown(user_id TEXT NOT NULL, case_id INTEGER NOT NULL, until REAL NOT NULL,
           PRIMARY KEY(user_id,case_id));
         CREATE TABLE IF NOT EXISTS history(id INTEGER PRIMARY KEY, user_id TEXT, kind TEXT, payload TEXT, created REAL);
+        CREATE INDEX IF NOT EXISTS history_case_batches ON history(user_id, created)
+          WHERE kind GLOB 'cases/*/open';
         CREATE INDEX IF NOT EXISTS history_streak_checkin ON history(user_id, created DESC, id DESC)
           WHERE kind='streak/checkin';
         CREATE TABLE IF NOT EXISTS live_drops(inventory_id INTEGER PRIMARY KEY REFERENCES inventory(id),
@@ -1753,6 +1755,34 @@ def owner_stats():
 DROP_SOURCES = ('case', 'upgrade', 'mystery', 'dice', 'mines', 'streak', 'pass', 'giveaway')
 
 
+@app.get('/api/owner/drop-options')
+def owner_drop_options():
+    require_owner()
+    c = db()
+    items = [r[0] for r in c.execute("""SELECT DISTINCT json_extract(item,'$.name') AS name
+        FROM inventory WHERE test=0 AND name IS NOT NULL ORDER BY name COLLATE NOCASE""")]
+    companion_items = sorted(set(items) | {item['name'] for item in base_catalog()['items']
+                                           if item.get('coins')}, key=str.casefold)
+    cases = [r[0] for r in c.execute("""SELECT DISTINCT json_extract(source,'$.caseName') AS name
+        FROM live_drops WHERE name IS NOT NULL ORDER BY name COLLATE NOCASE""")]
+    players = [dict(r) for r in c.execute("""SELECT u.id,u.name,COALESCE(p.username,'') AS username
+        FROM users u LEFT JOIN site_presence p ON p.user_id=u.id
+        WHERE u.id GLOB 'tg:*' ORDER BY u.name COLLATE NOCASE""")]
+    return jsonify(items=items, companionItems=companion_items, cases=cases, players=players)
+
+
+def drop_batch(c, row):
+    batch = c.execute("""SELECT json_extract(h.payload,'$.drops') FROM history h
+        JOIN json_each(h.payload,'$.drops') d
+        WHERE h.user_id=? AND h.created>=? AND h.created<=? AND h.kind GLOB 'cases/*/open'
+        AND json_extract(d.value,'$.inventoryId')=? LIMIT 1""",
+        (row['id'], row['created'], row['created'] + 60, row['inventory_id'])).fetchone()
+    if not batch:
+        return None, []
+    drops = json.loads(batch[0])
+    return len(drops), [drop['item']['name'] for drop in drops if drop.get('inventoryId') != row['inventory_id']]
+
+
 @app.get('/api/owner/drops')
 def owner_drops():
     require_owner()
@@ -1762,6 +1792,10 @@ def owner_drops():
     player = request.args.get('player', '').strip().casefold().removeprefix('@')
     mutation = request.args.get('mutation', '')
     clock = request.args.get('time', '')
+    count = request.args.get('count', '')
+    companions = [name.strip().casefold() for name in request.args.getlist('companion') if name.strip()]
+    if count not in ('', '1', '3', '5') or len(companions) > 4 or any(len(n) > 100 for n in companions):
+        raise Problem('Проверь параметры крутки')
     if (not 1 <= len(name) <= 100 or source not in ('', *DROP_SOURCES)
             or len(case_name) > 100 or len(player) > 100 or mutation not in ('', 'default', *MUTATIONS)):
         raise Problem('Укажи название предмета и способ получения')
@@ -1779,7 +1813,7 @@ def owner_drops():
     sources = (source,) if source else DROP_SOURCES
     placeholders = ','.join('?' for _ in sources)
     rows = db().execute(f"""SELECT i.user_id AS id,u.name,COALESCE(p.username,'') AS username,
-            i.item,i.source,i.created,json_extract(d.source,'$.caseName') AS case_name
+            i.id AS inventory_id,i.item,i.source,i.created,json_extract(d.source,'$.caseName') AS case_name
         FROM inventory i JOIN users u ON u.id=i.user_id
         LEFT JOIN site_presence p ON p.user_id=i.user_id
         LEFT JOIN live_drops d ON d.inventory_id=i.id
@@ -1790,7 +1824,7 @@ def owner_drops():
     needle = name.casefold()
     for row in rows:
         item = json.loads(row['item'])
-        if case_name and case_name not in (row['case_name'] or '').casefold():
+        if case_name and case_name != (row['case_name'] or '').casefold():
             continue
         if player and player not in (row['username'].casefold(), row['name'].casefold(), row['id'].removeprefix('tg:')):
             continue
@@ -1800,14 +1834,27 @@ def owner_drops():
             actual = (int(row['created'] // 60) + 180) % 1440
             if abs((actual - target_minute + 720) % 1440 - 720) > 30:
                 continue
-        if needle in item['name'].casefold():
+        if needle == item['name'].casefold():
+            opened, siblings = drop_batch(db(), row) if row['source'] == 'case' else (None, [])
+            remaining = [sibling.casefold() for sibling in siblings]
+            if count and opened != int(count):
+                continue
+            for companion in companions:
+                if companion not in remaining:
+                    break
+                remaining.remove(companion)
+            else:
+                remaining = None
+            if remaining is not None:
+                continue
             streak = db().execute("""SELECT json_extract(payload,'$.count') FROM history
                 WHERE kind='streak/checkin' AND user_id=? AND created<=?
                 ORDER BY created DESC,id DESC LIMIT 1""", (row['id'], row['created'])).fetchone()
             matches.append(dict(id=row['id'], name=row['name'], username=row['username'],
                                 item=item['name'], mutation=item.get('mutation'), source=row['source'],
                                 createdAt=iso(row['created']), caseName=row['case_name'],
-                                streakDays=streak[0] if streak else None))
+                                streakDays=streak[0] if streak else None,
+                                opened=opened, companionDrops=siblings))
             if len(matches) == 51:
                 break
     return jsonify(matches=matches[:50], more=len(matches) > 50)

@@ -939,15 +939,17 @@
         <form data-drop-form>
           <label>Примерная дата (МСК)<input type="date" name="date" required></label>
           <label>Диапазон<select name="days"><option value="0">Только этот день</option><option value="1" selected>±1 день</option><option value="3">±3 дня</option><option value="7">±7 дней</option></select></label>
-          <label>Предмет<input name="item" maxlength="100" placeholder="Например, Meowl" required></label>
+          <label>Предмет<select name="item" required><option value="">Выбери предмет</option></select></label>
           <label>Способ получения<select name="source">
             <option value="">Любой</option><option value="case">Кейс</option><option value="upgrade">Апгрейдер</option>
             <option value="mystery">Мистери</option><option value="dice">Дайсы</option><option value="mines">Мины</option>
             <option value="streak">Серия заходов</option><option value="pass">Grader Pass</option><option value="giveaway">Розыгрыш</option>
           </select></label>
-          <label>Название кейса <input name="case" maxlength="100" placeholder="Необязательно"></label>
+          <label>Кейс<select name="case"><option value="">Любой</option></select></label>
+          <label>Кейсов за крутку<select name="count"><option value="">Любое число</option><option value="1">×1</option><option value="3">×3</option><option value="5">×5</option></select></label>
+          <fieldset data-companions><legend>Другие дропы из этой крутки</legend></fieldset>
           <label>Примерное время (МСК, ±30 минут)<input type="time" name="time"></label>
-          <label>Игрок <input name="player" maxlength="100" placeholder="@username, имя или Telegram ID"></label>
+          <label>Игрок<select name="player"><option value="">Любой</option></select></label>
           <label>Мутация<select name="mutation"><option value="">Любая</option><option value="default">Без мутации</option><option value="gold">Gold</option><option value="diamond">Diamond</option><option value="rainbow">Rainbow</option></select></label>
           <button type="submit" class="btn">Найти</button>
           <p data-drop-status role="status"></p>
@@ -1011,6 +1013,38 @@
       }
     };
     const dropForm = $('[data-drop-form]', page);
+    let dropOptionsLoading = false;
+    let dropOptionsLoaded = false;
+    const loadDropOptions = async () => {
+      if (dropOptionsLoaded || dropOptionsLoading) return;
+      dropOptionsLoading = true;
+      const status = $('[data-drop-status]', dropForm);
+      status.textContent = 'Загружаю списки…';
+      try {
+        const { items, companionItems, cases, players } = await api('/api/owner/drop-options');
+        dropForm.elements.item.append(...items.map(name => new Option(name, name)));
+        dropForm.elements.case.append(...cases.map(name => new Option(name, name)));
+        dropForm.elements.player.append(...players.map(player => new Option(
+          `${player.username ? '@' + player.username : player.name} · ID ${player.id.slice(3)}`, player.id.slice(3))));
+        const fieldset = $('[data-companions]', dropForm);
+        for (let index = 1; index <= 4; index++) {
+          const select = document.createElement('select');
+          select.name = 'companion';
+          select.setAttribute('aria-label', `Другой дроп ${index}`);
+          select.append(new Option(`Другой дроп ${index} (необязательно)`, ''), ...companionItems.map(name => new Option(name, name)));
+          fieldset.append(select);
+        }
+        dropOptionsLoaded = true;
+        status.textContent = '';
+      } catch (error) {
+        status.textContent = error.message;
+      } finally {
+        dropOptionsLoading = false;
+      }
+    };
+    dropForm.closest('details').addEventListener('toggle', event => {
+      if (event.currentTarget.open) loadDropOptions();
+    });
     dropForm.elements.date.value = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Moscow' }).format(new Date());
     const loadStats = async () => {
       if (!page.isConnected) return;
@@ -1059,6 +1093,11 @@
           streak.textContent = match.streakDays == null ? 'Серия заходов: нет данных'
             : `Серия на момент дропа: ${fmt(match.streakDays)} ${plural(match.streakDays, 'день', 'дня', 'дней')}`;
           row.append(description, player, streak);
+          if (match.opened) {
+            const batch = document.createElement('div');
+            batch.textContent = `Крутка ×${match.opened}${match.companionDrops.length ? ' · Также выпали: ' + match.companionDrops.join(', ') : ''}`;
+            row.append(batch);
+          }
           results.append(row);
         }
       } catch (error) {
