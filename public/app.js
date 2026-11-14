@@ -1096,15 +1096,28 @@
       const box = $('[data-owner-stats]', page);
       try {
         const s = await api('/api/owner/stats');
+        const subscriptionRows = [
+          ['Подписаны', s.subscribed],
+          ['Не подписаны', s.checked - s.subscribed],
+        ];
         box.innerHTML = `<div class="owner-stat-grid">${[
           ['Игроков Telegram', s.players], ['Онлайн', s.online], ['За 24 часа', s.active24h],
           ['Средний онлайн за 24 ч', s.averageOnline == null ? '—' : fmt(Math.round(s.averageOnline * 10) / 10)],
           ['Средний онлайн · 09:00–21:00 МСК', s.daytimeOnline == null ? '—' : fmt(Math.round(s.daytimeOnline * 10) / 10)],
           [`Участников ${s.channel}`, s.channelMembers ?? '—'],
-          ['Доля подписанных среди всех игроков', !s.players ? '—' : s.checked < s.players ? 'Проверка идёт' : fmt(s.percent) + '%'],
           ['Открыто кейсов', s.cases], ['Апгрейдов', s.upgrades],
         ].map(([title, value]) => `<div><b>${esc(typeof value === 'number' ? fmt(value) : value)}</b><small>${esc(title)}</small></div>`).join('')}</div>
-        ${s.checked < s.players ? `<small class="muted">Проверено ${fmt(s.checked)} из ${fmt(s.players)} игроков${s.scanIssue?.until > Date.now() / 1000 ? (s.scanIssue.code === '429' ? ' · Пауза по лимиту Telegram' : ' · Ошибка Telegram: ' + esc(s.scanIssue.code)) : ''}</small>` : ''}`;
+        <div class="mw-subscription">
+          ${subscriptionRows.map(([label, count]) => {
+            const share = s.players ? Math.round(count / s.players * 1000) / 10 : 0;
+            return `<div class="mw-share-row"><span>${label}</span><b>${fmt(count)} · ${s.players ? fmt(share) + '%' : '—'}</b>
+              <div class="mw-share-track" role="meter" aria-label="${label}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${share}">
+                <span style="width:${share}%"></span>
+              </div>
+            </div>`;
+          }).join('')}
+        </div>
+        ${s.checked < s.players ? `<small class="muted">Статус неизвестен у ${fmt(s.players - s.checked)} игроков${s.scanIssue?.until > Date.now() / 1000 ? (s.scanIssue.code === '429' ? ' · Пауза по лимиту Telegram' : ' · Ошибка Telegram: ' + esc(s.scanIssue.code)) : ''}</small>` : ''}`;
         if (s.checked < s.players) setTimeout(loadStats, 30000);
       } catch (error) {
         box.textContent = error.message;
