@@ -330,6 +330,8 @@ def init_db():
           user_id TEXT PRIMARY KEY, subscribed INTEGER NOT NULL, checked REAL NOT NULL);
         CREATE TABLE IF NOT EXISTS site_presence(
           user_id TEXT PRIMARY KEY, username TEXT NOT NULL, seen REAL NOT NULL);
+        CREATE TABLE IF NOT EXISTS online_samples(
+          minute INTEGER PRIMARY KEY, players INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS presence_reminders(
           user_id TEXT PRIMARY KEY REFERENCES users(id), on_enter INTEGER NOT NULL,
           on_leave INTEGER NOT NULL, was_online INTEGER NOT NULL);
@@ -1729,6 +1731,9 @@ def owner_stats():
                        (now - ONLINE_TTL,)).fetchone()[0]
     active = c.execute("SELECT COUNT(*) FROM site_presence WHERE user_id GLOB 'tg:*' AND seen>?",
                        (now - 86400,)).fetchone()[0]
+    average, daytime_average = c.execute("""SELECT AVG(players),
+        AVG(CASE WHEN (minute + 180) % 1440 >= 540 AND (minute + 180) % 1440 < 1260 THEN players END)
+        FROM online_samples WHERE minute>?""", (int(now // 60) - 1440,)).fetchone()
     from telegram_bot import CHANNEL_USERNAME, TelegramError, call
     members = None
     token = os.getenv('BOT_TOKEN', '').strip()
@@ -1739,6 +1744,7 @@ def owner_stats():
             pass
     return jsonify(**dict(players), checked=checks, subscribed=subs, online=online, active24h=active,
                    channelMembers=members, channel=CHANNEL_USERNAME,
+                   averageOnline=average, daytimeOnline=daytime_average,
                    percent=round(100 * subs / players['players'], 2) if players['players'] else None)
 
 

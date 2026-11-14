@@ -1014,6 +1014,8 @@
         const s = await api('/api/owner/stats');
         box.innerHTML = `<div class="owner-stat-grid">${[
           ['Игроков Telegram', s.players], ['Онлайн', s.online], ['За 24 часа', s.active24h],
+          ['Средний онлайн за 24 ч', s.averageOnline == null ? '—' : fmt(Math.round(s.averageOnline * 10) / 10)],
+          ['Средний онлайн · 09:00–21:00 МСК', s.daytimeOnline == null ? '—' : fmt(Math.round(s.daytimeOnline * 10) / 10)],
           [`Участников ${s.channel}`, s.channelMembers ?? '—'],
           ['Доля подписанных среди всех игроков', !s.players ? '—' : s.checked < s.players ? 'Считается…' : fmt(s.percent) + '%'],
           ['Открыто кейсов', s.cases], ['Апгрейдов', s.upgrades],

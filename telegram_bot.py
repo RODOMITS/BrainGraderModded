@@ -207,6 +207,14 @@ def notify_presence(token, database_path, owner, ttl):
         try:
             with closing(sqlite3.connect(database_path, timeout=5)) as conn:
                 conn.row_factory = sqlite3.Row
+                now = time.time()
+                minute = int(now // 60)
+                if not conn.execute('SELECT 1 FROM online_samples WHERE minute=?', (minute,)).fetchone():
+                    with conn:
+                        conn.execute("""INSERT OR IGNORE INTO online_samples
+                            SELECT ?, COUNT(*) FROM site_presence WHERE user_id GLOB 'tg:*' AND seen>?""",
+                                     (minute, now - ttl))
+                        conn.execute('DELETE FROM online_samples WHERE minute<=?', (minute - 1440,))
                 rows = conn.execute("""SELECT r.*,u.name,p.username,COALESCE(p.seen>?,0) AS online
                     FROM presence_reminders r JOIN users u ON u.id=r.user_id
                     LEFT JOIN site_presence p ON p.user_id=r.user_id""", (time.time() - ttl,)).fetchall()
