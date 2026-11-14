@@ -1681,6 +1681,21 @@ def welcome_status():
     return jsonify(show=not subscribed)
 
 
+@app.get('/api/welcome/subscription-share')
+def welcome_subscription_share():
+    from telegram_bot import CHANNEL_USERNAME, TelegramError, call
+
+    players = db().execute("SELECT COUNT(*) FROM users WHERE id GLOB 'tg:*'").fetchone()[0]
+    token = os.getenv('BOT_TOKEN', '').strip()
+    if not players or not token:
+        return jsonify(percent=None)
+    try:
+        members = call(token, 'getChatMemberCount', {'chat_id': CHANNEL_USERNAME}, timeout=3)
+    except TelegramError:
+        return jsonify(percent=None)
+    return jsonify(percent=min(100, max(0, round(100 * members / players, 1))))
+
+
 def require_owner():
     if g.uid != OWNER_UID:
         raise Problem('Доступ только владельцу', 'forbidden', 403)

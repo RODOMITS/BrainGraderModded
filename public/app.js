@@ -5177,6 +5177,15 @@
     return new Promise(resolve=>{
       const dialog=h(`<dialog class="modded-welcome" aria-labelledby="moddedWelcomeTitle"><div class="mw-content"><h2 id="moddedWelcomeTitle">Привет, спасибо что зашёл в мой Моддед!</h2><p>Я старался чтобы сделать этот проект, поддержи меня подписавшись на <a href="https://t.me/brainrotmoddedgrader" id="mwChannel">@brainrotmoddedgrader</a>🙏</p><button class="btn" id="mwConfirm" disabled>Ясно, спасибо (10)</button></div></dialog>`);
       const button=$('#mwConfirm',dialog),previousLocked=state.locked;
+      api('/api/welcome/subscription-share').then(({ percent }) => {
+        if (!dialog.open || typeof percent !== 'number') return;
+        const bars = h(`<div class="mw-subscription">
+          <div>Подписаны <b>${fmt(percent)}%</b><progress aria-label="Подписаны" value="${percent}" max="100"></progress></div>
+          <div>Не подписаны <b>${fmt(Math.round((100 - percent) * 10) / 10)}%</b><progress aria-label="Не подписаны" value="${100 - percent}" max="100"></progress></div>
+          <small>Оценка по числу участников канала и игроков Telegram</small>
+        </div>`);
+        button.before(bars);
+      }).catch(() => {});
       state.welcomeOpen=true;state.locked=true;
       try{TG?.BackButton?.hide();}catch{}
       dialog.addEventListener('cancel',event=>event.preventDefault());
