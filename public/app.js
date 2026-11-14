@@ -5193,16 +5193,44 @@
       try{TG?.BackButton?.hide();}catch{}
       dialog.addEventListener('cancel',event=>event.preventDefault());
       document.body.append(dialog);dialog.showModal();
-      const deadline=performance.now()+10000;
+      let deadline;
+      let timer;
+      let reminded = false;
       const tickWelcome=()=>{
         const left=Math.max(0,Math.ceil((deadline-performance.now())/1000));
         button.textContent=left?`Ясно, спасибо (${left})`:'Ясно, спасибо';
         button.disabled=left>0;
         if(!left)clearInterval(timer);
       };
-      const timer=setInterval(tickWelcome,100);
-      button.onclick=()=>{
+      const startCountdown = seconds => {
+        clearInterval(timer);
+        deadline = performance.now() + seconds * 1000;
+        timer = setInterval(tickWelcome, 100);
+        tickWelcome();
+      };
+      startCountdown(10);
+      button.onclick=async ()=>{
         if(button.disabled||performance.now()<deadline)return;
+        if (!reminded) {
+          button.disabled = true;
+          const subscription = TG?.initData
+            ? await api('/api/welcome').catch(() => ({ show: true }))
+            : { show: true };
+          if (!dialog.open) return;
+          if (subscription.show) {
+            reminded = true;
+            $('#moddedWelcomeTitle', dialog).textContent = 'Ты не подписался?';
+            const paragraph = $('p', dialog);
+            const channel = $('#mwChannel', dialog);
+            paragraph.replaceChildren('Для меня это огромная поддержка. Подпишись пожалуйста на ', channel);
+            if (!reduced) dialog.animate(
+              [-8, 7, -5, 3, 0].map(x => ({ transform: `translateX(${x}px)` })),
+              { duration: 280, easing: 'ease-out' },
+            );
+            startCountdown(3);
+            return;
+          }
+        }
         clearInterval(timer);state.welcomeOpen=false;state.locked=previousLocked;dialog.close();dialog.remove();
         try{if((location.hash||'#/')!=='#/')TG?.BackButton?.show();}catch{}
         resolve();
