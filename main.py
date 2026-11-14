@@ -1746,7 +1746,10 @@ def owner_stats():
             members = call(token, 'getChatMemberCount', {'chat_id': CHANNEL_USERNAME}, timeout=3)
         except TelegramError:
             pass
+    scan_row = c.execute("SELECT value FROM settings WHERE key='channel-scan-issue'").fetchone()
+    scan_issue = json.loads(scan_row[0]) if scan_row else None
     return jsonify(**dict(players), checked=checks, subscribed=subs, online=online, active24h=active,
+                   scanIssue=scan_issue,
                    channelMembers=members, channel=CHANNEL_USERNAME,
                    averageOnline=average, daytimeOnline=daytime_average,
                    percent=round(100 * subs / players['players'], 2) if players['players'] else None)

@@ -1069,7 +1069,7 @@
           ['Доля подписанных среди всех игроков', !s.players ? '—' : s.checked < s.players ? 'Проверка идёт' : fmt(s.percent) + '%'],
           ['Открыто кейсов', s.cases], ['Апгрейдов', s.upgrades],
         ].map(([title, value]) => `<div><b>${esc(typeof value === 'number' ? fmt(value) : value)}</b><small>${esc(title)}</small></div>`).join('')}</div>
-        ${s.checked < s.players ? `<small class="muted">Проверено ${fmt(s.checked)} из ${fmt(s.players)} игроков</small>` : ''}`;
+        ${s.checked < s.players ? `<small class="muted">Проверено ${fmt(s.checked)} из ${fmt(s.players)} игроков${s.scanIssue?.until > Date.now() / 1000 ? (s.scanIssue.code === '429' ? ' · Пауза по лимиту Telegram' : ' · Ошибка Telegram: ' + esc(s.scanIssue.code)) : ''}</small>` : ''}`;
         if (s.checked < s.players) setTimeout(loadStats, 30000);
       } catch (error) {
         box.textContent = error.message;

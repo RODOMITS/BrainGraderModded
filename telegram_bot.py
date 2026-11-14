@@ -268,12 +268,26 @@ def refresh_subscriptions(token, database_path):
                     after = ''
                     delay = 60
         except TelegramError as error:
-            delay = max(60, error.retry_after)
+            delay = max(1, error.retry_after) if error.code == 429 else (
+                60 if error.code in (401, 403, 404) else 3)
+            if error.code == 429:
+                # Retry this account after Telegram's cooldown.
+                after = ''
             log.warning('Channel membership check failed (%s).', error.code)
+            save_scan_issue(database_path, str(error.code), delay)
         except sqlite3.Error:
             delay = 60
             log.warning('Could not refresh channel membership statistics.')
         time.sleep(delay)
+
+
+def save_scan_issue(database_path, code, delay):
+    try:
+        with closing(sqlite3.connect(database_path, timeout=5)) as conn, conn:
+            conn.execute("INSERT OR REPLACE INTO settings VALUES ('channel-scan-issue',?)",
+                         (json.dumps({'code': code, 'until': time.time() + delay}),))
+    except sqlite3.Error:
+        log.warning('Could not save membership check status.')
 
 
 def start_bot(database_path, owner, online_ttl):
