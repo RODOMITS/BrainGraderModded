@@ -1729,7 +1729,16 @@ def owner_stats():
                        (now - ONLINE_TTL,)).fetchone()[0]
     active = c.execute("SELECT COUNT(*) FROM site_presence WHERE user_id GLOB 'tg:*' AND seen>?",
                        (now - 86400,)).fetchone()[0]
+    from telegram_bot import CHANNEL_USERNAME, TelegramError, call
+    members = None
+    token = os.getenv('BOT_TOKEN', '').strip()
+    if token:
+        try:
+            members = call(token, 'getChatMemberCount', {'chat_id': CHANNEL_USERNAME}, timeout=3)
+        except TelegramError:
+            pass
     return jsonify(**dict(players), checked=checks, subscribed=subs, online=online, active24h=active,
+                   channelMembers=members, channel=CHANNEL_USERNAME,
                    percent=round(100 * subs / checks, 1) if checks else None)
 
 
