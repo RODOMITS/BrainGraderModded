@@ -945,6 +945,10 @@
             <option value="mystery">Мистери</option><option value="dice">Дайсы</option><option value="mines">Мины</option>
             <option value="streak">Серия заходов</option><option value="pass">Grader Pass</option><option value="giveaway">Розыгрыш</option>
           </select></label>
+          <label>Название кейса <input name="case" maxlength="100" placeholder="Необязательно"></label>
+          <label>Примерное время (МСК, ±30 минут)<input type="time" name="time"></label>
+          <label>Игрок <input name="player" maxlength="100" placeholder="@username, имя или Telegram ID"></label>
+          <label>Мутация<select name="mutation"><option value="">Любая</option><option value="default">Без мутации</option><option value="gold">Gold</option><option value="diamond">Diamond</option><option value="rainbow">Rainbow</option></select></label>
           <button type="submit" class="btn">Найти</button>
           <p data-drop-status role="status"></p>
           <ul data-drop-results></ul>
@@ -1046,7 +1050,7 @@
         for (const match of matches) {
           const row = document.createElement('li');
           const description = document.createElement('div');
-          description.textContent = [match.item, match.mutation, sourceLabels[match.source], date.format(new Date(match.createdAt))].filter(Boolean).join(' · ');
+          description.textContent = [match.item, match.mutation, sourceLabels[match.source], match.caseName, date.format(new Date(match.createdAt))].filter(Boolean).join(' · ');
           const player = document.createElement('div');
           player.textContent = match.id.startsWith('tg:')
             ? `${match.username ? '@' + match.username : match.name} · ID ${match.id.slice(3)}` : 'Гость';

@@ -1756,7 +1756,12 @@ def owner_drops():
     require_owner()
     name = request.args.get('item', '').strip()
     source = request.args.get('source', '')
-    if not 1 <= len(name) <= 100 or source not in ('', *DROP_SOURCES):
+    case_name = request.args.get('case', '').strip().casefold()
+    player = request.args.get('player', '').strip().casefold().removeprefix('@')
+    mutation = request.args.get('mutation', '')
+    clock = request.args.get('time', '')
+    if (not 1 <= len(name) <= 100 or source not in ('', *DROP_SOURCES)
+            or len(case_name) > 100 or len(player) > 100 or mutation not in ('', 'default', *MUTATIONS)):
         raise Problem('Укажи название предмета и способ получения')
     try:
         day = datetime.strptime(request.args.get('date', ''), '%Y-%m-%d').replace(
@@ -1764,14 +1769,18 @@ def owner_drops():
         days = integer(request.args.get('days', '1'), 0, 7)
         start = (day - timedelta(days=days)).timestamp()
         end = (day + timedelta(days=days + 1)).timestamp()
+        if clock:
+            slots = datetime.strptime(clock, '%H:%M')
+            target_minute = slots.hour * 60 + slots.minute
     except (ValueError, OverflowError):
         raise Problem('Укажи дату поиска') from None
     sources = (source,) if source else DROP_SOURCES
     placeholders = ','.join('?' for _ in sources)
     rows = db().execute(f"""SELECT i.user_id AS id,u.name,COALESCE(p.username,'') AS username,
-            i.item,i.source,i.created
+            i.item,i.source,i.created,json_extract(d.source,'$.caseName') AS case_name
         FROM inventory i JOIN users u ON u.id=i.user_id
         LEFT JOIN site_presence p ON p.user_id=i.user_id
+        LEFT JOIN live_drops d ON d.inventory_id=i.id
         WHERE i.test=0 AND i.created>=? AND i.created<?
           AND i.source IN ({placeholders})
         ORDER BY i.created DESC, i.id DESC""", (start, end, *sources))
@@ -1779,10 +1788,20 @@ def owner_drops():
     needle = name.casefold()
     for row in rows:
         item = json.loads(row['item'])
+        if case_name and case_name not in (row['case_name'] or '').casefold():
+            continue
+        if player and player not in (row['username'].casefold(), row['name'].casefold(), row['id'].removeprefix('tg:')):
+            continue
+        if mutation and mutation != (item.get('mutation') or 'default'):
+            continue
+        if clock:
+            actual = (int(row['created'] // 60) + 180) % 1440
+            if abs((actual - target_minute + 720) % 1440 - 720) > 30:
+                continue
         if needle in item['name'].casefold():
             matches.append(dict(id=row['id'], name=row['name'], username=row['username'],
                                 item=item['name'], mutation=item.get('mutation'), source=row['source'],
-                                createdAt=iso(row['created'])))
+                                createdAt=iso(row['created']), caseName=row['case_name']))
             if len(matches) == 51:
                 break
     return jsonify(matches=matches[:50], more=len(matches) > 50)
