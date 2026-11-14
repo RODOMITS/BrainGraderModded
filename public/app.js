@@ -4841,7 +4841,6 @@
     // Keep the admin document ready so opening it does not navigate away or reload its catalogue.
     if(prefs.showAdmin)setTimeout(prepareAdmin,1500);
     if (showWelcome) await showModdedWelcome();
-    startModdedTour();
     streakCheckin();
   }
 
