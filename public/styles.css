@@ -1991,6 +1991,15 @@ html.autumn h2::after { content: ' 🍂'; font-size: .8em; }
 }
 
 .owner-panel { display: grid; gap: 14px; max-width: 720px; margin: auto; }
+.owner-panel > * { min-width: 0; }
+@media (min-width: 900px) {
+  .owner-panel { max-width: 1080px; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+  .owner-panel > h1,
+  .owner-panel > :has(> [data-owner-stats]),
+  .owner-panel > :has(> [data-drop-form]) { grid-column: 1 / -1; }
+  .owner-panel [data-drop-form] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .owner-panel [data-drop-form] > :is(fieldset, button, p, ul) { grid-column: 1 / -1; }
+}
 .owner-panel h1, .owner-panel h2 { margin: 0; }
 .owner-card { padding: 18px; border: 1px solid var(--ridge); border-radius: 16px; background: var(--stone); }
 .owner-card h2 { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
