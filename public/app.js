@@ -939,7 +939,7 @@
         <form data-drop-form>
           <label>Примерная дата (МСК)<input type="date" name="date" required></label>
           <label>Диапазон<select name="days"><option value="0">Только этот день</option><option value="1" selected>±1 день</option><option value="3">±3 дня</option><option value="7">±7 дней</option></select></label>
-          <label>Предмет<select name="item" required><option value="">Выбери предмет</option></select></label>
+          <label>Предмет<select name="item" required disabled><option value="">Загрузка списка…</option></select></label>
           <label>Способ получения<select name="source">
             <option value="">Любой</option><option value="case">Кейс</option><option value="upgrade">Апгрейдер</option>
             <option value="mystery">Мистери</option><option value="dice">Дайсы</option><option value="mines">Мины</option>
@@ -951,7 +951,8 @@
           <label>Примерное время (МСК, ±30 минут)<input type="time" name="time"></label>
           <label>Игрок<select name="player"><option value="">Любой</option></select></label>
           <label>Мутация<select name="mutation"><option value="">Любая</option><option value="default">Без мутации</option><option value="gold">Gold</option><option value="diamond">Diamond</option><option value="rainbow">Rainbow</option></select></label>
-          <button type="submit" class="btn">Найти</button>
+          <button type="submit" class="btn" data-drop-submit disabled>Найти</button>
+          <button type="button" class="btn ghost" data-drop-retry hidden>Повторить загрузку</button>
           <p data-drop-status role="status"></p>
           <ul data-drop-results></ul>
         </form>
@@ -1015,14 +1016,18 @@
     const dropForm = $('[data-drop-form]', page);
     let dropOptionsLoading = false;
     let dropOptionsLoaded = false;
+    const dropItemSelect = dropForm.elements.namedItem('item');
+    const dropRetry = $('[data-drop-retry]', dropForm);
     const loadDropOptions = async () => {
       if (dropOptionsLoaded || dropOptionsLoading) return;
       dropOptionsLoading = true;
+      dropRetry.hidden = true;
       const status = $('[data-drop-status]', dropForm);
       status.textContent = 'Загружаю списки…';
       try {
         const { items, companionItems, cases, players } = await api('/api/owner/drop-options');
-        dropForm.elements.item.append(...items.map(name => new Option(name, name)));
+        dropItemSelect.replaceChildren(new Option(items.length ? 'Выбери предмет' : 'Сохранённых предметов нет', ''),
+          ...items.map(name => new Option(name, name)));
         dropForm.elements.case.append(...cases.map(name => new Option(name, name)));
         dropForm.elements.player.append(...players.map(player => new Option(
           `${player.username ? '@' + player.username : player.name} · ID ${player.id.slice(3)}`, player.id.slice(3))));
@@ -1035,13 +1040,18 @@
           fieldset.append(select);
         }
         dropOptionsLoaded = true;
+        dropItemSelect.disabled = !items.length;
+        $('[data-drop-submit]', dropForm).disabled = !items.length;
         status.textContent = '';
       } catch (error) {
         status.textContent = error.message;
+        dropItemSelect.options[0].textContent = 'Список недоступен';
+        dropRetry.hidden = false;
       } finally {
         dropOptionsLoading = false;
       }
     };
+    dropRetry.onclick = loadDropOptions;
     dropForm.closest('details').addEventListener('toggle', event => {
       if (event.currentTarget.open) loadDropOptions();
     });
