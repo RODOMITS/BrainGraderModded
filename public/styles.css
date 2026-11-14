@@ -2042,3 +2042,36 @@ html.autumn h2::after { content: ' 🍂'; font-size: .8em; }
   border-radius: 10px; background: var(--stone); color: var(--muted);
   white-space: pre-wrap; overflow-wrap: anywhere;
 }
+
+.mutation-picture { display: inline-grid; position: relative; max-width: 100%; vertical-align: middle; }
+.mutation-picture > img { grid-area: 1 / 1; }
+.mutation-picture > i {
+  position: absolute; z-index: 1; bottom: 0; right: 0; width: 22px; height: 22px;
+  background: center / contain no-repeat; pointer-events: none;
+}
+.mutation-gold > img { filter: grayscale(1) sepia(1) saturate(5) brightness(1.12); }
+.mutation-diamond > img { filter: grayscale(1) sepia(1) saturate(4) hue-rotate(155deg) brightness(1.13); }
+.mutation-rainbow > img { filter: saturate(2); animation: mutation-rainbow 2.8s linear infinite; }
+@keyframes mutation-rainbow {
+  from { filter: sepia(.6) saturate(2.6) hue-rotate(0deg); }
+  to { filter: sepia(.6) saturate(2.6) hue-rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) { .mutation-rainbow > img { animation: none; } }
+.item .mutation-picker {
+  position: absolute; z-index: 2; top: 4px; right: 4px; display: grid; place-items: center;
+  width: 30px; height: 30px; border: 1px solid var(--ridge); border-radius: 8px; background: var(--stone);
+}
+.item .mutation-picker img, .mutation-options img { width: 22px; height: 22px; object-fit: contain; }
+.mutation-options { display: grid; gap: 8px; }
+.mutation-options button { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+
+.modded-tour { position: fixed; inset: 0; z-index: 1200; overflow: hidden; }
+.tour-spot { position: absolute; border: 2px solid var(--crystal); border-radius: 14px; box-shadow: 0 0 0 200vmax #000c; }
+.tour-card {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  width: min(360px, calc(100% - 24px)); max-height: calc(100% - 16px); overflow: auto;
+  padding: 14px; border: 1px solid var(--ridge); border-radius: 14px;
+  background: var(--stone); color: var(--text);
+}
+.tour-card h2 { margin: 6px 0; }
+.tour-card p { margin: 0 0 12px; }

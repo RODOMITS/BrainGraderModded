@@ -65,6 +65,9 @@ def original_api(path, token):
 def original_item(item):
     result = {key: item[key] for key in ('name', 'price', 'rarity', 'image')}
     result['id'] = integer(item['id'])
+    for key in ('kind', 'type', 'category'):
+        if isinstance(item.get(key), str):
+            result[key] = item[key]
     if result['rarity'] == 'coins' or item.get('coins'):
         result['coins'] = True
         result['rarity'] = 'common'
@@ -75,6 +78,34 @@ CASE_RARITY_WEIGHTS = {'common': 60, 'rare': 25, 'epic': 10, 'legendary': 4, 'og
 UPGRADE_MIN_CHANCE = 0
 UPGRADE_MAX_CHANCE = 75
 UPGRADE_CHANCE_FACTOR = 90
+MUTATIONS = {'gold': 1.25, 'diamond': 1.4, 'rainbow': 3}
+
+
+def can_mutate(item):
+    return (not item.get('coins') and not item.get('mutation')
+            and not any(item.get(key, '').lower() in ('gear', 'gears', 'base', 'bases', 'coins')
+                        for key in ('kind', 'type', 'category') if isinstance(item.get(key), str))
+            and not re.search(r'\b(?:base|gear|slap)\b', item['name'], re.I)
+            and not re.search(r'/(?:gears?|bases?)/|-(?:gear|base|slap)\.', item.get('image', ''), re.I))
+
+
+def mutated(item, mutation):
+    return dict(item, mutation=mutation, price=round(item['price'] * MUTATIONS[mutation], 2))
+
+
+def roll_mutation(item):
+    if can_mutate(item):
+        mutation = RNG.choices((None, *MUTATIONS), weights=(45, 30, 20, 5))[0]
+        if mutation:
+            return mutated(item, mutation)
+    return item
+
+
+def mutation_variants(item):
+    yield item
+    if can_mutate(item):
+        for mutation in MUTATIONS:
+            yield mutated(item, mutation)
 DICE_PAYOUTS = (0, 2, 0, 0, 3)
 DICE_BONUS_MULTIPLIER = 10
 
@@ -710,11 +741,14 @@ def case(i):
     if not cs:
         raise Problem('Кейс не найден', 'not_found',404)
     pool = {x['id']:x for x in cat['items']}
-    return dict(cs, items=[dict(pool[x['itemId']],weight=x['weight']) for x in cs['items']], itemsCount=len(cs['items']))
+    return dict(cs, items=[dict(pool[x['itemId']], weight=x['weight'],
+                                mutationEligible=can_mutate(pool[x['itemId']])) for x in cs['items']],
+                itemsCount=len(cs['items']))
 
 
 def published_case(row_id, definition):
     data = json.loads(definition)
+    data['items'] = [dict(item, mutationEligible=can_mutate(item)) for item in data['items']]
     return dict(data, id=named_cases.CASE_BASE + row_id, category='named', freeKind=None,
                 image=f'/img/named/{row_id}.png', itemsCount=len(data['items']))
 
@@ -736,11 +770,11 @@ def targets(body):
     if len(rows)>5:
         raise Problem('Можно поставить до 5 предметов')
     value=sum(i['item']['price'] for i in rows)
-    input_ids={i['item']['id'] for i in rows}
+    input_ids={(i['item']['id'], i['item'].get('mutation')) for i in rows}
     input_prices={round(i['item']['price'],2) for i in rows}
     options = []
-    for item in catalog()['items']:
-        if item.get('coins') or item['id'] in input_ids or round(item['price'], 2) in input_prices:
+    for item in (variant for base in catalog()['items'] for variant in mutation_variants(base)):
+        if item.get('coins') or (item['id'], item.get('mutation')) in input_ids or round(item['price'], 2) in input_prices:
             continue
         chance = value / item['price'] * UPGRADE_CHANCE_FACTOR
         if UPGRADE_MIN_CHANCE <= chance <= UPGRADE_MAX_CHANCE:
@@ -749,7 +783,8 @@ def targets(body):
     options.sort(key=lambda x: (x['price'], x['id']))
     presets=[]
     for n in [1.25,2,3,5,10]:
-        target=min(options,key=lambda x:abs(x['price']-value*n)) if options else None
+        desired_chance = min(UPGRADE_MAX_CHANCE, UPGRADE_CHANCE_FACTOR / n)
+        target=min(options,key=lambda x:abs(x['chance']-desired_chance)) if options else None
         presets.append(dict(label=f'×{n}',target=target,chance=target['chance'] if target else 0))
     return dict(inputValue=value,targets=options,presets=presets)
 
@@ -1085,7 +1120,7 @@ def claim_pass(body):
             raise Problem('В наградном кейсе нет предметов')
         case_info = dict(name=cs['name'])
         for drop in RNG.choices(cs['items'], weights=[item['weight'] for item in cs['items']], k=reward['count']):
-            item = {key: value for key, value in drop.items() if key != 'weight'}
+            item = roll_mutation({key: value for key, value in drop.items() if key != 'weight'})
             if item.get('coins'):
                 got.append(dict(kind='coins', amount=item['price']))
             else:
@@ -1211,6 +1246,7 @@ def dispatch(path, body):
             else:
                 item = dict(RNG.choices(cs['items'], weights=[x['weight'] for x in cs['items']])[0])
             item.pop('weight',None)
+            item = roll_mutation(item)
             if item.get('coins'):
                 c.execute(f'UPDATE users SET {field}={field}+? WHERE id=?', (item['price'], g.uid))
                 drops.append(dict(item=item))
@@ -1231,17 +1267,26 @@ def dispatch(path, body):
         c.execute(f'UPDATE users SET {field}={field}+? WHERE id=?',(total,g.uid))
         return dict(total=total,balance=user()['balance'],testBalance=user()['testBalance'],test=test)
     if path=='shop' and not post:
-        items = [item for item in catalog()['items'] if not item.get('coins')]
+        items = [dict(item, mutations=list(MUTATIONS) if can_mutate(item) else [])
+                 for item in catalog()['items'] if not item.get('coins')]
         return dict(enabled=True, items=sorted(items, key=lambda item: (item['price'], item['id'])))
     if path=='shop/buy' and post:
         it=find_item(body.get('itemId'))
         if not it or it.get('coins'): raise Problem('Предмет не найден')
+        mutation = body.get('mutation')
+        if mutation is not None:
+            if not isinstance(mutation, str) or mutation not in MUTATIONS or not can_mutate(it):
+                raise Problem('Эта мутация недоступна')
+            it = mutated(it, mutation)
         if user()['balance']<it['price']: raise Problem('Недостаточно BG')
         c.execute('UPDATE users SET balance=balance-? WHERE id=?',(it['price'],g.uid))
         return dict(item=it,inventoryId=add_item(it,'shop'),balance=user()['balance'])
     if path=='upgrade/targets' and post: return targets(body)
     if path=='upgrade' and post:
-        options=targets(body); target=next((x for x in options['targets'] if x['id']==integer(body.get('targetId'))),None)
+        options = targets(body)
+        target_id = integer(body.get('targetId'))
+        target = next((x for x in options['targets']
+                       if x['id'] == target_id and x.get('mutation') == body.get('mutation')), None)
         if not target: raise Problem('Недопустимая цель')
         rows=selected(body)
         side = controlled_side('upgrade', body)
@@ -1326,7 +1371,8 @@ def dispatch(path, body):
             c.execute('UPDATE users SET balance=balance+? WHERE id=?',(reward['amount'],g.uid))
             return dict(kind='coins',amount=reward['amount'],balance=user()['balance'])
         item=reward.get('item')
-        if reward['kind']=='case': item=RNG.choices(reward['pool'],weights=[i['weight'] for i in reward['pool']])[0]
+        if reward['kind']=='case':
+            item = roll_mutation(RNG.choices(reward['pool'], weights=[i['weight'] for i in reward['pool']])[0])
         if item.get('coins'):
             c.execute('UPDATE users SET balance=balance+? WHERE id=?', (item['price'], g.uid))
             return dict(kind='coins', amount=item['price'], balance=user()['balance'], fromCase=reward['kind']=='case')
@@ -1836,7 +1882,8 @@ def image(name):
         if not row:
             raise Problem('Обложка недоступна', 'not_found', 404)
         return Response(row['cover'], mimetype='image/png', headers={'Cache-Control': 'no-store'})
-    if name in ['logo.svg','coin.webp','custom/horseman.webp','custom/rodomits.webp']:
+    if name in ['logo.svg','coin.webp','custom/horseman.webp','custom/rodomits.webp'] or re.fullmatch(
+            r'mutations/(?:default|gold|diamond|rainbow)\.webp', name):
         return send_from_directory(ROOT/'public'/'img',name)
     if '..' in name or any(ch not in 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/_-.' for ch in name):
         raise Problem('Неверный путь',status=404)

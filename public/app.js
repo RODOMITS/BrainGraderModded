@@ -29,6 +29,24 @@
   // её телефон раскодирует в разы быстрее. Крупно (окно выигрыша, слоты апгрейда) — оригинал
   const itemImgBig = (src) => esc(src || '/img/unknown.svg');
   const itemImg = (src) => esc(src ? String(src).replace(/^\/img\/brainrots\/(?!s\/)/, '/img/brainrots/s/') : '/img/unknown.svg');
+  const MUTATIONS = { default: 1, gold: 1.25, diamond: 1.4, rainbow: 3 };
+  const mutationName = key => key[0].toUpperCase() + key.slice(1);
+  const mutationIcon = key => `/img/mutations/${key}.webp`;
+  const sameVariant = (a, b) => a?.id === b?.id && a?.mutation === b?.mutation;
+  function itemPicture(item, big = false) {
+    const src = (big ? itemImgBig : itemImg)(item.image);
+    const key = item.mutation;
+    const img = `<img ${big ? '' : 'loading="lazy"'} src="${src}" alt="">`;
+    if (!key || !Object.hasOwn(MUTATIONS, key)) return img;
+    return `<span class="mutation-picture mutation-${key}" title="${mutationName(key)}">${img}<i aria-label="${mutationName(key)}" style="background-image:url('${mutationIcon(key)}')"></i></span>`;
+  }
+
+  function rouletteMutation(item) {
+    if (!item.mutationEligible || item.mutation) return item;
+    const roll = Math.random();
+    const mutation = roll < .05 ? 'rainbow' : roll < .25 ? 'diamond' : roll < .55 ? 'gold' : null;
+    return mutation ? { ...item, mutation, price: Math.round(item.price * MUTATIONS[mutation] * 100) / 100 } : item;
+  }
   // «OG» нарисовано по пикселям: в пиксельном шрифте O похожа на ноль, а G на шестёрку
   const OG_PATH = 'M1 0h4v1h-4zM8 0h4v1h-4zM0 1h2v1h-2zM4 1h2v1h-2zM7 1h2v1h-2zM11 1h2v1h-2zM0 2h2v1h-2zM4 2h2v1h-2zM7 2h2v1h-2zM0 3h2v1h-2zM4 3h2v1h-2zM7 3h2v1h-2zM10 3h3v1h-3zM0 4h2v1h-2zM4 4h2v1h-2zM7 4h2v1h-2zM11 4h2v1h-2zM0 5h2v1h-2zM4 5h2v1h-2zM7 5h2v1h-2zM11 5h2v1h-2zM1 6h4v1h-4zM8 6h4v1h-4z';
   const ogSvg = (fill = 'currentColor') => `<svg viewBox="0 0 13 7" shape-rendering="crispEdges" aria-hidden="true"><path d="${OG_PATH}" fill="${fill}"/></svg>`;
@@ -551,7 +569,7 @@
   const live = { busy: false, ids: new Set() };
   const liveCard = (d) => (rememberDrop(d), '') + `
     <div class="lb-drop swap rar-${esc(d.rarity)}" data-drop="${esc(d.id)}" data-id="${esc(d.id)}" role="link" tabindex="0">
-      ${ogTag(d)}<img src="${itemImg(d.image)}" alt=""><b>${esc(d.name)}</b>${price(d.price)}${srcLayer(d)}
+      ${ogTag(d)}${itemPicture(d)}<b>${esc(d.name)}</b>${price(d.price)}${srcLayer(d)}
     </div>`;
   function drawLive(home, animate) {
     const bar = $('#livebar');
@@ -567,7 +585,7 @@
     live.signature=signature;live.mode=home.liveMode;
     const top = home.top;
     $('#lbTop', bar).innerHTML = top
-      ? (rememberDrop(top), '') + `<div class="lb-top-in swap rar-${esc(top.rarity)}" data-drop="${esc(top.id)}" role="link" tabindex="0"><span class="td-label">🏆 Топ-дроп дня</span>${ogTag(top)}<img src="${itemImg(top.image)}" alt=""><b>${esc(top.name)}</b><span class="td-price">${COIN}${fmt(top.price)}</span>${srcLayer(top)}</div>`
+      ? (rememberDrop(top), '') + `<div class="lb-top-in swap rar-${esc(top.rarity)}" data-drop="${esc(top.id)}" role="link" tabindex="0"><span class="td-label">🏆 Топ-дроп дня</span>${ogTag(top)}${itemPicture(top)}<b>${esc(top.name)}</b><span class="td-price">${COIN}${fmt(top.price)}</span>${srcLayer(top)}</div>`
       : `<div class="lb-top-in"><span class="td-label">🏆 Топ-дроп дня</span><div class="lb-empty">${HOURGLASS}<span class="muted">Сегодня ещё пусто</span></div></div>`;
     const list = $('#lbList', bar);
     const fresh = home.drops.filter((d) => !live.ids.has(d.id));
@@ -1124,7 +1142,7 @@
     const t = Math.max(0, Math.floor(ms / 1000));
     return `${Math.floor(t / 3600)}:${String(Math.floor((t % 3600) / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
   };
-  const dropTile = (d) => (rememberDrop(d), `<div class="drop-tile swap rar-${esc(d.rarity)}" data-drop="${esc(d.id)}" data-id="${esc(d.id)}" role="link" tabindex="0" aria-label="${esc(d.name)} — ${fmt(d.price)} BG"><img src="${itemImg(d.image)}" alt="${esc(d.name)}">${srcLayer(d)}</div>`);
+  const dropTile = (d) => (rememberDrop(d), `<div class="drop-tile swap rar-${esc(d.rarity)}" data-drop="${esc(d.id)}" data-id="${esc(d.id)}" role="link" tabindex="0" aria-label="${esc(d.name)} — ${fmt(d.price)} BG">${itemPicture(d)}${srcLayer(d)}</div>`);
 
   function drawTopDrop(home) {
     const box = $('#topDropMain');
@@ -1133,7 +1151,7 @@
     box.classList.toggle('swap', !!top);
     if (top) { rememberDrop(top); box.dataset.drop = top.id; box.setAttribute('role', 'link'); box.tabIndex = 0; } else delete box.dataset.drop;
     box.innerHTML = top
-      ? `<div class="td-img rar-${esc(top.rarity)}"><img src="${itemImg(top.image)}" alt=""></div>
+      ? `<div class="td-img rar-${esc(top.rarity)}">${itemPicture(top)}</div>
          <div class="td-info"><span class="td-label">🏆 Топ-дроп дня</span><b class="td-name">${esc(top.name)}</b></div>
          <span class="td-price">${COIN}${fmt(top.price)}</span>${srcLayer(top)}`
       : `<div class="td-img empty-img">${HOURGLASS}</div>
@@ -1283,7 +1301,7 @@
       const term = search.value.trim().toLowerCase();
       options.innerHTML = items.filter(item => item.name.toLowerCase().includes(term)).map(item => `
         <label><input type="checkbox" value="${item.id}" ${drops.has(item.id) ? 'checked' : ''}>
-        <img src="${itemImg(item.image)}" loading="lazy" alt=""><span>${esc(item.name)} · ${fmt(item.price)} BG</span></label>`).join('');
+        ${itemPicture(item)}<span>${esc(item.name)} · ${fmt(item.price)} BG</span></label>`).join('');
     };
     search.oninput = draw;
     options.onchange = event => {
@@ -1517,8 +1535,8 @@
   // Сколько карточек пролетает до выигрыша: обычный прокрут — сильный и длинный, быстрый — короткий
   const SPIN = { normal: { win: 125, dur: 9800 }, fast: { win: 36, dur: 2700 } };
 
-  const rCard = (it) => `<div class="r-card rar-${esc(it.rarity)}">${ogTag(it)}<img src="${itemImg(it.image)}" alt=""><div class="n">${esc(it.name)}</div>${price(it.price)}</div>`;
-  const itemCard = (it, extra = '') => `<div class="item rar-${esc(it.rarity)}" ${extra}>${ogTag(it)}<img loading="lazy" src="${itemImg(it.image)}" alt=""><div class="n">${esc(it.name)}</div>${price(it.price)}</div>`;
+  const rCard = (it) => `<div class="r-card rar-${esc(it.rarity)}">${ogTag(it)}${itemPicture(it)}<div class="n">${esc(it.name)}</div>${price(it.price)}</div>`;
+  const itemCard = (it, extra = '') => `<div class="item rar-${esc(it.rarity)}" ${extra}>${ogTag(it)}${itemPicture(it)}<div class="n">${esc(it.name)}</div>${price(it.price)}</div>`;
 
   // Дешёвые чаще мелькают в ленте, как и выпадают на самом деле
   function randomItem(pool) {
@@ -1540,7 +1558,7 @@
       if (d > 2 && Math.random() < 0.12) return pick(rich); // по пути тоже пролетают
       return randomItem(pool);
     });
-    return cards;
+    return cards.map((item, index) => index === winIdx ? item : rouletteMutation(item));
   }
 
   function placeStrip(strip, index, offset = 0) {
@@ -1570,7 +1588,7 @@
     const period = seq.length * STEP;
     const W = strip.parentElement.clientWidth || 390;
     const reps = Math.ceil((W + period) / period) + 1;
-    strip.innerHTML = Array.from({ length: reps }, () => seq.map(rCard).join('')).join('');
+    strip.innerHTML = Array.from({ length: reps }, () => seq.map(item => rCard(rouletteMutation(item))).join('')).join('');
     const v2 = isV2(strip);
     if (v2) resetFlow(strip);
     const x0 = Math.random() * period;
@@ -2128,7 +2146,7 @@
       <div>
         <div class="result-row n${n}">${drops.map((d) => `
           <div class="result-card shine rar-${esc(d.item.rarity)}">${ogTag(d.item)}
-            <img src="${itemImgBig(d.item.image)}" alt="">
+            ${itemPicture(d.item, true)}
             <b>${esc(d.item.name)}</b>
             ${price(d.item.price)}
           </div>`).join('')}
@@ -2298,13 +2316,13 @@
     const slotIn = $('#slotIn');
     slotIn.classList.toggle('full', chosen.length > 0);
     slotIn.innerHTML = chosen.length
-      ? `<div class="imgs ${chosen.length === 1 ? 'one' : ''}">${chosen.map((i) => `<img src="${chosen.length === 1 ? itemImgBig(i.item.image) : itemImg(i.item.image)}" alt="">`).join('')}</div>
+      ? `<div class="imgs ${chosen.length === 1 ? 'one' : ''}">${chosen.map(i => itemPicture(i.item, chosen.length === 1)).join('')}</div>
          <div>${chosen.length === 1 ? esc(chosen[0].item.name) : `${chosen.length} брейнрота`}</div>${price(sum)}`
       : `<div class="t">Твоя ставка</div><div class="t">выбери до ${cfg.maxItems} своих брейнротов</div>`;
     const slotOut = $('#slotOut');
     slotOut.classList.toggle('full', !!up.target);
     slotOut.innerHTML = up.target
-      ? `<div class="imgs one"><img src="${itemImgBig(up.target.image)}" alt=""></div><div>${esc(up.target.name)}</div>${price(up.target.price)}`
+      ? `<div class="imgs one">${itemPicture(up.target, true)}</div><div>${esc(up.target.name)}</div>${price(up.target.price)}`
       : `<div class="t">Цель</div><div class="t">${up.loading ? 'подбираю…' : chosen.length ? 'нет подходящих целей' : 'появится после выбора ставки'}</div>`;
 
     const presets = up.data?.presets || cfg.presets.map((p) => ({ ...p, target: null }));
@@ -2351,7 +2369,7 @@
     if (box.dataset.sig !== sig) {
       box.dataset.sig = sig;
       box.innerHTML = `<div class="items">${up.inv
-        .map((i) => `<button class="item rar-${esc(i.item.rarity)}" data-id="${i.id}">${ogTag(i.item)}${boughtTag(i)}<img loading="lazy" decoding="async" src="${itemImg(i.item.image)}" alt=""><div class="n">${esc(i.item.name)}</div>${price(i.item.price)}</button>`)
+        .map((i) => `<button class="item rar-${esc(i.item.rarity)}" data-id="${i.id}">${ogTag(i.item)}${boughtTag(i)}${itemPicture(i.item)}<div class="n">${esc(i.item.name)}</div>${price(i.item.price)}</button>`)
         .join('')}</div>`;
       box.onclick = async (ev) => {
         const b = ev.target.closest('.item[data-id]');
@@ -2416,10 +2434,16 @@
         .sort((a, b) => a.price - b.price || a.id - b.id);
       paint(`shop|${qy}`, `<div class="shop-warn">⚠️ <b>Брейнротов из магазина нельзя вывести.</b> Купленного можно поставить в апгрейд, сыграть в мистери или продать за ту же цену. А то, что выиграешь в апгрейде, выводится как обычно.</div>
         <div class="items">${list
-          .map((it) => `<button class="item rar-${esc(it.rarity)}" data-id="${it.id}">${ogTag(it)}<img loading="lazy" decoding="async" src="${itemImg(it.image)}" alt=""><div class="n">${esc(it.name)}</div>${price(it.price)}<small class="buy-lbl">Купить</small></button>`)
+          .map((it) => `<button class="item rar-${esc(it.rarity)}" data-id="${it.id}">${ogTag(it)}${itemPicture(it)}<div class="n">${esc(it.name)}</div>${price(it.price)}<small class="buy-lbl">Купить</small>${it.mutations?.length ? mutationPicker : ''}</button>`)
           .join('') || '<div class="empty">Ничего не нашлось</div>'}</div>`, (ev) => {
         const b = ev.target.closest('.item[data-id]');
-        if (b) buyShop(up.shop.items.find((x) => x.id === Number(b.dataset.id)));
+        if (!b) return;
+        const item = up.shop.items.find(x => x.id === Number(b.dataset.id));
+        if (ev.target.closest('[data-mutation-picker]') && item.mutations?.length) {
+          chooseMutation([item, ...item.mutations.map(mutation => ({
+            ...item, mutation, price: Math.round(item.price * MUTATIONS[mutation] * 100) / 100,
+          }))], buyShop);
+        } else buyShop(item);
       });
       return;
     }
@@ -2435,17 +2459,30 @@
       return;
     }
     search.classList.remove('hidden');
-    const targets = up.data.targets.filter(match).sort((a, b) => a.price - b.price || a.id - b.id);
-    paint(`t|${up.data.inputValue}|${qy}|${targets.length}`, `<div class="items">${targets
-      .map((it) => `<button class="item rar-${esc(it.rarity)}" data-id="${it.id}">${ogTag(it)}<img loading="lazy" decoding="async" src="${itemImg(it.image)}" alt=""><div class="n">${esc(it.name)}</div>${price(it.price)}<small class="muted">${fmt(it.chance)}%</small></button>`)
-      .join('') || '<div class="empty">Ничего не нашлось</div>'}</div>`, (ev) => {
-      const b = ev.target.closest('.item[data-id]');
-      if (!b || up.spinning || !up.data) return;
-      up.target = up.data.targets.find((x) => x.id === Number(b.dataset.id));
-      up.preset = up.data.presets.find((p) => p.target?.id === up.target.id)?.label || null;
+    const families = new Map();
+    for (const target of up.data.targets.filter(match)) {
+      if (!families.has(target.id)) families.set(target.id, []);
+      families.get(target.id).push(target);
+    }
+    const targets = [...families.values()].map(family => family.find(it => !it.mutation) || family[0])
+      .sort((a, b) => a.price - b.price || a.id - b.id);
+    const select = target => {
+      up.target = target;
+      up.preset = up.data.presets.find(p => sameVariant(p.target, target))?.label || null;
       tick();
       drawUpgrade({ lists: false });
       markRight();
+    };
+    paint(`t|${up.data.inputValue}|${qy}|${targets.length}`, `<div class="items">${targets
+      .map(it => `<button class="item rar-${esc(it.rarity)}" data-id="${it.id}">${ogTag(it)}${itemPicture(it)}
+        <div class="n">${esc(it.name)}</div>${price(it.price)}<small class="muted">${fmt(it.chance)}%</small>
+        ${families.get(it.id).length > 1 ? mutationPicker : ''}</button>`).join('') ||
+        '<div class="empty">Ничего не нашлось</div>'}</div>`, ev => {
+      const button = ev.target.closest('.item[data-id]');
+      if (!button || up.spinning || !up.data) return;
+      const family = families.get(Number(button.dataset.id));
+      if (ev.target.closest('[data-mutation-picker]')) chooseMutation(family, select);
+      else select(family.find(it => !it.mutation) || family[0]);
     });
     markRight();
   }
@@ -2456,6 +2493,24 @@
     for (const b of box.querySelectorAll('.item[data-id]')) b.classList.toggle('sel', Number(b.dataset.id) === id);
   }
 
+  function chooseMutation(variants, onPick) {
+    const body = h(`<div class="mutation-options">${variants.map((it, index) => {
+      const key = it.mutation || 'default';
+      return `<button class="btn ghost" data-variant="${index}"><img src="${mutationIcon(key)}" alt="">
+        <span>${mutationName(key)} · ×${MUTATIONS[key]}</span>${price(it.price)}
+        ${it.chance == null ? '' : `<small>${fmt(it.chance)}%</small>`}</button>`;
+    }).join('')}</div>`);
+    const sheet = openSheet(variants[0].name, body);
+    $$('[data-variant]', body).forEach(button => {
+      button.onclick = () => {
+        sheet.close();
+        onPick(variants[Number(button.dataset.variant)]);
+      };
+    });
+  }
+
+  const mutationPicker = '<span class="mutation-picker" data-mutation-picker title="Выбрать мутацию"><img src="/img/mutations/default.webp" alt="Мутации"></span>';
+
   async function buyShop(it) {
     if (!it || up.spinning) return;
     if ((state.me?.balance ?? 0) < it.price) {
@@ -2465,7 +2520,7 @@
     const ok = await confirmBox(`Купить «${it.name}» за ${fmt(it.price)} BG?\n\nКупленного брейнрота вывести нельзя — его можно поставить в апгрейд, сыграть в мистери или продать за ту же цену.`, { ok: 'Купить' });
     if (!ok) return;
     try {
-      const r = await api('/api/shop/buy', { method: 'POST', body: { itemId: it.id, key: newKey() } });
+      const r = await api('/api/shop/buy', { method: 'POST', body: { itemId: it.id, mutation: it.mutation, key: newKey() } });
       setBalance(r.balance);
       haptic('success');
       toast(`${r.item?.name || it.name} в инвентаре — выбран для апгрейда`);
@@ -2635,7 +2690,7 @@
     const slot = $('#slotOut');
     if (!slot || !item) return;
     slot.classList.add('full', 'gold');
-    slot.innerHTML = `<div class="imgs one"><img src="${itemImgBig(item.image)}" alt=""><span class="mult-tag">×${mult}</span></div><div>${esc(item.name)}</div>${price(item.price)}`;
+    slot.innerHTML = `<div class="imgs one">${itemPicture(item, true)}<span class="mult-tag">×${mult}</span></div><div>${esc(item.name)}</div>${price(item.price)}`;
     slot.classList.remove('pop');
     void slot.offsetWidth;
     slot.classList.add('pop');
@@ -2669,7 +2724,7 @@
     lockNav(true);
     let r;
     try {
-      r = await api('/api/upgrade', { method: 'POST', body: { ids: up.selected, targetId: up.target.id, key: newKey(), buttonSide } });
+      r = await api('/api/upgrade', { method: 'POST', body: { ids: up.selected, targetId: up.target.id, mutation: up.target.mutation, key: newKey(), buttonSide } });
       if (r.target) {
         up.target = r.target;
         drawUpgrade({ lists: false });
@@ -2906,7 +2961,7 @@
     const signature=minesUI.inv.map(i=>i.id).join(',');
     if(box.dataset.sig!==signature||!box.firstChild){
       box.dataset.sig=signature;
-      box.innerHTML=minesUI.inv.length?`<div class="items">${minesUI.inv.map(i=>`<button class="item rar-${esc(i.item.rarity)}" data-mine-item="${i.id}">${ogTag(i.item)}${boughtTag(i)}<img loading="lazy" decoding="async" src="${itemImg(i.item.image)}" alt=""><div class="n">${esc(i.item.name)}</div>${price(i.item.price)}</button>`).join('')}</div>`:'<div class="empty">Пока нечего поставить. Открой кейс или купи брейнрота справа<a class="btn" href="#/">К кейсам</a></div>';
+      box.innerHTML=minesUI.inv.length?`<div class="items">${minesUI.inv.map(i=>`<button class="item rar-${esc(i.item.rarity)}" data-mine-item="${i.id}">${ogTag(i.item)}${boughtTag(i)}${itemPicture(i.item)}<div class="n">${esc(i.item.name)}</div>${price(i.item.price)}</button>`).join('')}</div>`:'<div class="empty">Пока нечего поставить. Открой кейс или купи брейнрота справа<a class="btn" href="#/">К кейсам</a></div>';
       box.onclick=event=>{
         const button=event.target.closest('[data-mine-item]');if(!button)return;
         if(minesUI.busy||minesUI.game?.status==='active')return;
@@ -2933,7 +2988,7 @@
     const signature=query+'|'+list.map(i=>`${i.id}:${i.price}`).join(',');
     if(box.dataset.sig!==signature||!box.firstChild){
       box.dataset.sig=signature;
-      box.innerHTML=`<div class="shop-warn">⚠️ <b>Брейнротов из магазина нельзя вывести.</b> Купленного можно поставить в апгрейд, сыграть в мистери или продать за ту же цену. А то, что выиграешь в апгрейде, выводится как обычно.</div><div class="items">${list.map(it=>`<button class="item rar-${esc(it.rarity)}" data-mine-buy="${it.id}">${ogTag(it)}<img loading="lazy" decoding="async" src="${itemImg(it.image)}" alt=""><div class="n">${esc(it.name)}</div>${price(it.price)}<small class="buy-lbl">Купить</small></button>`).join('')||'<div class="empty">Ничего не нашлось</div>'}</div>`;
+      box.innerHTML=`<div class="shop-warn">⚠️ <b>Брейнротов из магазина нельзя вывести.</b> Купленного можно поставить в апгрейд, сыграть в мистери или продать за ту же цену. А то, что выиграешь в апгрейде, выводится как обычно.</div><div class="items">${list.map(it=>`<button class="item rar-${esc(it.rarity)}" data-mine-buy="${it.id}">${ogTag(it)}${itemPicture(it)}<div class="n">${esc(it.name)}</div>${price(it.price)}<small class="buy-lbl">Купить</small></button>`).join('')||'<div class="empty">Ничего не нашлось</div>'}</div>`;
     }
     $$('[data-mine-buy]',box).forEach(button=>button.disabled=minesUI.busy||minesUI.game?.status==='active');
     box.onclick=event=>{
@@ -2984,7 +3039,7 @@
     if(!reward&&item){const nearest=[...minesUI.pool].filter(i=>i.price<=item.price).sort((a,b)=>b.price-a.price||a.id-b.id)[0];reward={item:nearest||null,coins:Math.round((item.price-(nearest?.price||0))*100)/100,total:item.price};}
     $('#minesCount').disabled=active||minesUI.busy;
     $('#minesMult').textContent='×'+fmt(game&&!minesUI.selected?game.multiplier:1);
-    $('#minesReward').innerHTML=reward?`${reward.item?`<div class="mines-prize"><img src="${itemImg(reward.item.image)}" alt=""><span>${esc(reward.item.name)}</span></div>`:''}<b>${price(reward.total)}</b>${reward.coins>0?`<small>+ ${fmt(reward.coins)} BG доплатой</small>`:''}`:'<span class="muted">Выбери ставку</span>';
+    $('#minesReward').innerHTML=reward?`${reward.item?`<div class="mines-prize">${itemPicture(reward.item)}<span>${esc(reward.item.name)}</span></div>`:''}<b>${price(reward.total)}</b>${reward.coins>0?`<small>+ ${fmt(reward.coins)} BG доплатой</small>`:''}`:'<span class="muted">Выбери ставку</span>';
     $('#minesStake').innerHTML=item?`Ставка: <b>${esc(item.name)}</b> · ${price(item.price)}`:'';
     $('#minesStatus').textContent=active?`Открыто ${game.revealed.length} из ${25-game.mines}`:game?.status==='lost'?'Мина — ставка проиграна':game?.status==='cashed'?'Награда в инвентаре':'Выбери ставку';
     const go=$('#minesGo');go.textContent=minesUI.busy?'Подожди':active?'Забрать '+fmt(game.reward.total)+' BG':game?'Начать новую игру':'Начать';
@@ -3222,7 +3277,7 @@
           ${state.cfg.theme === 'halloween' ? webs : ''}
           <div class="gw-prize">
             <div class="gw-glow"></div>
-            <img src="${itemImgBig(g.item.image)}" alt="">
+            ${itemPicture(g.item, true)}
             <div class="gw-name">${esc(g.item.name)}</div>
             <div class="gw-price">${price(g.item.price)}</div>
           </div>
@@ -3245,7 +3300,7 @@
     };
     const past = (g) => `
       <div class="gw-past rar-${esc(g.item.rarity)}">
-        <img src="${itemImg(g.item.image)}" alt="">
+        ${itemPicture(g.item)}
         <div class="gw-past-n"><b>${esc(g.item.name)}</b>${price(g.item.price)}</div>
         <div class="gw-past-w">${g.participants == null ? '' : 'Участников: ' + fmt(g.participants) + ' · '}${g.winner ? `${g.winner.me ? '🎉 <b>Ты победил!</b>' : `Победил <b>${esc(g.winner.name)}</b>`} · №${fmt(g.winner.num)}` : '<span class="muted">Победителя нет</span>'}</div>
       </div>`;
@@ -3380,7 +3435,7 @@
         const r = await api('/api/pass/claim', { method: 'POST', body: { level: Number(b.dataset.claim), key: newKey() } });
         haptic('success');
         const items = r.got.map((g) => (g.kind === 'coins' ? `<div class="line"><img class="gp-coin" src="/img/coin.webp" alt=""><div class="grow"><b>${fmt(g.amount)} BG</b><span class="muted"> на баланс</span></div></div>`
-          : `<div class="line"><img src="${itemImg(g.item.image)}" alt=""><div class="grow"><b>${esc(g.item.name)}</b></div>${price(g.item.price)}</div>`)).join('');
+          : `<div class="line">${itemPicture(g.item)}<div class="grow"><b>${esc(g.item.name)}</b></div>${price(g.item.price)}</div>`)).join('');
         const hasItems = r.got.some((g) => g.kind === 'item');
         openSheet(`Награда ${r.level}-го уровня`, h(`<div class="gp-got">${r.case ? `<p class="muted center">Из кейса «${esc(r.case.name)}»:</p>` : ''}${items}${r.badge ? '<p class="center">🔥 <b>Значок сезона</b> — ты прошёл весь Осенний сезон!</p>' : ''}${hasItems ? '<p class="hint center">Брейнроты — в инвентаре. Вывести их нельзя, но можно продать, поставить в апгрейд или мистери.</p>' : ''}</div>`));
         if (typeof r.balance === 'number') setBalance(r.balance);
@@ -3463,7 +3518,7 @@
       ? `<div class="items">${[...dice.inv].sort((a, b) => b.item.price - a.item.price).map((i) => {
           const on = dice.sel.includes(i.id);
           const off = !on && (full || sum + i.item.price > cfg.max);
-          return `<button class="item rar-${esc(i.item.rarity)} ${on ? 'sel' : ''} ${off ? 'dim' : ''}" data-id="${i.id}">${ogTag(i.item)}${boughtTag(i)}<img loading="lazy" decoding="async" src="${itemImg(i.item.image)}" alt=""><div class="n">${esc(i.item.name)}</div>${price(i.item.price)}</button>`;
+          return `<button class="item rar-${esc(i.item.rarity)} ${on ? 'sel' : ''} ${off ? 'dim' : ''}" data-id="${i.id}">${ogTag(i.item)}${boughtTag(i)}${itemPicture(i.item)}<div class="n">${esc(i.item.name)}</div>${price(i.item.price)}</button>`;
         }).join('')}</div>`
       : '<div class="empty">У тебя пока нет брейнротов. Открой кейс или купи в апгрейдере — и возвращайся</div>';
     box.onclick = (ev) => {
@@ -3492,7 +3547,7 @@
     slot.classList.toggle('full', chosen.length > 0);
     slot.classList.toggle('hidden', !chosen.length); // пустой слот не показываем — выбор и так внизу
     slot.innerHTML = chosen.length
-      ? `<div class="cd-slot-imgs">${chosen.map((i) => `<img src="${itemImg(i.item.image)}" alt="">`).join('')}</div><div class="cd-slot-sum">${price(sum)}</div>`
+      ? `<div class="cd-slot-imgs">${chosen.map((i) => `${itemPicture(i.item)}`).join('')}</div><div class="cd-slot-sum">${price(sum)}</div>`
       : '';
     slot.onclick = () => $('#cdInv')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     const n = $('#cdSelN');
@@ -3683,7 +3738,7 @@
         const fits = mysFits(i.item.price);
         // почему нельзя положить — прямо на карточке, а не просто «тусклая»
         const why = fits ? '' : `<small class="mys-why">${i.item.price < state.cfg.mystery.minInput ? `дешевле ${fmt(state.cfg.mystery.minInput)} BG` : `дороже ${fmt(state.cfg.mystery.maxInput)} BG`}</small>`;
-        return `<button class="item rar-${esc(i.item.rarity)} ${mys.sel === i.id ? 'sel' : ''} ${fits ? '' : 'dim'}" data-id="${i.id}">${ogTag(i.item)}<img loading="lazy" src="${itemImg(i.item.image)}" alt=""><div class="n">${esc(i.item.name)}</div>${price(i.item.price)}${why}</button>`;
+        return `<button class="item rar-${esc(i.item.rarity)} ${mys.sel === i.id ? 'sel' : ''} ${fits ? '' : 'dim'}" data-id="${i.id}">${ogTag(i.item)}${itemPicture(i.item)}<div class="n">${esc(i.item.name)}</div>${price(i.item.price)}${why}</button>`;
       })
       .join('')}</div>`;
     $$('.item', box).forEach((b) => (b.onclick = () => {
@@ -3705,7 +3760,7 @@
     showMysItem(it?.item || null);
     const slot = $('#mysSlot');
     if (slot) slot.innerHTML = it
-      ? `<img src="${itemImg(it.item.image)}" alt=""><b>${esc(it.item.name)}</b>${price(it.item.price)}`
+      ? `${itemPicture(it.item)}<b>${esc(it.item.name)}</b>${price(it.item.price)}`
       : '<div class="t">Твой брейнрот</div><div class="t">выбери его в списке «Твои брейнроты»</div>';
     $('#mysRange').innerHTML = '';
     $('#mysPool').innerHTML = MYS_POOL_EMPTY;
@@ -4196,7 +4251,7 @@
         drawStreakPill();
         box.innerHTML = res.kind === 'coins'
           ? `<div class="s-got">${streakFlame(40)}<b>+${fmt(res.amount)} BG</b><span class="muted">${res.fromCase ? 'выпало из наградного кейса · ' : ''}уже на балансе</span></div>`
-          : `<div class="s-got item rar-${esc(res.item.rarity)}"><img src="${itemImg(res.item.image)}" alt=""><b>${esc(res.item.name)}</b>${price(res.item.price)}<span class="muted">${res.fromCase ? 'выпал из наградного кейса · ' : ''}уже в инвентаре. Вывести нельзя — можно продать, апгрейд или мистери</span></div>`;
+          : `<div class="s-got item rar-${esc(res.item.rarity)}">${itemPicture(res.item)}<b>${esc(res.item.name)}</b>${price(res.item.price)}<span class="muted">${res.fromCase ? 'выпал из наградного кейса · ' : ''}уже в инвентаре. Вывести нельзя — можно продать, апгрейд или мистери</span></div>`;
       } catch (e) {
         fail(e);
         if (e.code === 'need_deposit') { await streakCheckin(); }
@@ -4414,7 +4469,7 @@
           ? `<div class="wd-layer"><div class="spinner"></div>На выводе<button class="wd-cancel" data-cancel="${w.id}" aria-label="Отменить вывод">×</button></div>`
           : '';
         // div, а не button: внутри есть свои кнопки (отмена вывода, «Я в игре»)
-        return `<div class="item rar-${esc(i.item.rarity)} ${w ? 'withdrawing' : ''} ${i.test ? 'is-test' : ''}" role="button" tabindex="0" data-id="${i.id}">${ogTag(i.item)}${i.test ? testTag : ''}<img loading="lazy" src="${itemImg(i.item.image)}" alt=""><div class="n">${esc(i.item.name)}</div>${price(i.item.price)}${layer}</div>`;
+        return `<div class="item rar-${esc(i.item.rarity)} ${w ? 'withdrawing' : ''} ${i.test ? 'is-test' : ''}" role="button" tabindex="0" data-id="${i.id}">${ogTag(i.item)}${i.test ? testTag : ''}${itemPicture(i.item)}<div class="n">${esc(i.item.name)}</div>${price(i.item.price)}${layer}</div>`;
       })
       .join('')}</div>`;
     $$('.item', box).forEach((b) => {
@@ -4433,7 +4488,7 @@
     if (!box || !done.length) return;
     const label = { completed: 'Выведен', cancelled: 'Отменён', rejected: 'Отклонён' };
     box.innerHTML = `<div class="section-head"><h2>История выводов</h2></div>${done
-      .map((r) => `<div class="line"><img src="${itemImg(r.item.image)}" alt=""><div class="grow"><b>${esc(r.item.name)}</b><span class="muted">${label[r.status] || r.status}${r.note ? ': ' + esc(r.note) : ''}</span></div>${price(r.item.price)}</div>`)
+      .map((r) => `<div class="line">${itemPicture(r.item)}<div class="grow"><b>${esc(r.item.name)}</b><span class="muted">${label[r.status] || r.status}${r.note ? ': ' + esc(r.note) : ''}</span></div>${price(r.item.price)}</div>`)
       .join('')}`;
   }
 
@@ -4448,7 +4503,7 @@
     const body = h(`
       <div>
         <div class="result-card rar-${esc(it.item.rarity)}" ${it.item.rarity === 'og' ? '' : 'style="box-shadow:none;border-color:var(--ridge-2)"'}>${ogTag(it.item)}
-          <img src="${itemImgBig(it.item.image)}" alt=""><b>${esc(it.item.name)}</b>${price(it.item.price)}
+          ${itemPicture(it.item, true)}<b>${esc(it.item.name)}</b>${price(it.item.price)}
         </div>
         <button class="btn" data-a="withdraw" ${canWithdraw ? '' : 'disabled'}>Вывести в Roblox</button>
         ${it.source === 'pass' ? '<p class="hint center">Награду Grader Pass можно продать или поставить в игре.</p>' : ''}
@@ -4500,7 +4555,7 @@
   function withdrawSheet(it) {
     if (payBlocked() || !it.withdrawable) return;
     const form = h(`<form>
-      <div class="line"><img src="${itemImg(it.item.image)}" alt=""><div class="grow"><b>${esc(it.item.name)}</b></div>${price(it.item.price)}</div>
+      <div class="line">${itemPicture(it.item)}<div class="grow"><b>${esc(it.item.name)}</b></div>${price(it.item.price)}</div>
       <label class="field"><span>Твой ник в Roblox</span><input id="rbx" autocomplete="off" autocapitalize="off" spellcheck="false" minlength="3" maxlength="20" pattern="[A-Za-z0-9_]{3,20}" placeholder="Например, Player_123" required></label>
       <button class="btn" type="submit">Поставить на вывод</button>
     </form>`);
@@ -4679,7 +4734,7 @@
         ? list
             .map((i) => {
               const n = dep.sel.get(i.id) || 0;
-              return `<button class="item rar-${esc(i.rarity)} ${n ? 'sel' : ''}" data-id="${i.id}">${n ? `<span class="qty">${n}</span><span class="minus" data-minus="${i.id}">−</span>` : ''}${i.minQty && !n ? `<span class="min-qty">от ${i.minQty} шт.</span>` : ''}${ogTag(i)}<img loading="lazy" src="${itemImg(i.image)}" alt=""><div class="n">${esc(i.name)}</div>${price(i.price)}</button>`;
+              return `<button class="item rar-${esc(i.rarity)} ${n ? 'sel' : ''}" data-id="${i.id}">${n ? `<span class="qty">${n}</span><span class="minus" data-minus="${i.id}">−</span>` : ''}${i.minQty && !n ? `<span class="min-qty">от ${i.minQty} шт.</span>` : ''}${ogTag(i)}${itemPicture(i)}<div class="n">${esc(i.name)}</div>${price(i.price)}</button>`;
             })
             .join('')
         : '<div class="empty" style="grid-column:1/-1">Ничего не нашлось</div>';
@@ -4786,7 +4841,76 @@
     // Keep the admin document ready so opening it does not navigate away or reload its catalogue.
     if(prefs.showAdmin)setTimeout(prepareAdmin,1500);
     if (showWelcome) await showModdedWelcome();
+    startModdedTour();
     streakCheckin();
+  }
+
+  function startModdedTour() {
+    const key = 'bg_tour_mutations_v1';
+    try { if (localStorage.getItem(key)) return; } catch {}
+    const steps = [
+      ['#setBtn', 'Настройки', 'Здесь можно настроить звук, режим стримера и видимость админок.'],
+      ['#setBtn', 'Кастомный контент', 'Включи «Кастомный контент» в настройках, чтобы появились Мины, Headless Horseman и раздел «Именные кейсы».'],
+      ['#namedCreate, a[href="#/"], .logo', 'Именные кейсы', 'Открой главную. В разделе «Именные кейсы» можно покрутить RODOMITS или создать кейс со своей обложкой и дропами на неделю за 15 ⭐.'],
+      ['[href="#/upgrade"]', 'Мутации', 'В кейсах брейнроты могут выпадать в Gold, Diamond и Rainbow. В магазине и целях апгрейдера нажми на иконку мутации, чтобы выбрать вариант. Быстрый подбор учитывает их автоматически.'],
+      ['[href="#/mines"]', 'Мины', 'Выбери брейнрота для ставки и количество мин. Открывай алмазы и забирай награду до попадания на мину.'],
+      ['[href="#/admin"], .admin-shortcut', 'Админка', 'Здесь можно пополнить свой игровой баланс, выдать себе предмет или настроить следующий дроп. Также можно настроить каталог, лайв-дропы, розыгрыши, рефералов, серию заходов и Grader Pass.'],
+      ['[href="#/owner"]', 'Овнерская админка', 'Здесь видны игроки онлайн, список аккаунтов и управление скримером.', true],
+      ['#streakPill, [href="#/pass"]', 'Награды', 'Огонёк в шапке открывает серию заходов. В Grader Pass можно выполнять задания, получать XP за игры и забирать награды за уровни.'],
+    ].filter(step => !step[3] || state.me?.isOwner);
+    const tour = h(`<div class="modded-tour">
+      <div class="tour-spot"></div>
+      <section class="tour-card" role="dialog" aria-label="Туториал">
+        <small></small><h2></h2><p></p>
+        <div class="btn-row"><button class="btn ghost" data-skip>Пропустить</button><button class="btn" data-next>Далее</button></div>
+      </section>
+    </div>`);
+    const spot = $('.tour-spot', tour);
+    const card = $('.tour-card', tour);
+    const next = $('[data-next]', tour);
+    let index = 0;
+    let frame;
+    function position() {
+      const target = [...document.querySelectorAll(steps[index][0])]
+        .find(el => el.getClientRects().length && el.getBoundingClientRect().bottom > 0 &&
+          el.getBoundingClientRect().top < innerHeight);
+      const rect = (target || $('#menuBtn') || $('.topbar')).getBoundingClientRect();
+      const left = Math.max(4, rect.left - 5);
+      const top = Math.max(4, rect.top - 5);
+      const right = Math.min(innerWidth - 4, rect.right + 5);
+      const bottom = Math.min(innerHeight - 4, rect.bottom + 5);
+      Object.assign(spot.style, { left: left + 'px', top: top + 'px',
+        width: Math.max(0, right - left) + 'px', height: Math.max(0, bottom - top) + 'px' });
+      const below = bottom + 12;
+      card.style.top = (below + card.offsetHeight <= innerHeight - 8
+        ? below : Math.max(8, top - card.offsetHeight - 12)) + 'px';
+    }
+    function draw() {
+      closeMenu();
+      const selector = steps[index][0];
+      if (selector.includes('[href=') && ![...document.querySelectorAll(selector)].some(el => el.getClientRects().length)
+          && $('#menuBtn')?.getClientRects().length) openMenu();
+      $('small', card).textContent = `${index + 1} / ${steps.length}`;
+      $('h2', card).textContent = steps[index][1];
+      $('p', card).textContent = steps[index][2];
+      next.textContent = index === steps.length - 1 ? 'Готово' : 'Далее';
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(position);
+    }
+    function finish() {
+      try { localStorage.setItem(key, '1'); } catch {}
+      cancelAnimationFrame(frame);
+      removeEventListener('resize', position);
+      removeEventListener('scroll', position, true);
+      tour.remove();
+      closeMenu();
+    }
+    $('[data-skip]', tour).onclick = finish;
+    next.onclick = () => index + 1 >= steps.length ? finish() : (++index, draw());
+    document.body.append(tour);
+    addEventListener('resize', position);
+    addEventListener('scroll', position, true);
+    draw();
   }
 
   function showModdedWelcome(){
