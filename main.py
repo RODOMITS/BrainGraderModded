@@ -1799,6 +1799,8 @@ def owner_drops():
     player = request.args.get('player', '').strip().casefold().removeprefix('@')
     mutation = request.args.get('mutation', '')
     clock = request.args.get('time', '')
+    streak_filter = request.args.get('streak', '').strip()
+    streak_days = integer(streak_filter, 0) if streak_filter else None
     count = request.args.get('count', '')
     companions = [name.strip().casefold() for name in request.args.getlist('companion') if name.strip()]
     if count not in ('', '1', '3', '5') or len(companions) > 4 or any(len(n) > 100 for n in companions):
@@ -1857,6 +1859,8 @@ def owner_drops():
             streak = db().execute("""SELECT json_extract(payload,'$.count') FROM history
                 WHERE kind='streak/checkin' AND user_id=? AND created<=?
                 ORDER BY created DESC,id DESC LIMIT 1""", (row['id'], row['created'])).fetchone()
+            if streak_days is not None and (not streak or streak[0] != streak_days):
+                continue
             matches.append(dict(id=row['id'], name=row['name'], username=row['username'],
                                 item=item['name'], mutation=item.get('mutation'), source=row['source'],
                                 createdAt=iso(row['created']), caseName=row['case_name'],

@@ -957,6 +957,7 @@
           <label>Примерное время (МСК, ±30 минут)<input type="time" name="time"></label>
           <label>Игрок<select name="player"><option value="">Любой</option></select></label>
           <label>Мутация<select name="mutation"><option value="">Любая</option><option value="default">Без мутации</option><option value="gold">Gold</option><option value="diamond">Diamond</option><option value="rainbow">Rainbow</option></select></label>
+          <label>Серия заходов на момент дропа<input name="streak" type="number" min="0" step="1" placeholder="Любая серия"></label>
           <button type="submit" class="btn" data-drop-submit disabled>Найти</button>
           <button type="button" class="btn ghost" data-drop-retry hidden>Повторить загрузку</button>
           <p data-drop-status role="status"></p>
