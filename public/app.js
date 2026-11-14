@@ -1015,11 +1015,10 @@
         box.innerHTML = `<div class="owner-stat-grid">${[
           ['Игроков Telegram', s.players], ['Онлайн', s.online], ['За 24 часа', s.active24h],
           [`Участников ${s.channel}`, s.channelMembers ?? '—'],
-          ['Подписаны из проверенных игроков', s.subscribed], ['Игроков проверено', s.checked],
-          ['Доля среди проверенных', s.percent == null ? '—' : fmt(s.percent) + '%'],
+          ['Доля подписанных среди всех игроков', s.percent == null ? '—' : `${s.checked < s.players ? '≥ ' : ''}${fmt(s.percent)}%`],
           ['Открыто кейсов', s.cases], ['Апгрейдов', s.upgrades],
         ].map(([title, value]) => `<div><b>${esc(typeof value === 'number' ? fmt(value) : value)}</b><small>${esc(title)}</small></div>`).join('')}</div>
-        <small class="muted">Подписка считается по последней успешной проверке каждого игрока.</small>`;
+        <small class="muted">Подтверждено подписок: ${fmt(s.subscribed)} из ${fmt(s.players)} игроков. Без проверки: ${fmt(Math.max(0, s.players - s.checked))}.</small>`;
       } catch (error) {
         box.textContent = error.message;
       }

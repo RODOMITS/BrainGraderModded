@@ -1739,7 +1739,7 @@ def owner_stats():
             pass
     return jsonify(**dict(players), checked=checks, subscribed=subs, online=online, active24h=active,
                    channelMembers=members, channel=CHANNEL_USERNAME,
-                   percent=round(100 * subs / checks, 1) if checks else None)
+                   percent=round(100 * subs / players['players'], 2) if players['players'] else None)
 
 
 DROP_SOURCES = ('case', 'upgrade', 'mystery', 'dice', 'mines', 'streak', 'pass', 'giveaway')
