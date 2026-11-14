@@ -5180,9 +5180,12 @@
       api('/api/welcome/subscription-share').then(({ percent }) => {
         if (!dialog.open || typeof percent !== 'number') return;
         const bars = h(`<div class="mw-subscription">
-          <div>Подписаны <b>${fmt(percent)}%</b><progress aria-label="Подписаны" value="${percent}" max="100"></progress></div>
-          <div>Не подписаны <b>${fmt(Math.round((100 - percent) * 10) / 10)}%</b><progress aria-label="Не подписаны" value="${100 - percent}" max="100"></progress></div>
-          <small>Оценка по числу участников канала и игроков Telegram</small>
+          ${[['Подписаны', percent], ['Не подписаны', Math.round((100 - percent) * 10) / 10]].map(([label, value]) => `
+            <div class="mw-share-row"><span>${label}</span><b>${fmt(value)}%</b>
+              <div class="mw-share-track" role="meter" aria-label="${label}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${value}">
+                <span style="width:${value}%"></span>
+              </div>
+            </div>`).join('')}
         </div>`);
         button.before(bars);
       }).catch(() => {});

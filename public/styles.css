@@ -2099,7 +2099,9 @@ html.autumn h2::after { content: ' 🍂'; font-size: .8em; }
 .owner-card [data-reminder-list] li { flex-wrap: wrap; align-items: center; }
 
 .mw-subscription { display: grid; gap: 9px; margin: 0 0 18px; font-size: 13px; }
-.mw-subscription b { float: right; }
-.mw-subscription progress { display: block; width: 100%; margin-top: 4px; height: 9px; accent-color: var(--crystal); }
-.mw-subscription > div:nth-child(2) progress { accent-color: var(--ember); }
-.mw-subscription small { color: var(--muted); }
+.mw-share-row { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; }
+.mw-share-row b { color: var(--crystal-hi); font-variant-numeric: tabular-nums; }
+.mw-share-track { grid-column: 1 / -1; height: 10px; background: var(--cave); border: 1px solid var(--ridge); border-radius: 999px; overflow: hidden; }
+.mw-share-track span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #159b60, #55eca5); }
+.mw-share-row:nth-child(2) b { color: #ff9c90; }
+.mw-share-row:nth-child(2) .mw-share-track span { background: linear-gradient(90deg, #b5414e, #ff8c7a); }
