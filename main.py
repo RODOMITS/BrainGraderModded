@@ -330,6 +330,9 @@ def init_db():
           user_id TEXT PRIMARY KEY, subscribed INTEGER NOT NULL, checked REAL NOT NULL);
         CREATE TABLE IF NOT EXISTS site_presence(
           user_id TEXT PRIMARY KEY, username TEXT NOT NULL, seen REAL NOT NULL);
+        CREATE TABLE IF NOT EXISTS presence_reminders(
+          user_id TEXT PRIMARY KEY REFERENCES users(id), on_enter INTEGER NOT NULL,
+          on_leave INTEGER NOT NULL, was_online INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS screamers(
           target TEXT PRIMARY KEY, id TEXT NOT NULL, mime TEXT NOT NULL,
           video BLOB NOT NULL, expires REAL NOT NULL, delivered INTEGER NOT NULL DEFAULT 0);
@@ -1673,6 +1676,47 @@ def require_owner():
         raise Problem('Доступ только владельцу', 'forbidden', 403)
 
 
+@app.route('/api/owner/reminders', methods=['GET', 'POST'])
+def owner_reminders():
+    require_owner()
+    c = db()
+    if request.method == 'POST':
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict) or not isinstance(body.get('player'), str):
+            raise Problem('Укажи @username или Telegram ID')
+        player = body['player'].strip().removeprefix('@').lower()
+        if re.fullmatch(r'[0-9]{1,16}', player):
+            uid = 'tg:' + player
+            if not c.execute('SELECT 1 FROM users WHERE id=?', (uid,)).fetchone():
+                raise Problem('Этот игрок ещё не заходил в Modded', status=404)
+        else:
+            rows = c.execute("""SELECT user_id FROM site_presence
+                WHERE user_id GLOB 'tg:*' AND lower(username)=? AND username<>'' LIMIT 2""",
+                (player,)).fetchall()
+            if len(rows) != 1:
+                raise Problem('Игрок не найден по нику. Попробуй Telegram ID', status=404)
+            uid = rows[0]['user_id']
+        enter, leave = body.get('enter'), body.get('leave')
+        if type(enter) is not bool or type(leave) is not bool:
+            raise Problem('Выбери события для уведомлений')
+        c.execute('BEGIN IMMEDIATE')
+        with c:
+            if enter or leave:
+                online = c.execute('SELECT 1 FROM site_presence WHERE user_id=? AND seen>?',
+                                   (uid, time.time() - ONLINE_TTL)).fetchone() is not None
+                c.execute('''INSERT INTO presence_reminders VALUES (?,?,?,?)
+                    ON CONFLICT(user_id) DO UPDATE SET on_enter=excluded.on_enter,on_leave=excluded.on_leave''',
+                          (uid, enter, leave, online))
+            else:
+                c.execute('DELETE FROM presence_reminders WHERE user_id=?', (uid,))
+    rows = c.execute("""SELECT r.user_id AS id,u.name,COALESCE(p.username,'') AS username,
+        r.on_enter AS enter,r.on_leave AS leave,COALESCE(p.seen>?,0) AS online
+        FROM presence_reminders r JOIN users u ON u.id=r.user_id
+        LEFT JOIN site_presence p ON p.user_id=r.user_id ORDER BY u.name,r.user_id""",
+                     (time.time() - ONLINE_TTL,))
+    return jsonify(players=[dict(row) for row in rows])
+
+
 @app.get('/api/owner/stats')
 def owner_stats():
     require_owner()
@@ -2093,6 +2137,6 @@ if __name__=='__main__':
                          + '. Add the public directory to the repository and redeploy.')
     print('BrainGrader: frontend found; starting HTTP server.', flush=True)
     from telegram_bot import start_bot
-    start_bot(DB_PATH)
+    start_bot(DB_PATH, int(OWNER_UID[3:]), ONLINE_TTL)
     from waitress import serve
     serve(app,host='0.0.0.0',port=int(os.getenv('PORT','8000')),threads=8)

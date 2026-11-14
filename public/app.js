@@ -919,6 +919,17 @@
     }
     const page = h(`<section class="owner-panel">
       <h1>Овнерская админка</h1>
+      <details class="owner-card">
+        <summary>Напоминания об онлайне</summary>
+        <form data-reminder>
+          <label>Игрок<input name="player" placeholder="@username или Telegram ID" required></label>
+          <label><input type="checkbox" name="enter" checked> Когда заходит</label>
+          <label><input type="checkbox" name="leave"> Когда выходит</label>
+          <button class="btn" type="submit">Сохранить</button>
+          <p data-reminder-status role="status"></p>
+          <ul data-reminder-list></ul>
+        </form>
+      </details>
       <section class="owner-card">
         <h2>Статистика</h2>
         <div data-owner-stats role="status">Загрузка…</div>
@@ -1044,7 +1055,49 @@
         button.disabled = false;
       }
     };
-    const form = $('form:not([data-drop-form])', page);
+    const reminder = $('[data-reminder]', page);
+    const reminderStatus = $('[data-reminder-status]', reminder);
+    const reminderList = $('[data-reminder-list]', reminder);
+    let reminderBusy = false;
+    async function updateReminders(body) {
+      if (reminderBusy) return;
+      reminderBusy = true;
+      try {
+        const { players } = await api('/api/owner/reminders', body ? { method: 'POST', body } : undefined);
+        reminderList.replaceChildren(...players.map(player => {
+          const row = document.createElement('li');
+          const id = player.id.slice(3);
+          const title = document.createElement('span');
+          title.textContent = `${player.username ? '@' + player.username : player.name} · ${[player.enter && 'вход', player.leave && 'выход'].filter(Boolean).join(' и ')}`;
+          const edit = document.createElement('button');
+          edit.type = 'button';
+          edit.className = 'btn ghost small';
+          edit.textContent = 'Настроить';
+          edit.onclick = () => {
+            reminder.elements.player.value = id;
+            reminder.elements.enter.checked = !!player.enter;
+            reminder.elements.leave.checked = !!player.leave;
+          };
+          const remove = edit.cloneNode(false);
+          remove.textContent = 'Убрать';
+          remove.onclick = () => updateReminders({ player: id, enter: false, leave: false });
+          row.append(title, edit, remove);
+          return row;
+        }));
+        reminderStatus.textContent = body ? 'Сохранено' : players.length ? '' : 'Список пуст';
+      } catch (error) {
+        reminderStatus.textContent = error.message;
+      } finally {
+        reminderBusy = false;
+      }
+    }
+    reminder.closest('details').ontoggle = event => { if (event.currentTarget.open) updateReminders(); };
+    reminder.onsubmit = event => {
+      event.preventDefault();
+      const { player, enter, leave } = reminder.elements;
+      updateReminders({ player: player.value, enter: enter.checked, leave: leave.checked });
+    };
+    const form = $('form:has([data-stop-screamer])', page);
     const picker = form.elements.username;
     const status = $('[data-result]', page);
     const stop = $('[data-stop-screamer]', page);

@@ -2083,3 +2083,8 @@ html.autumn h2::after { content: ' 🍂'; font-size: .8em; }
 .owner-stat-grid small { color: var(--muted); }
 .owner-card [data-drop-form] { margin-top: 12px; }
 .owner-card [data-drop-results] > li { display: grid; gap: 4px; overflow-wrap: anywhere; }
+
+.owner-card [data-reminder] { margin-top: 12px; }
+.owner-card [data-reminder] label:has(input[type="checkbox"]) { display: flex; align-items: center; gap: 8px; }
+.owner-card [data-reminder] input[type="checkbox"] { width: auto; accent-color: var(--crystal); }
+.owner-card [data-reminder-list] li { flex-wrap: wrap; align-items: center; }

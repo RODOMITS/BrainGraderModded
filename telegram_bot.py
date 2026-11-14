@@ -202,7 +202,42 @@ def polling(token, app_url, database_path):
             time.sleep(5)
 
 
-def start_bot(database_path):
+def notify_presence(token, database_path, owner, ttl):
+    while True:
+        try:
+            with closing(sqlite3.connect(database_path, timeout=5)) as conn:
+                conn.row_factory = sqlite3.Row
+                rows = conn.execute("""SELECT r.*,u.name,p.username,COALESCE(p.seen>?,0) AS online
+                    FROM presence_reminders r JOIN users u ON u.id=r.user_id
+                    LEFT JOIN site_presence p ON p.user_id=r.user_id""", (time.time() - ttl,)).fetchall()
+                for row in rows:
+                    online = row['online']
+                    if online == row['was_online']:
+                        continue
+                    enabled = row['on_enter'] if online else row['on_leave']
+                    if enabled:
+                        name = '@' + row['username'] if row['username'] else row['name']
+                        status = 'сейчас онлайн' if online else 'больше не онлайн'
+                        try:
+                            call(token, 'sendMessage', {
+                                'chat_id': owner,
+                                'text': f'{name} (ID {row["user_id"][3:]}) {status} в Modded.',
+                            }, timeout=5)
+                        except TelegramError as error:
+                            log.warning('Presence reminder could not be delivered (%s).', error.code)
+                            if error.code == 429:
+                                time.sleep(max(5, min(error.retry_after, 60)))
+                                break
+                            continue
+                    with conn:
+                        conn.execute('UPDATE presence_reminders SET was_online=? WHERE user_id=? AND was_online=?',
+                                     (online, row['user_id'], row['was_online']))
+        except (TelegramError, sqlite3.Error) as error:
+            log.warning('Presence reminder failed (%s).', getattr(error, 'code', type(error).__name__))
+        time.sleep(5)
+
+
+def start_bot(database_path, owner, online_ttl):
     token = os.getenv('BOT_TOKEN', '').strip()
     if not token:
         log.warning('Telegram: BOT_TOKEN is missing; /start handler disabled.')
@@ -214,3 +249,5 @@ def start_bot(database_path):
         return
     threading.Thread(target=polling, args=(token, app_url, Path(database_path)),
                      name='telegram-polling', daemon=True).start()
+    threading.Thread(target=notify_presence, args=(token, database_path, owner, online_ttl),
+                     name='presence-reminders', daemon=True).start()
