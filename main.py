@@ -13,7 +13,7 @@ import secrets
 import sqlite3
 import time
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import parse_qsl
 from urllib.error import HTTPError
@@ -326,6 +326,8 @@ def init_db():
           balance REAL NOT NULL DEFAULT 10000 CHECK(balance>=0), testBalance REAL NOT NULL DEFAULT 100000,
           cases INTEGER NOT NULL DEFAULT 0, upgrades INTEGER NOT NULL DEFAULT 0);
         CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS channel_checks(
+          user_id TEXT PRIMARY KEY, subscribed INTEGER NOT NULL, checked REAL NOT NULL);
         CREATE TABLE IF NOT EXISTS site_presence(
           user_id TEXT PRIMARY KEY, username TEXT NOT NULL, seen REAL NOT NULL);
         CREATE TABLE IF NOT EXISTS screamers(
@@ -345,6 +347,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS inventory(id INTEGER PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id),
           item TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'owned', test INTEGER NOT NULL DEFAULT 0,
           source TEXT NOT NULL, created REAL NOT NULL);
+        CREATE INDEX IF NOT EXISTS inventory_created ON inventory(created);
         CREATE TABLE IF NOT EXISTS fake_withdrawals(
           id INTEGER PRIMARY KEY, inventory_id INTEGER NOT NULL REFERENCES inventory(id) ON DELETE CASCADE,
           roblox_username TEXT NOT NULL, status TEXT NOT NULL, created REAL NOT NULL
@@ -1658,12 +1661,72 @@ def welcome_status():
         subscribed = is_channel_subscriber(os.environ['BOT_TOKEN'].strip(), int(g.uid[3:]))
     except TelegramError:
         return jsonify(show=False)
+    c = db()
+    with c:
+        c.execute('INSERT OR REPLACE INTO channel_checks VALUES (?,?,?)',
+                  (g.uid, int(subscribed), time.time()))
     return jsonify(show=not subscribed)
 
 
 def require_owner():
     if g.uid != OWNER_UID:
         raise Problem('Доступ только владельцу', 'forbidden', 403)
+
+
+@app.get('/api/owner/stats')
+def owner_stats():
+    require_owner()
+    c = db()
+    now = time.time()
+    players = c.execute("""SELECT COUNT(*) AS players, COALESCE(SUM(cases),0) AS cases,
+        COALESCE(SUM(upgrades),0) AS upgrades FROM users WHERE id GLOB 'tg:*'""").fetchone()
+    checks, subs = c.execute('SELECT COUNT(*), COALESCE(SUM(subscribed),0) FROM channel_checks').fetchone()
+    online = c.execute("SELECT COUNT(*) FROM site_presence WHERE user_id GLOB 'tg:*' AND seen>?",
+                       (now - ONLINE_TTL,)).fetchone()[0]
+    active = c.execute("SELECT COUNT(*) FROM site_presence WHERE user_id GLOB 'tg:*' AND seen>?",
+                       (now - 86400,)).fetchone()[0]
+    return jsonify(**dict(players), checked=checks, subscribed=subs, online=online, active24h=active,
+                   percent=round(100 * subs / checks, 1) if checks else None)
+
+
+DROP_SOURCES = ('case', 'upgrade', 'mystery', 'dice', 'mines', 'streak', 'pass', 'giveaway')
+
+
+@app.get('/api/owner/drops')
+def owner_drops():
+    require_owner()
+    name = request.args.get('item', '').strip()
+    source = request.args.get('source', '')
+    if not 1 <= len(name) <= 100 or source not in ('', *DROP_SOURCES):
+        raise Problem('Укажи название предмета и способ получения')
+    try:
+        day = datetime.strptime(request.args.get('date', ''), '%Y-%m-%d').replace(
+            tzinfo=timezone(timedelta(hours=3)))
+        days = integer(request.args.get('days', '1'), 0, 7)
+        start = (day - timedelta(days=days)).timestamp()
+        end = (day + timedelta(days=days + 1)).timestamp()
+    except (ValueError, OverflowError):
+        raise Problem('Укажи дату поиска') from None
+    sources = (source,) if source else DROP_SOURCES
+    placeholders = ','.join('?' for _ in sources)
+    rows = db().execute(f"""SELECT i.user_id AS id,u.name,COALESCE(p.username,'') AS username,
+            i.item,i.source,i.created
+        FROM inventory i JOIN users u ON u.id=i.user_id
+        LEFT JOIN site_presence p ON p.user_id=i.user_id
+        WHERE i.test=0 AND i.created>=? AND i.created<?
+          AND i.source IN ({placeholders})
+        ORDER BY i.created DESC, i.id DESC""", (start, end, *sources))
+    matches = []
+    needle = name.casefold()
+    for row in rows:
+        item = json.loads(row['item'])
+        if needle in item['name'].casefold():
+            matches.append(dict(id=row['id'], name=row['name'], username=row['username'],
+                                item=item['name'], mutation=item.get('mutation'), source=row['source'],
+                                createdAt=iso(row['created'])))
+            if len(matches) == 51:
+                break
+    return jsonify(matches=matches[:50], more=len(matches) > 50)
 
 
 def site_mode():

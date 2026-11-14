@@ -920,6 +920,26 @@
     const page = h(`<section class="owner-panel">
       <h1>Овнерская админка</h1>
       <section class="owner-card">
+        <h2>Статистика</h2>
+        <div data-owner-stats role="status">Загрузка…</div>
+      </section>
+      <details class="owner-card">
+        <summary>Проверить дроп</summary>
+        <form data-drop-form>
+          <label>Примерная дата (МСК)<input type="date" name="date" required></label>
+          <label>Диапазон<select name="days"><option value="0">Только этот день</option><option value="1" selected>±1 день</option><option value="3">±3 дня</option><option value="7">±7 дней</option></select></label>
+          <label>Предмет<input name="item" maxlength="100" placeholder="Например, Meowl" required></label>
+          <label>Способ получения<select name="source">
+            <option value="">Любой</option><option value="case">Кейс</option><option value="upgrade">Апгрейдер</option>
+            <option value="mystery">Мистери</option><option value="dice">Дайсы</option><option value="mines">Мины</option>
+            <option value="streak">Серия заходов</option><option value="pass">Grader Pass</option><option value="giveaway">Розыгрыш</option>
+          </select></label>
+          <button type="submit" class="btn">Найти</button>
+          <p data-drop-status role="status"></p>
+          <ul data-drop-results></ul>
+        </form>
+      </details>
+      <section class="owner-card">
         <h2>Режим обновления</h2>
         <p data-maintenance-status role="status"></p>
         <button type="button" class="btn ghost" data-maintenance></button>
@@ -975,7 +995,56 @@
         maintenance.disabled = false;
       }
     };
-    const form = $('form', page);
+    const dropForm = $('[data-drop-form]', page);
+    dropForm.elements.date.value = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Moscow' }).format(new Date());
+    const loadStats = async () => {
+      const box = $('[data-owner-stats]', page);
+      try {
+        const s = await api('/api/owner/stats');
+        box.innerHTML = `<div class="owner-stat-grid">${[
+          ['Игроков Telegram', s.players], ['Онлайн', s.online], ['За 24 часа', s.active24h],
+          ['Подписаны на канал', s.subscribed], ['Проверено подписок', s.checked],
+          ['Доля среди проверенных', s.percent == null ? '—' : fmt(s.percent) + '%'],
+          ['Открыто кейсов', s.cases], ['Апгрейдов', s.upgrades],
+        ].map(([title, value]) => `<div><b>${esc(typeof value === 'number' ? fmt(value) : value)}</b><small>${title}</small></div>`).join('')}</div>
+        <small class="muted">Подписка считается по последней успешной проверке каждого игрока.</small>`;
+      } catch (error) {
+        box.textContent = error.message;
+      }
+    };
+    loadStats();
+    dropForm.onsubmit = async event => {
+      event.preventDefault();
+      const button = $('button', dropForm);
+      const status = $('[data-drop-status]', dropForm);
+      const results = $('[data-drop-results]', dropForm);
+      const sourceLabels = { case: 'Кейс', upgrade: 'Апгрейдер', mystery: 'Мистери', dice: 'Дайсы',
+        mines: 'Мины', streak: 'Серия заходов', pass: 'Grader Pass', giveaway: 'Розыгрыш' };
+      button.disabled = true;
+      results.replaceChildren();
+      status.textContent = 'Ищу…';
+      try {
+        const { matches, more } = await api('/api/owner/drops?' + new URLSearchParams(new FormData(dropForm)));
+        status.textContent = matches.length ? (more ? 'Первые 50 совпадений. Сузь поиск.' : `Найдено: ${matches.length}`)
+          : 'В сохранённых дропах совпадений нет.';
+        const date = new Intl.DateTimeFormat('ru-RU', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Moscow' });
+        for (const match of matches) {
+          const row = document.createElement('li');
+          const description = document.createElement('div');
+          description.textContent = [match.item, match.mutation, sourceLabels[match.source], date.format(new Date(match.createdAt))].filter(Boolean).join(' · ');
+          const player = document.createElement('div');
+          player.textContent = match.id.startsWith('tg:')
+            ? `${match.username ? '@' + match.username : match.name} · ID ${match.id.slice(3)}` : 'Гость';
+          row.append(description, player);
+          results.append(row);
+        }
+      } catch (error) {
+        status.textContent = error.message;
+      } finally {
+        button.disabled = false;
+      }
+    };
+    const form = $('form:not([data-drop-form])', page);
     const picker = form.elements.username;
     const status = $('[data-result]', page);
     const stop = $('[data-stop-screamer]', page);

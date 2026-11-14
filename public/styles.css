@@ -2077,3 +2077,9 @@ html.autumn h2::after { content: ' 🍂'; font-size: .8em; }
 }
 .tour-card h2 { margin: 6px 0; }
 .tour-card p { margin: 0 0 12px; }
+
+.owner-stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin-bottom: 10px; }
+.owner-stat-grid > div { display: grid; gap: 4px; padding: 10px; background: var(--cave); border-radius: 10px; }
+.owner-stat-grid small { color: var(--muted); }
+.owner-card [data-drop-form] { margin-top: 12px; }
+.owner-card [data-drop-results] > li { display: grid; gap: 4px; overflow-wrap: anywhere; }
