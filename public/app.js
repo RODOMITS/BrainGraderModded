@@ -1054,7 +1054,11 @@
           const player = document.createElement('div');
           player.textContent = match.id.startsWith('tg:')
             ? `${match.username ? '@' + match.username : match.name} · ID ${match.id.slice(3)}` : 'Гость';
-          row.append(description, player);
+          const streak = document.createElement('div');
+          streak.className = 'muted';
+          streak.textContent = match.streakDays == null ? 'Серия заходов: нет данных'
+            : `Серия на момент дропа: ${fmt(match.streakDays)} ${plural(match.streakDays, 'день', 'дня', 'дней')}`;
+          row.append(description, player, streak);
           results.append(row);
         }
       } catch (error) {

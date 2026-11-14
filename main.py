@@ -364,6 +364,8 @@ def init_db():
         CREATE TABLE IF NOT EXISTS cooldown(user_id TEXT NOT NULL, case_id INTEGER NOT NULL, until REAL NOT NULL,
           PRIMARY KEY(user_id,case_id));
         CREATE TABLE IF NOT EXISTS history(id INTEGER PRIMARY KEY, user_id TEXT, kind TEXT, payload TEXT, created REAL);
+        CREATE INDEX IF NOT EXISTS history_streak_checkin ON history(user_id, created DESC, id DESC)
+          WHERE kind='streak/checkin';
         CREATE TABLE IF NOT EXISTS live_drops(inventory_id INTEGER PRIMARY KEY REFERENCES inventory(id),
           item TEXT NOT NULL, source TEXT NOT NULL, price REAL NOT NULL, created REAL NOT NULL);
         CREATE INDEX IF NOT EXISTS live_drops_created ON live_drops(created DESC, inventory_id DESC);
@@ -1799,9 +1801,13 @@ def owner_drops():
             if abs((actual - target_minute + 720) % 1440 - 720) > 30:
                 continue
         if needle in item['name'].casefold():
+            streak = db().execute("""SELECT json_extract(payload,'$.count') FROM history
+                WHERE kind='streak/checkin' AND user_id=? AND created<=?
+                ORDER BY created DESC,id DESC LIMIT 1""", (row['id'], row['created'])).fetchone()
             matches.append(dict(id=row['id'], name=row['name'], username=row['username'],
                                 item=item['name'], mutation=item.get('mutation'), source=row['source'],
-                                createdAt=iso(row['created']), caseName=row['case_name']))
+                                createdAt=iso(row['created']), caseName=row['case_name'],
+                                streakDays=streak[0] if streak else None))
             if len(matches) == 51:
                 break
     return jsonify(matches=matches[:50], more=len(matches) > 50)
