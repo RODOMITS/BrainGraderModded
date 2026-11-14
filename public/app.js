@@ -37,7 +37,7 @@
     const src = (big ? itemImgBig : itemImg)(item.image);
     const key = item.mutation;
     const img = `<img ${big ? '' : 'loading="lazy"'} src="${src}" alt="">`;
-    if (!key || !Object.hasOwn(MUTATIONS, key)) return img;
+    if (!prefs.customContent || !key || !Object.hasOwn(MUTATIONS, key)) return img;
     return `<span class="mutation-picture mutation-${key}" title="${mutationName(key)}">${img}<i aria-label="${mutationName(key)}" style="background-image:url('${mutationIcon(key)}')"></i></span>`;
   }
 
@@ -378,6 +378,11 @@
   function showClosed(mode) {
     const c = CLOSED[mode] || CLOSED.maintenance;
     if ($('#closed')) return;
+    $('#screamerOverlay')?.close();
+    $('#buildUpdate')?.close();
+    $('#moddedWelcomeTitle')?.closest('dialog')?.close();
+    closeSheet();
+    closeMenu();
     document.body.append(h(`
       <div class="closed" id="closed">
         <img src="/img/logo.svg?v=3" alt="Brainrot Grader">
@@ -915,6 +920,11 @@
     const page = h(`<section class="owner-panel">
       <h1>Овнерская админка</h1>
       <section class="owner-card">
+        <h2>Режим обновления</h2>
+        <p data-maintenance-status role="status"></p>
+        <button type="button" class="btn ghost" data-maintenance></button>
+      </section>
+      <section class="owner-card">
         <h2>Сейчас на сайте <span data-online role="status">…</span></h2>
         <ul data-players></ul>
       </section>
@@ -941,6 +951,30 @@
       </section>
     </section>`);
     view.replaceChildren(page);
+    const maintenance = $('[data-maintenance]', page);
+    const maintenanceStatus = $('[data-maintenance-status]', page);
+    const drawMaintenance = () => {
+      const closed = state.me.siteMode === 'maintenance';
+      maintenance.textContent = closed ? 'Открыть сайт' : 'Закрыть сайт на обновление';
+      maintenanceStatus.textContent = closed ? 'Сайт закрыт для игроков' : 'Сайт открыт для игроков';
+    };
+    drawMaintenance();
+    maintenance.onclick = async () => {
+      maintenance.disabled = true;
+      try {
+        const { mode } = await api('/api/owner/maintenance', {
+          method: 'POST', body: { enabled: state.me.siteMode !== 'maintenance' },
+        });
+        state.me.siteMode = mode;
+        $('.mode-strip')?.remove();
+        adminModeStrip();
+        drawMaintenance();
+      } catch (error) {
+        maintenanceStatus.textContent = error.message;
+      } finally {
+        maintenance.disabled = false;
+      }
+    };
     const form = $('form', page);
     const picker = form.elements.username;
     const status = $('[data-result]', page);

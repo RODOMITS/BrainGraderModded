@@ -82,7 +82,7 @@ MUTATIONS = {'gold': 1.25, 'diamond': 1.4, 'rainbow': 3}
 
 
 def can_mutate(item):
-    return (not item.get('coins') and not item.get('mutation')
+    return (custom_content_enabled() and not item.get('coins') and not item.get('mutation')
             and not any(item.get(key, '').lower() in ('gear', 'gears', 'base', 'bases', 'coins')
                         for key in ('kind', 'type', 'category') if isinstance(item.get(key), str))
             and not re.search(r'\b(?:base|gear|slap)\b', item['name'], re.I)
@@ -473,7 +473,7 @@ def me():
     u = dict(user())
     return dict(id=u['id'], firstName=u['name'], username=getattr(g,'username',''),
                 photoUrl=getattr(g,'photo_url',None), balance=u['balance'], testBalance=u['testBalance'],
-                isAdmin=True, isOwner=g.uid == OWNER_UID, isTester=True, isPartner=False, siteMode='open',
+                isAdmin=True, isOwner=g.uid == OWNER_UID, isTester=True, isPartner=False, siteMode=site_mode(),
                 stats=dict(cases=u['cases'], upgrades=u['upgrades'], withdrawn=0))
 
 
@@ -877,8 +877,9 @@ def mines_multiplier(count, opened):
 
 
 def mines_reward(value):
-    pool=[i for i in catalog()['items'] if not i.get('coins') and i['price']<=value]
-    item=max(pool,key=lambda i:(i['price'],-i['id'])) if pool else None
+    pool = (item for base in catalog()['items'] if not base.get('coins')
+            for item in mutation_variants(base) if item['price'] <= value)
+    item = max(pool, key=lambda i: (i['price'], -i['id']), default=None)
     return dict(item=item,coins=round(value-(item['price'] if item else 0),2),total=value)
 
 
@@ -1663,6 +1664,31 @@ def welcome_status():
 def require_owner():
     if g.uid != OWNER_UID:
         raise Problem('Доступ только владельцу', 'forbidden', 403)
+
+
+def site_mode():
+    return 'maintenance' if db().execute(
+        "SELECT 1 FROM settings WHERE key='site-maintenance' AND value='1'"
+    ).fetchone() else 'open'
+
+
+@app.before_request
+def enforce_maintenance():
+    if request.path.startswith('/api/') and g.uid != OWNER_UID and site_mode() == 'maintenance':
+        return jsonify(error='site_closed', mode='maintenance', message='Сайт закрыт на обновление'), 503
+
+
+@app.post('/api/owner/maintenance')
+def owner_maintenance():
+    require_owner()
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict) or type(body.get('enabled')) is not bool:
+        raise Problem('Укажи состояние режима обновления')
+    c = db()
+    with c:
+        c.execute("INSERT OR REPLACE INTO settings VALUES ('site-maintenance', ?)",
+                  ('1' if body['enabled'] else '0',))
+    return jsonify(mode=site_mode())
 
 
 @app.post('/api/presence')
