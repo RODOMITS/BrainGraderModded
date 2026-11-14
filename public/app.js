@@ -919,6 +919,12 @@
     }
     const page = h(`<section class="owner-panel">
       <h1>Овнерская админка</h1>
+      <details class="owner-card" data-screamer-history>
+        <summary>История скримеров</summary>
+        <p data-history-status role="status"></p>
+        <ul></ul>
+        <button type="button" class="btn ghost small">Обновить</button>
+      </details>
       <details class="owner-card">
         <summary>Напоминания об онлайне</summary>
         <form data-reminder>
@@ -989,6 +995,34 @@
       </section>
     </section>`);
     view.replaceChildren(page);
+    const screamerHistory = $('[data-screamer-history]', page);
+    async function loadScreamerHistory() {
+      const status = $('[data-history-status]', screamerHistory);
+      const button = $('button', screamerHistory);
+      if (button.disabled) return;
+      button.disabled = true;
+      try {
+        const { entries } = await api('/api/owner/screamer/history');
+        const date = new Intl.DateTimeFormat('ru-RU', {
+          dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Moscow',
+        });
+        const endings = { stopped: 'Выключен', expired: 'Истёк', replaced: 'Заменён' };
+        $('ul', screamerHistory).replaceChildren(...entries.map(entry => {
+          const row = document.createElement('li');
+          row.textContent = [date.format(entry.sent * 1000), '@' + entry.username,
+            'ID ' + entry.target.slice(3), entry.delivered ? 'Передан игроку' : 'Не передан',
+            endings[entry.ended] || 'Активен'].join(' · ');
+          return row;
+        }));
+        status.textContent = entries.length ? 'Последние 50 отправок · МСК' : 'История пока пуста';
+      } catch (error) {
+        status.textContent = error.message;
+      } finally {
+        button.disabled = false;
+      }
+    }
+    screamerHistory.ontoggle = () => { if (screamerHistory.open) loadScreamerHistory(); };
+    $('button', screamerHistory).onclick = loadScreamerHistory;
     const maintenance = $('[data-maintenance]', page);
     const maintenanceStatus = $('[data-maintenance-status]', page);
     const drawMaintenance = () => {
@@ -1167,6 +1201,7 @@
       try {
         const { stopped } = await api('/api/owner/screamer/stop', { method: 'POST' });
         status.textContent = stopped ? 'Скример выключен.' : 'Активных скримеров нет.';
+        if (screamerHistory.open) loadScreamerHistory();
       } catch (error) {
         status.textContent = error.message;
       } finally {
@@ -1249,6 +1284,7 @@
       try {
         await api('/api/owner/screamer', { method: 'POST', body: new FormData(form) });
         status.textContent = 'Видео отправлено.';
+        if (screamerHistory.open) loadScreamerHistory();
       } catch (error) {
         status.textContent = error.message;
       } finally {

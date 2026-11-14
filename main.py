@@ -338,6 +338,10 @@ def init_db():
         CREATE TABLE IF NOT EXISTS screamers(
           target TEXT PRIMARY KEY, id TEXT NOT NULL, mime TEXT NOT NULL,
           video BLOB NOT NULL, expires REAL NOT NULL, delivered INTEGER NOT NULL DEFAULT 0);
+        CREATE TABLE IF NOT EXISTS screamer_history(
+          id TEXT PRIMARY KEY, target TEXT NOT NULL, username TEXT NOT NULL,
+          sent REAL NOT NULL, delivered REAL, ended TEXT);
+        CREATE INDEX IF NOT EXISTS screamer_history_sent ON screamer_history(sent DESC);
         CREATE TABLE IF NOT EXISTS user_live(user_id TEXT PRIMARY KEY, value TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS streak_progress(user_id TEXT PRIMARY KEY,last_day INTEGER,count INTEGER NOT NULL,best INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS streak_rewards(id TEXT PRIMARY KEY,user_id TEXT NOT NULL,day INTEGER NOT NULL,reward TEXT NOT NULL,expires REAL NOT NULL,claimed INTEGER NOT NULL DEFAULT 0);
@@ -1901,6 +1905,8 @@ def site_presence():
                   (g.uid, g.username, now))
         delivery = c.execute('''UPDATE screamers SET delivered=1
             WHERE target=? AND expires>? AND delivered=0 RETURNING id,captions''', (g.uid, now)).fetchone()
+        if delivery:
+            c.execute('UPDATE screamer_history SET delivered=? WHERE id=?', (now, delivery['id']))
         if isinstance(active_id, str):
             active = bool(c.execute('''UPDATE screamers SET expires=?
                 WHERE target=? AND id=? AND delivered=1 AND expires>?''',
@@ -1917,7 +1923,7 @@ def owner_online():
     with c:
         cutoff = now - ONLINE_TTL
         c.execute("DELETE FROM site_presence WHERE seen<=? AND user_id GLOB 'guest:*'", (cutoff,))
-        c.execute('DELETE FROM screamers WHERE expires<=?', (now,))
+        expire_screamers(c, now)
         rows = c.execute('''SELECT u.id,p.username,u.name FROM site_presence p JOIN users u ON u.id=p.user_id
             WHERE p.user_id GLOB 'tg:*' AND p.seen>? ORDER BY p.username COLLATE NOCASE''', (cutoff,)).fetchall()
         total = c.execute('SELECT COUNT(*) FROM site_presence WHERE seen>?', (cutoff,)).fetchone()[0]
@@ -1965,11 +1971,17 @@ def owner_screamer():
                             (now - ONLINE_TTL, username)).fetchall()
         if len(players) != 1:
             raise Problem('Игрок с этим юзернеймом сейчас недоступен', 'player_offline', 409)
-        c.execute('DELETE FROM screamers WHERE expires<=?', (now,))
+        expire_screamers(c, now)
+        target = players[0]['user_id']
+        video_id = secrets.token_hex(16)
+        c.execute("""UPDATE screamer_history SET ended='replaced'
+            WHERE id IN (SELECT id FROM screamers WHERE target=?)""", (target,))
         c.execute('''INSERT OR REPLACE INTO screamers (target,id,mime,video,expires,captions)
                      VALUES (?,?,?,?,?,?)''',
-                  (players[0]['user_id'], secrets.token_hex(16), mime, video, now + 120,
+                  (target, video_id, mime, video, now + 120,
                    json.dumps([caption for caption in captions if caption])))
+        c.execute('INSERT INTO screamer_history(id,target,username,sent) VALUES (?,?,?,?)',
+                  (video_id, target, username, now))
     return jsonify(ok=True)
 
 
@@ -1990,8 +2002,28 @@ def owner_stop_screamer():
     require_owner()
     c = db()
     with c:
+        expire_screamers(c, time.time())
+        c.execute("""UPDATE screamer_history SET ended='stopped'
+            WHERE id IN (SELECT id FROM screamers)""")
         stopped = c.execute('DELETE FROM screamers').rowcount
     return jsonify(stopped=stopped)
+
+
+def expire_screamers(c, now):
+    c.execute("""UPDATE screamer_history SET ended='expired'
+        WHERE id IN (SELECT id FROM screamers WHERE expires<=?)""", (now,))
+    c.execute('DELETE FROM screamers WHERE expires<=?', (now,))
+
+
+@app.get('/api/owner/screamer/history')
+def owner_screamer_history():
+    require_owner()
+    c = db()
+    with c:
+        expire_screamers(c, time.time())
+        rows = c.execute('''SELECT target,username,sent,delivered,ended
+            FROM screamer_history ORDER BY sent DESC LIMIT 50''').fetchall()
+    return jsonify(entries=[dict(row) for row in rows])
 
 
 @app.route('/api/<path:path>',methods=['GET','POST'])
