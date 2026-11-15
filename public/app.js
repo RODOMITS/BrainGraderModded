@@ -951,6 +951,7 @@
             <option value="mystery">Мистери</option><option value="dice">Дайсы</option><option value="mines">Мины</option>
             <option value="streak">Серия заходов</option><option value="pass">Grader Pass</option><option value="giveaway">Розыгрыш</option>
           </select></label>
+          <label data-drop-stake hidden>Ставка в брейнротах<select name="stake" disabled><option value="">Любая</option></select></label>
           <label>Кейс<select name="case"><option value="">Любой</option></select></label>
           <label>Кейсов за крутку<select name="count"><option value="">Любое число</option><option value="1">×1</option><option value="3">×3</option><option value="5">×5</option></select></label>
           <fieldset data-companions><legend>Другие дропы из этой крутки</legend></fieldset>
@@ -1060,9 +1061,10 @@
       const status = $('[data-drop-status]', dropForm);
       status.textContent = 'Загружаю списки…';
       try {
-        const { items, companionItems, cases, players } = await api('/api/owner/drop-options');
+        const { items, companionItems, cases, players, stakes } = await api('/api/owner/drop-options');
         dropItemSelect.replaceChildren(new Option(items.length ? 'Выбери предмет' : 'Сохранённых предметов нет', ''),
           ...items.map(name => new Option(name, name)));
+        dropForm.elements.stake.append(...stakes.map(name => new Option(name, name)));
         dropForm.elements.case.append(...cases.map(name => new Option(name, name)));
         dropForm.elements.player.append(...players.map(player => new Option(
           `${player.username ? '@' + player.username : player.name} · ID ${player.id.slice(3)}`, player.id.slice(3))));
@@ -1086,6 +1088,15 @@
         dropOptionsLoading = false;
       }
     };
+    const updateStakeFilter = () => {
+      const available = ['upgrade', 'mystery', 'mines'].includes(dropForm.elements.source.value);
+      const stake = dropForm.elements.stake;
+      stake.closest('label').hidden = !available;
+      stake.disabled = !available;
+      if (!available) stake.value = '';
+    };
+    dropForm.elements.source.addEventListener('change', updateStakeFilter);
+    updateStakeFilter();
     dropRetry.onclick = loadDropOptions;
     dropForm.closest('details').addEventListener('toggle', event => {
       if (event.currentTarget.open) loadDropOptions();
@@ -1139,6 +1150,11 @@
           streak.textContent = match.streakDays == null ? 'Серия заходов: нет данных'
             : `Серия на момент дропа: ${fmt(match.streakDays)} ${plural(match.streakDays, 'день', 'дня', 'дней')}`;
           row.append(description, player, streak);
+          if (match.stakes?.length) {
+            const stake = document.createElement('div');
+            stake.textContent = 'Ставка: ' + match.stakes.join(', ');
+            row.append(stake);
+          }
           if (match.opened) {
             const batch = document.createElement('div');
             batch.textContent = `Крутка ×${match.opened}${match.companionDrops.length ? ' · Также выпали: ' + match.companionDrops.join(', ') : ''}`;

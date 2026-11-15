@@ -355,6 +355,10 @@ def init_db():
           item TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'owned', test INTEGER NOT NULL DEFAULT 0,
           source TEXT NOT NULL, created REAL NOT NULL);
         CREATE INDEX IF NOT EXISTS inventory_created ON inventory(created);
+        CREATE TABLE IF NOT EXISTS drop_stakes(
+          inventory_id INTEGER PRIMARY KEY REFERENCES inventory(id) ON DELETE CASCADE,
+          names TEXT NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS fake_withdrawals(
           id INTEGER PRIMARY KEY, inventory_id INTEGER NOT NULL REFERENCES inventory(id) ON DELETE CASCADE,
           roblox_username TEXT NOT NULL, status TEXT NOT NULL, created REAL NOT NULL
@@ -398,6 +402,22 @@ def init_db():
         rollout = c.execute("INSERT OR IGNORE INTO settings VALUES ('welcome_share_rollout', '1')")
         if rollout.rowcount:
             c.execute("INSERT INTO welcome_share_rollout_users(user_id) SELECT id FROM users WHERE id GLOB 'tg:*'")
+        if c.execute("INSERT OR IGNORE INTO settings VALUES ('drop_stakes_backfill', '1')").rowcount:
+            c.execute("""INSERT OR IGNORE INTO drop_stakes
+                SELECT i.id, json_array(json_extract(m.stake,'$.name'))
+                FROM mines_games m JOIN inventory i
+                  ON i.id=json_extract(m.payout,'$.inventoryId') AND i.user_id=m.user_id
+                WHERE i.source='mines' AND m.status='cashed' AND m.created<=i.created""")
+            c.execute("""INSERT OR IGNORE INTO drop_stakes
+                SELECT prize.id, json_group_array(json_extract(stake.item,'$.name'))
+                FROM operations o
+                JOIN inventory prize ON prize.id=CASE o.path WHEN 'upgrade'
+                  THEN json_extract(o.response,'$.inventoryIds[0]') ELSE json_extract(o.response,'$.inventoryId') END
+                  AND prize.source=o.path AND prize.user_id=o.user_id
+                JOIN json_each(COALESCE(json_extract(o.body,'$.ids'),json_array(json_extract(o.body,'$.id')))) ids
+                JOIN inventory stake ON stake.id=ids.value AND stake.user_id=o.user_id AND stake.created<=prize.created
+                WHERE o.path IN ('upgrade','mystery')
+                GROUP BY prize.id""")
         if 'captions' not in {row['name'] for row in c.execute('PRAGMA table_info(screamers)')}:
             c.execute("ALTER TABLE screamers ADD COLUMN captions TEXT NOT NULL DEFAULT '[]'")
         c.commit()
@@ -609,7 +629,7 @@ def cancel_fake_withdrawal(withdrawal_id):
     return dict(ok=True)
 
 
-def add_item(item, source, test=False, uid=None):
+def add_item(item, source, test=False, uid=None, *, stakes=()):
     if item.get('customSession') and (not visible_item(item) or uid not in (None,g.uid)):
         raise Problem('Кастомный предмет доступен только в текущей сессии')
     details = source if isinstance(source, dict) else dict(kind=source)
@@ -620,6 +640,9 @@ def add_item(item, source, test=False, uid=None):
     if not test and not item.get('customSession') and kind in ('case','upgrade','mystery','dice','mines'):
         db().execute('INSERT INTO live_drops VALUES (?,?,?,?,?)',
                      (iid,json.dumps(item),json.dumps(details),item['price'],created))
+    if stakes:
+        db().execute('INSERT INTO drop_stakes VALUES (?,?)',
+                     (iid, json.dumps([item['name'] for item in stakes])))
     return iid
 
 
@@ -924,7 +947,7 @@ def mines_cashout(row):
     mult=mines_multiplier(row['mine_count'],len(json.loads(row['revealed'])))
     payout=mines_reward(round(row['stake_value']*mult,2))
     if payout['item']:
-        payout['inventoryId']=add_item(payout['item'],'mines')
+        payout['inventoryId']=add_item(payout['item'], 'mines', stakes=[json.loads(row['stake'])])
     db().execute('UPDATE users SET balance=balance+? WHERE id=?',(payout['coins'],g.uid))
     db().execute("UPDATE mines_games SET status='cashed',payout=? WHERE id=?",(json.dumps(payout),row['id']))
     return db().execute('SELECT * FROM mines_games WHERE id=?',(row['id'],)).fetchone()
@@ -1321,7 +1344,7 @@ def dispatch(path, body):
         consume(rows,'upgraded')
         c.execute('UPDATE users SET upgrades=upgrades+1 WHERE id=?',(g.uid,))
         record_pass_play('upgrade', sum(row['item']['price'] for row in rows), wins=int(won))
-        return dict(won=won,chance=target['chance'],roll=roll,target=target,inventoryIds=[add_item(target,'upgrade')] if won else [])
+        return dict(won=won,chance=target['chance'],roll=roll,target=target,inventoryIds=[add_item(target, 'upgrade', stakes=[row['item'] for row in rows])] if won else [])
     if path in ('mystery/info','mystery') and post:
         row=selected(body)[0]; value=row['item']['price']; pool=[x for x in catalog()['items'] if not x.get('coins') and value/3<=x['price']<=value*3]
         if path.endswith('info'): return dict(ok=bool(pool),min=value/3,max=value*3,items=pool,reason='Нет подходящих предметов')
@@ -1330,7 +1353,7 @@ def dispatch(path, body):
         it=rig['item'] if rig else RNG.choice(pool)
         consume([row],'mystery')
         record_pass_play('mystery', value)
-        return dict(item=it,inventoryId=add_item(it,'mystery'),shuffle=[x['image'] for x in pool]+[it['image']],balance=user()['balance'])
+        return dict(item=it,inventoryId=add_item(it, 'mystery', stakes=[row['item']]),shuffle=[x['image'] for x in pool]+[it['image']],balance=user()['balance'])
     if path=='dice/my' and not post:
         return [json.loads(r[0]) for r in c.execute("SELECT payload FROM history WHERE user_id=? AND kind='dice' ORDER BY id DESC LIMIT 20",(g.uid,))]
     if path=='dice' and post:
@@ -1825,7 +1848,9 @@ def owner_drop_options():
     players = [dict(r) for r in c.execute("""SELECT u.id,u.name,COALESCE(p.username,'') AS username
         FROM users u LEFT JOIN site_presence p ON p.user_id=u.id
         WHERE u.id GLOB 'tg:*' ORDER BY u.name COLLATE NOCASE""")]
-    return jsonify(items=items, companionItems=companion_items, cases=cases, players=players)
+    stakes = [r[0] for r in c.execute('''SELECT DISTINCT n.value FROM drop_stakes s
+        JOIN json_each(s.names) n WHERE n.type='text' ORDER BY n.value COLLATE NOCASE''')]
+    return jsonify(items=items, companionItems=companion_items, cases=cases, players=players, stakes=stakes)
 
 
 def drop_batch(c, row):
@@ -1848,6 +1873,9 @@ def owner_drops():
     case_name = request.args.get('case', '').strip().casefold()
     player = request.args.get('player', '').strip().casefold().removeprefix('@')
     mutation = request.args.get('mutation', '')
+    stake_filter = request.args.get('stake', '').strip().casefold()
+    if len(stake_filter) > 100 or (stake_filter and source not in ('upgrade', 'mystery', 'mines')):
+        raise Problem('Выбери ставку для мин, мистери или апгрейдера')
     clock = request.args.get('time', '')
     streak_filter = request.args.get('streak', '').strip()
     streak_days = integer(streak_filter, 0) if streak_filter else None
@@ -1872,10 +1900,11 @@ def owner_drops():
     sources = (source,) if source else DROP_SOURCES
     placeholders = ','.join('?' for _ in sources)
     rows = db().execute(f"""SELECT i.user_id AS id,u.name,COALESCE(p.username,'') AS username,
-            i.id AS inventory_id,i.item,i.source,i.created,json_extract(d.source,'$.caseName') AS case_name
+            i.id AS inventory_id,i.item,i.source,i.created,json_extract(d.source,'$.caseName') AS case_name,s.names AS stakes
         FROM inventory i JOIN users u ON u.id=i.user_id
         LEFT JOIN site_presence p ON p.user_id=i.user_id
         LEFT JOIN live_drops d ON d.inventory_id=i.id
+        LEFT JOIN drop_stakes s ON s.inventory_id=i.id
         WHERE i.test=0 AND i.created>=? AND i.created<?
           AND i.source IN ({placeholders})
         ORDER BY i.created DESC, i.id DESC""", (start, end, *sources))
@@ -1894,6 +1923,9 @@ def owner_drops():
             if abs((actual - target_minute + 720) % 1440 - 720) > 30:
                 continue
         if needle == item['name'].casefold():
+            stakes = json.loads(row['stakes']) if row['stakes'] else []
+            if stake_filter and not any(stake.casefold() == stake_filter for stake in stakes):
+                continue
             opened, siblings = drop_batch(db(), row) if row['source'] == 'case' else (None, [])
             remaining = [sibling.casefold() for sibling in siblings]
             if count and opened != int(count):
@@ -1915,7 +1947,7 @@ def owner_drops():
                                 item=item['name'], mutation=item.get('mutation'), source=row['source'],
                                 createdAt=iso(row['created']), caseName=row['case_name'],
                                 streakDays=streak[0] if streak else None,
-                                opened=opened, companionDrops=siblings))
+                                opened=opened, companionDrops=siblings, stakes=stakes))
             if len(matches) == 51:
                 break
     return jsonify(matches=matches[:50], more=len(matches) > 50)
