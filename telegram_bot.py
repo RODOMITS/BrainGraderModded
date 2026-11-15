@@ -25,9 +25,10 @@ CHANNEL_URL = 'https://t.me/' + CHANNEL_USERNAME[1:]
 
 
 class TelegramError(Exception):
-    def __init__(self, code, retry_after=5):
+    def __init__(self, code, retry_after=5, description=None):
         self.code = code
         self.retry_after = retry_after
+        self.description = description
 
 
 def call(token, method, payload, photo=None, *, timeout=40):
@@ -65,7 +66,8 @@ def call(token, method, payload, photo=None, *, timeout=40):
         raise TelegramError('network') from None
     if not result.get('ok'):
         raise TelegramError(result.get('error_code', 'unknown'),
-                            result.get('parameters', {}).get('retry_after', 5))
+                            result.get('parameters', {}).get('retry_after', 5),
+                            result.get('description'))
     return result['result']
 
 
@@ -273,7 +275,8 @@ def refresh_subscriptions(token, database_path):
             if error.code == 429:
                 # Retry this account after Telegram's cooldown.
                 after = ''
-            log.warning('Channel membership check failed (%s).', error.code)
+            log.warning('Channel membership check failed (%s): %.200s',
+                        error.code, error.description or 'no Telegram description')
             save_scan_issue(database_path, str(error.code), delay)
         except sqlite3.Error:
             delay = 60
