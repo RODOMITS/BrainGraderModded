@@ -129,6 +129,7 @@ def fetch_original_catalog(token):
             case_items.append(dict(itemId=iid, weight=1))
         cases.append(dict(id=cid, name=summary['name'], price=summary['price'], image=summary['image'],
                           category=summary.get('category', 'standard'),
+                          isNew=bool(summary.get('isNew') or detail.get('isNew')),
                           freeKind='ref' if detail.get('freeKind', summary.get('freeKind')) == 'ref'
                           else 'daily' if summary.get('freeKind') else None, items=case_items))
     catalog = dict(items=list(items.values()), cases=cases)
@@ -426,6 +427,8 @@ def init_db():
         if 'replacement' not in withdrawal_columns:
             c.execute('ALTER TABLE fake_withdrawals ADD COLUMN replacement TEXT')
         c.execute("CREATE INDEX IF NOT EXISTS history_ref_transfers ON history(user_id,id DESC) WHERE kind='referrals/transfer'")
+        if 'photo_url' not in {row['name'] for row in c.execute('PRAGMA table_info(site_presence)')}:
+            c.execute('ALTER TABLE site_presence ADD COLUMN photo_url TEXT')
         if 'captions' not in {row['name'] for row in c.execute('PRAGMA table_info(screamers)')}:
             c.execute("ALTER TABLE screamers ADD COLUMN captions TEXT NOT NULL DEFAULT '[]'")
         c.commit()
@@ -763,9 +766,12 @@ def giveaway_view(row):
     amount=progress[0] if progress else 0
     winner=None
     if row['winner_id']:
-        winner_user=c.execute('SELECT name FROM users WHERE id=?',(row['winner_id'],)).fetchone()
+        winner_user = c.execute('''SELECT u.name,p.username,p.photo_url FROM users u
+            LEFT JOIN site_presence p ON p.user_id=u.id WHERE u.id=?''', (row['winner_id'],)).fetchone()
         winner_name = winner_user[0] if winner_user else 'Игрок'
-        winner=dict(name=winner_name,num=row['winner_num'],me=row['winner_id']==g.uid)
+        winner = dict(name=winner_name, num=row['winner_num'], me=row['winner_id']==g.uid,
+                      username=winner_user['username'] if winner_user else None,
+                      photo=winner_user['photo_url'] if winner_user else None)
     override = giveaway_participant_overrides().get(str(gid), {})
     item = json.loads(row['item'])
     participants = None
@@ -1564,6 +1570,11 @@ def dispatch(path, body):
     if path=='promo' and post:
         reward = redeem_promo(body.get('code'))
         c.execute('UPDATE users SET balance=balance+? WHERE id=?',(reward,g.uid))
+        if reward > 0:
+            c.execute('''INSERT INTO giveaway_progress(giveaway_id,user_id,amount)
+                SELECT id,?,? FROM giveaways WHERE finished=0 AND ends>?
+                ON CONFLICT(giveaway_id,user_id) DO UPDATE SET amount=amount+excluded.amount''',
+                      (g.uid, reward, time.time()))
         return dict(type='coins',kind='coins',reward=reward,balance=user()['balance'])
     if path=='admin/state' and not post:
         promos = c.execute('SELECT p.*, o.case_id AS caseId FROM promos p LEFT JOIN promo_options o USING(code)')
@@ -1735,9 +1746,9 @@ def validate_catalog(cat):
         seen.add(cid); cs['price']=number(cs.get('price'))
         if not isinstance(cs.get('name'),str) or not 1<=len(cs['name'])<=100: raise Problem('Нужно название кейса')
         validate_image(cs.get('image',''))
-        if cs.get('category','standard') not in ['free','start','standard','platina','allin']: raise Problem('Неизвестная категория')
+        if cs.get('category','standard') not in ['free','start','pixel','standard','platina','allin']: raise Problem('Неизвестная категория')
         if cs.get('freeKind') not in (None, 'daily', 'ref'): raise Problem('freeKind: null, daily или ref')
-        if not isinstance(cs.get('items'),list) or len(cs['items'])>500 or (not cs['items'] and cs.get('freeKind') != 'ref'): raise Problem('Нужны предметы кейса')
+        if not isinstance(cs.get('items'),list) or len(cs['items'])>500: raise Problem('Нужны предметы кейса')
         item_ids=set()
         for entry in cs['items']:
             iid=integer(entry.get('itemId'))
@@ -2051,9 +2062,9 @@ def site_presence():
     active_id = body.get('activeVideoId') if isinstance(body, dict) else None
     active = False
     with c:
-        c.execute('''INSERT INTO site_presence VALUES (?,?,?)
-            ON CONFLICT(user_id) DO UPDATE SET username=excluded.username, seen=excluded.seen''',
-                  (g.uid, g.username, now))
+        c.execute('''INSERT INTO site_presence(user_id,username,seen,photo_url) VALUES (?,?,?,?)
+            ON CONFLICT(user_id) DO UPDATE SET username=excluded.username, seen=excluded.seen,
+                photo_url=excluded.photo_url''', (g.uid, g.username, now, g.photo_url))
         delivery = c.execute('''UPDATE screamers SET delivered=1
             WHERE target=? AND expires>? AND delivered=0 RETURNING id,captions''', (g.uid, now)).fetchone()
         if delivery:

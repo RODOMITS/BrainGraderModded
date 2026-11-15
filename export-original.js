@@ -38,9 +38,8 @@
       if(!(Number(supplied)>0)) missingWeights++;
       return {itemId,weight:Number(supplied)>0?Number(supplied):1};
     });
-    if(!pool.length && cs.freeKind!=='ref') continue;
-    cases.push({id:Number(cs.id),name:cs.name,price:Number(cs.price)||0,
-      category:['free','start','standard','platina','allin'].includes(cs.category)?cs.category:'standard',
+    cases.push({isNew:Boolean(cs.isNew || entry.isNew),id:Number(cs.id),name:cs.name,price:Number(cs.price)||0,
+      category:['free','start','pixel','standard','platina','allin'].includes(cs.category)?cs.category:'standard',
       freeKind:cs.freeKind==='ref'?'ref':cs.freeKind?'daily':null,image:image(cs.image || '/img/chest.svg'),items:pool});
   }
   try {const shop=await get('/api/shop');for(const it of shop.items || [])if(!it.coins)addItem(it);}

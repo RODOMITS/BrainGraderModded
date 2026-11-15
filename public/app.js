@@ -635,6 +635,13 @@
           <img class="logo" src="/img/logo.svg?v=3" alt="Brainrot Grader">
           <button class="x" id="menuX" aria-label="Закрыть меню">×</button>
         </div>
+        ${state.me ? `<div class="menu-me">
+          <a href="#/profile" id="menuMe" ${cur === 'profile' ? 'aria-current="page"' : ''}>
+            <span class="avatar" id="menuAva"></span>
+            <span class="mm-txt"><b>${esc(state.me.firstName || state.me.username || 'Игрок')}</b><span class="mm-bal">${price(state.me.balance)}</span></span>
+          </a>
+          <button class="plus" type="button" id="menuTopup" aria-label="Пополнить баланс">+</button>
+        </div>` : ''}
         <nav class="menu-list">
           ${MENU.map((g) => {
             const items = g.items.filter((it) => !it.show || it.show());
@@ -658,6 +665,15 @@
 
     ov.addEventListener('click', closeMenu);
     $('#menuX', el).onclick = closeMenu;
+    fillAvatar($('#menuAva', el));
+    $('#menuMe', el)?.addEventListener('click', event => {
+      if (cur === 'profile') event.preventDefault();
+      closeMenu();
+    });
+    $('#menuTopup', el)?.addEventListener('click', () => {
+      closeMenu();
+      openDeposit();
+    });
     $$('.menu-item', el).forEach((a) => a.addEventListener('click', (e) => {
       const it = MENU.flatMap((g) => g.items).find((x) => x.id === a.dataset.id);
       if (it?.action) { e.preventDefault(); closeMenu(); return it.action(); }
@@ -1469,7 +1485,7 @@
   }
 
   // Названия разделов кейсов на главной (новый раздел = новая строка здесь + category у кейса)
-  const CASE_SECTIONS = { free: 'Бесплатные кейсы', start: 'Лёгкий Старт', standard: 'Стандартные кейсы', platina: 'Платиновые кейсы', allin: 'ALL-IN кейсы' };
+  const CASE_SECTIONS = { free: 'Бесплатные кейсы', start: 'Лёгкий Старт', pixel: 'Пиксельный рай', standard: 'Стандартные кейсы', platina: 'Платиновые кейсы', allin: 'ALL-IN кейсы' };
 
   async function renderHome() {
     const t = state.render;
@@ -1516,9 +1532,11 @@
     // Разделы кейсов: порядок — как идут кейсы, название раздела — из CASE_SECTIONS
     const card = (c) => `
         <a class="case-card" href="#/case/${c.id}">
-          <img src="${esc(c.image || '/img/chest.svg')}" alt="">
+          ${c.isNew ? '<i class="case-new">NEW</i>' : ''}<img src="${esc(c.image || '/img/chest.svg')}" alt="">
           <div class="name">${esc(c.name)}</div>
-          <div class="row">${c.freeKind
+          <div class="row">${!c.itemsCount
+            ? '<span class="muted">новинка</span><span class="soon-chip">Скоро</span>'
+            : c.freeKind
             ? `<span class="muted">${c.freeKind === 'ref' ? 'по ссылке партнёра' : 'раз в сутки'}</span><span class="free-chip">Бесплатно</span>`
             : `<span class="muted">${c.itemsCount} ${plural(c.itemsCount, 'брейнрот', 'брейнрота', 'брейнротов')}</span>${price(c.price)}`}</div>
         </a>`;
@@ -1528,7 +1546,9 @@
       if (!groups.has(k)) groups.set(k, []);
       groups.get(k).push(c);
     }
-    const sections = [...groups].filter(([key]) => key !== 'named');
+    const firstSections = ['free', 'start', 'pixel'];
+    const sections = [...firstSections.filter(key => groups.has(key)).map(key => [key, groups.get(key)]),
+      ...[...groups].filter(([key]) => key !== 'named' && !firstSections.includes(key))];
     if (groups.has('named')) {
       const platinum = sections.findIndex(([key]) => key === 'platina');
       sections.splice(platinum < 0 ? sections.length : platinum, 0, ['named', groups.get('named')]);
@@ -2158,12 +2178,17 @@
       return fail(e);
     }
     if (stale(t)) return;
-    view.innerHTML = `
+    const header = `
       <a class="back" href="#/">‹ Все кейсы</a>
       <div class="case-head">
         <div class="ch-art" id="caseArt"><img src="${esc(cs.image || '/img/chest.svg')}" alt=""><i class="ch-flash"></i></div>
-        <div><h1>${esc(cs.name)}</h1><div class="muted">${cs.freeKind === 'ref' ? 'Бесплатно, один раз — по ссылке партнёра' : cs.freeKind ? 'Бесплатно, раз в сутки' : `${cs.items.length} ${plural(cs.items.length, 'брейнрот', 'брейнрота', 'брейнротов')} внутри`}</div></div>
-      </div>
+        <div><h1>${esc(cs.name)}</h1><div class="muted">${!cs.items.length ? 'Скоро откроется' : cs.freeKind === 'ref' ? 'Бесплатно, один раз — по ссылке партнёра' : cs.freeKind ? 'Бесплатно, раз в сутки' : `${cs.items.length} ${plural(cs.items.length, 'брейнрот', 'брейнрота', 'брейнротов')} внутри`}</div></div>
+      </div>`;
+    if (!cs.items.length) {
+      view.innerHTML = header + '<div class="empty">Брейнроты появятся скоро</div>';
+      return;
+    }
+    view.innerHTML = `${header}
       <div id="strips"></div>
       <div class="case-ctrl">
         ${cs.freeKind ? '<span></span>' : `<div class="count-seg" id="countSeg" role="group" aria-label="Сколько кейсов открыть">${[1, 3, 5].map((n) => `<button data-n="${n}" class="${prefs.count === n ? 'on' : ''}">×${n}</button>`).join('')}</div>`}
@@ -2178,7 +2203,7 @@
     const drawStrips = () => {
       const cnt = openCount(cs);
       $('#strips').innerHTML = Array.from({ length: cnt }, (_, k) => `<div class="roulette ${caseAnimV2() ? 'v2' : ''} ${cnt > 1 ? 'multi' : ''} n${cnt}"><div class="marker"></div><div class="strip" data-k="${k}"></div></div>`).join('');
-      if (cs.items.length) $$('#strips .strip').forEach((st) => idleStrip(st, cs.items));
+      $$('#strips .strip').forEach((st) => idleStrip(st, cs.items));
     };
     drawStrips();
     bindSpeedSound(view);
@@ -2244,11 +2269,6 @@
       }
       btn.classList.remove('skip');
       btn.disabled = state.busy;
-      if (!cs.items.length) {
-        btn.disabled = true;
-        btn.textContent = 'Скоро';
-        return;
-      }
       if (test) {
         $('#freeBox')?.classList.add('hidden');
         btn.disabled = state.busy || !enough;
@@ -3549,7 +3569,7 @@
               ${need > 0
                 ? `<div class="gw-need-t"><span>Для участия пополни баланс от <b>${price(need)}</b></span><span class="muted">${fmt(g.deposited)} / ${fmt(need)}</span></div>
                    <div class="gw-bar"><i style="width:${pct}%"></i></div>
-                   <p class="muted">Считаются пополнения звёздами и брейнротами с начала розыгрыша</p>`
+                   <p class="muted">Считаются пополнения и BG по промокодам с начала розыгрыша</p>`
                 : '<div class="gw-need-t"><span>Участие <b>бесплатное</b></span></div>'}
             </div>
             ${action}
@@ -3706,8 +3726,17 @@
         <div class="gd-w-info">
           <div class="gd-w-t">🏆 Победитель — №${fmt(w.num)}</div>
           <div class="gd-w-name">${esc(w.name)}</div>
+          ${/^[A-Za-z0-9_]{1,32}$/.test(w.username || '') ? `<a class="gd-w-user" href="https://t.me/${w.username}" target="_blank" rel="noopener">@${w.username}</a>` : ''}
           <div class="muted">Приз «${nmi(sh.item)}»${sh.demo ? '' : ' уже в его инвентаре'}</div>
         </div>`;
+      if (typeof w.photo === 'string' && w.photo.startsWith('https://')) {
+        const avatar = $('.gd-w-ava', win);
+        const image = new Image();
+        image.alt = '';
+        image.referrerPolicy = 'no-referrer';
+        image.onload = () => avatar.replaceChildren(image);
+        image.src = w.photo;
+      }
       win.hidden = false;
       if (w.me) haptic('success');
     };
@@ -5287,34 +5316,50 @@
     form.onsubmit = event => {
       event.preventDefault();
       if (sum < minTotal) return;
-      dep.request = { status: 'queued', nickname: form.elements.nickname.value, lines, total, readyAt: Date.now() + 5000 };
+      dep.request = { status: 'queued', nickname: form.elements.nickname.value, lines, total, readyAt: Date.now() + depositStages.queued.delay };
       dep.sel.clear();
       depositQueue(box);
     };
   }
 
+  const depositStages = {
+    queued: { title: 'Ты в очереди', hint: '№1 · ты следующий', next: 'joining', delay: 2500 },
+    joining: { title: 'Заходим на сервер', hint: 'Подключаемся к Steal a Brainrot', next: 'waiting', delay: 2500 },
+    waiting: { title: 'Твоя очередь!', hint: 'Подтверди, что ты в игре', next: 'in_trade', action: 'Я в игре' },
+    in_trade: { title: 'Проверяем трейд', hint: 'Проверяем предметы из заявки', next: 'ready', delay: 1700 },
+    ready: { title: 'Жми READY', hint: 'Подтверди состав трейда', next: 'accept_wait', action: 'READY' },
+    accept_wait: { title: 'Подожди', hint: 'Проверяем трейд перед подтверждением', next: 'accepting', delay: 1700 },
+    accepting: { title: 'Жми ACCEPT', hint: 'Подтверди трейд', next: 'mut_review', action: 'ACCEPT' },
+    mut_review: { title: 'Проверяем мутации', hint: 'Сверяем варианты брейнротов', next: 'completed', delay: 2300 },
+    completed: { title: 'Предпросмотр завершён' },
+    cancelled: { title: 'Заявка отменена' },
+  };
+
   function depositQueue(box) {
     const request = dep.request;
-    if (request.status === 'queued' && Date.now() >= request.readyAt) request.status = 'active';
-    const queued = request.status === 'queued';
-    const active = request.status === 'active';
-    const closed = !queued && !active;
-    const title = queued ? 'Ты в очереди' : active ? 'Твоя очередь!' : request.status === 'cancelled' ? 'Заявка отменена' : 'Предпросмотр завершён';
+    let stage = depositStages[request.status];
+    while (stage.delay && Date.now() >= request.readyAt) {
+      request.status = stage.next;
+      stage = depositStages[request.status];
+      request.readyAt += stage.delay || 0;
+    }
+    const closed = !stage.next;
     const panel = h(`<div>
-      <div class="center"><div class="queue-num">${title}</div>${queued ? '<p class="hint">№1 · ты следующий</p>' : ''}</div>
+      <div class="center"><div class="queue-num">${stage.title}</div>${stage.hint ? `<p class="hint">${stage.hint}</p>` : ''}</div>
       ${depositItemLines(request.lines)}
       <div class="total"><span>Ник: ${esc(request.nickname)}</span><b>${price(request.total)}</b></div>
-      ${active ? '<button class="btn" type="button" data-in-game>Я в игре</button>' : ''}
+      ${stage.action ? `<button class="btn" type="button" data-in-game>${stage.action}</button>` : ''}
       <button class="btn ghost" type="button" data-queue-action>${closed ? 'Новая заявка' : 'Отменить заявку'}</button>
     </div>`);
     box.replaceChildren(panel);
-    if (queued) setTimeout(() => {
+    if (stage.delay) setTimeout(() => {
       if (panel.isConnected && dep.request === request) depositQueue(box);
     }, Math.max(0, request.readyAt - Date.now()));
-    if (active) $('[data-in-game]', panel).onclick = () => {
-      request.status = 'completed';
+    $('[data-in-game]', panel)?.addEventListener('click', () => {
+      request.status = stage.next;
+      request.readyAt = Date.now() + (depositStages[request.status].delay || 0);
       depositQueue(box);
-    };
+    });
     $('[data-queue-action]', panel).onclick = () => {
       if (closed) {
         dep.request = null;
