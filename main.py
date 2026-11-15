@@ -1696,6 +1696,35 @@ def welcome_subscription_share():
     return jsonify(percent=min(100, max(0, round(100 * members / players, 1))))
 
 
+@app.post('/api/welcome/share')
+def welcome_share():
+    from telegram_bot import DEFAULT_APP_URL, TelegramError, call
+    from urllib.parse import urljoin
+
+    token = os.getenv('BOT_TOKEN', '').strip()
+    if not token or not g.uid.startswith('tg:'):
+        raise Problem('Поделиться можно из Telegram', status=403)
+    photo = urljoin(os.getenv('MINI_APP_URL', '').strip() or DEFAULT_APP_URL, '/promo-mutations.jpg')
+    try:
+        prepared = call(token, 'savePreparedInlineMessage', {
+            'user_id': int(g.uid[3:]),
+            'result': {
+                'type': 'photo', 'id': 'modded-mutations',
+                'photo_url': photo, 'thumbnail_url': photo,
+                'caption': (
+                    'Brainrot Grader, где уже есть МУТАЦИИ и БЕСПЛАТНЫЙ БАЛИК🌈\n\n'
+                    'Никаких пополнений, новые функци и кастомы в том же самом Brainrot Graderе😎\n\n'
+                    'Заходи » @brainrotmoddedgraderbot'
+                ),
+            },
+            'allow_user_chats': True,
+            'allow_group_chats': True,
+        }, timeout=5)
+    except TelegramError:
+        raise Problem('Не удалось подготовить сообщение', status=503) from None
+    return jsonify(id=prepared['id'])
+
+
 def require_owner():
     if g.uid != OWNER_UID:
         raise Problem('Доступ только владельцу', 'forbidden', 403)

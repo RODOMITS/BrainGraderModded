@@ -5213,8 +5213,23 @@
         tickWelcome();
       };
       startCountdown(10);
+      const finish = () => {
+        clearInterval(timer);state.welcomeOpen=false;state.locked=previousLocked;dialog.close();dialog.remove();
+        try{if((location.hash||'#/')!=='#/')TG?.BackButton?.show();}catch{}
+        resolve();
+      };
       button.onclick=async ()=>{
         if(button.disabled||performance.now()<deadline)return;
+        if (reminded && TG?.initData && TG.shareMessage && TG.isVersionAtLeast?.('8.0')) {
+          button.disabled = true;
+          try {
+            const { id } = await api('/api/welcome/share', { method: 'POST' });
+            if (dialog.open) TG.shareMessage(id, finish);
+          } catch {
+            finish();
+          }
+          return;
+        }
         if (!reminded) {
           button.disabled = true;
           const subscription = TG?.initData
@@ -5235,9 +5250,7 @@
             return;
           }
         }
-        clearInterval(timer);state.welcomeOpen=false;state.locked=previousLocked;dialog.close();dialog.remove();
-        try{if((location.hash||'#/')!=='#/')TG?.BackButton?.show();}catch{}
-        resolve();
+        finish();
       };
       $('#mwChannel',dialog).onclick=event=>{
         event.preventDefault();
