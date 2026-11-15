@@ -1721,10 +1721,11 @@ def welcome_share():
             'result': {
                 'type': 'photo', 'id': 'modded-mutations',
                 'photo_url': photo, 'thumbnail_url': photo,
+                'parse_mode': 'HTML',
                 'caption': (
-                    'Brainrot Grader, где уже есть МУТАЦИИ и БЕСПЛАТНЫЙ БАЛИК🌈\n\n'
+                    '<b>Brainrot Grader, где уже есть МУТАЦИИ и БЕСПЛАТНЫЙ БАЛИК🌈</b>\n\n'
                     'Никаких пополнений, новые функци и кастомы в том же самом Brainrot Graderе😎\n\n'
-                    'Заходи » @brainrotmoddedgraderbot'
+                    '<i>Заходи » @brainrotmoddedgraderbot</i>'
                 ),
             },
             'allow_user_chats': True,
