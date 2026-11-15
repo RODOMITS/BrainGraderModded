@@ -10,6 +10,7 @@
   };
   const list = await get('/api/cases');
   if (!Array.isArray(list)) throw new Error('Неизвестный формат списка кейсов');
+  const { mutations = {} } = await get('/api/config');
   const items = new Map(), cases = [];
   let missingWeights = 0;
   const image = value => {
@@ -22,6 +23,11 @@
     if(!Number.isInteger(Number(i.id)) || !(Number(i.price)>0))
       throw new Error('Предмет без ID или положительной цены: '+JSON.stringify(i));
     const out={id:Number(i.id),name:i.name,price:Number(i.price),rarity:i.rarity || 'common',image:image(i.image)};
+    const variant = mutations?.[out.name];
+    if (typeof variant?.base === 'string' && typeof variant?.mut === 'string') {
+      out.baseName = variant.base;
+      out.mutation = variant.mut;
+    }
     items.set(out.id,out); return out.id;
   };
   for (const entry of list) {
