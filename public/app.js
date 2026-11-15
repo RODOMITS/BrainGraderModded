@@ -5196,11 +5196,9 @@
           <h2 id="returningShareTitle">Можешь поделится этим ботом с другом?⁉️</h2>
           <p>Это очень большая поддержка для нашего проекта, больше рекламы не будет💓</p>
           <button class="btn" id="returningShare">Поделиться</button>
-          <button class="btn secondary" id="returningSkip">Пропустить</button>
         </div>
       </dialog>`);
       const share = $('#returningShare', dialog);
-      const skip = $('#returningSkip', dialog);
       let finished = false;
       const finish = async () => {
         if (finished) return;
@@ -5214,7 +5212,6 @@
         event.preventDefault();
         finish();
       });
-      skip.onclick = finish;
       share.onclick = () => {
         share.disabled = true;
         shareModded(finish);
