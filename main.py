@@ -396,6 +396,10 @@ def init_db():
         c.executescript(grader_pass.SCHEMA)
         c.executescript(named_cases.SCHEMA)
         c.execute('BEGIN IMMEDIATE')
+        c.execute('CREATE TABLE IF NOT EXISTS welcome_share_rollout_users(user_id TEXT PRIMARY KEY, seen INTEGER NOT NULL DEFAULT 0)')
+        rollout = c.execute("INSERT OR IGNORE INTO settings VALUES ('welcome_share_rollout', '1')")
+        if rollout.rowcount:
+            c.execute("INSERT INTO welcome_share_rollout_users(user_id) SELECT id FROM users WHERE id GLOB 'tg:*'")
         if 'captions' not in {row['name'] for row in c.execute('PRAGMA table_info(screamers)')}:
             c.execute("ALTER TABLE screamers ADD COLUMN captions TEXT NOT NULL DEFAULT '[]'")
         c.commit()
@@ -1668,6 +1672,10 @@ def welcome_status():
     if not g.uid.startswith('tg:'):
         return jsonify(show=True)
 
+    rollout_user = db().execute('SELECT seen FROM welcome_share_rollout_users WHERE user_id=?', (g.uid,)).fetchone()
+    if rollout_user is not None:
+        return jsonify(show=False, returningShare=not rollout_user['seen'])
+
     from telegram_bot import TelegramError, is_channel_subscriber
 
     try:
@@ -1694,6 +1702,14 @@ def welcome_subscription_share():
     except TelegramError:
         return jsonify(percent=None)
     return jsonify(percent=min(100, max(0, round(100 * members / players, 1))))
+
+
+@app.post('/api/welcome/seen')
+def welcome_seen():
+    c = db()
+    with c:
+        c.execute('UPDATE welcome_share_rollout_users SET seen=1 WHERE user_id=?', (g.uid,))
+    return jsonify(ok=True)
 
 
 @app.post('/api/welcome/share')

@@ -5076,12 +5076,12 @@
       view.innerHTML = '<div class="empty">Открой Brainrot Grader через бота в Telegram</div>';
       return;
     }
-    let showWelcome;
+    let welcome;
     try {
-      [state.me, state.cfg, showWelcome] = await Promise.all([
+      [state.me, state.cfg, welcome] = await Promise.all([
         api('/api/me'),
         api('/api/config'),
-        TG?.initData ? api('/api/welcome').then(result => result.show).catch(() => false) : true
+        TG?.initData ? api('/api/welcome').catch(() => ({})) : { show: true }
       ]);
       if (promptForUpdate(state.cfg.build)) return;
     } catch (e) {
@@ -5105,7 +5105,8 @@
     route();
     // Keep the admin document ready so opening it does not navigate away or reload its catalogue.
     if(prefs.showAdmin)setTimeout(prepareAdmin,1500);
-    if (showWelcome) await showModdedWelcome();
+    if (welcome.returningShare) await showReturningShare();
+    else if (welcome.show) await showModdedWelcome();
     streakCheckin();
   }
 
@@ -5177,6 +5178,52 @@
     draw();
   }
 
+  async function shareModded(finish) {
+    if (TG?.initData && TG.shareMessage && TG.isVersionAtLeast?.('8.0')) {
+      try {
+        const { id } = await api('/api/welcome/share', { method: 'POST' });
+        TG.shareMessage(id, finish);
+        return;
+      } catch {}
+    }
+    finish();
+  }
+
+  function showReturningShare() {
+    return new Promise(resolve => {
+      const dialog = h(`<dialog class="modded-welcome" aria-labelledby="returningShareTitle">
+        <div class="mw-content">
+          <h2 id="returningShareTitle">Можешь поделится этим ботом с другом?⁉️</h2>
+          <p>Это очень большая поддержка для нашего проекта, больше рекламы не будет💓</p>
+          <button class="btn" id="returningShare">Поделиться</button>
+          <button class="btn secondary" id="returningSkip">Пропустить</button>
+        </div>
+      </dialog>`);
+      const share = $('#returningShare', dialog);
+      const skip = $('#returningSkip', dialog);
+      let finished = false;
+      const finish = async () => {
+        if (finished) return;
+        finished = true;
+        dialog.close();
+        dialog.remove();
+        await api('/api/welcome/seen', { method: 'POST' }).catch(() => {});
+        resolve();
+      };
+      dialog.addEventListener('cancel', event => {
+        event.preventDefault();
+        finish();
+      });
+      skip.onclick = finish;
+      share.onclick = () => {
+        share.disabled = true;
+        shareModded(finish);
+      };
+      document.body.append(dialog);
+      dialog.showModal();
+    });
+  }
+
   function showModdedWelcome(){
     return new Promise(resolve=>{
       const dialog=h(`<dialog class="modded-welcome" aria-labelledby="moddedWelcomeTitle"><div class="mw-content"><h2 id="moddedWelcomeTitle">Привет, спасибо что зашёл в мой Моддед!</h2><p>Я старался чтобы сделать этот проект, поддержи меня подписавшись на <a href="https://t.me/brainrotmoddedgrader" id="mwChannel">@brainrotmoddedgrader</a>🙏</p><button class="btn" id="mwConfirm" disabled>Ясно, спасибо (10)</button></div></dialog>`);
@@ -5220,14 +5267,9 @@
       };
       button.onclick=async ()=>{
         if(button.disabled||performance.now()<deadline)return;
-        if (reminded && TG?.initData && TG.shareMessage && TG.isVersionAtLeast?.('8.0')) {
+        if (reminded) {
           button.disabled = true;
-          try {
-            const { id } = await api('/api/welcome/share', { method: 'POST' });
-            if (dialog.open) TG.shareMessage(id, finish);
-          } catch {
-            finish();
-          }
+          shareModded(finish);
           return;
         }
         if (!reminded) {
