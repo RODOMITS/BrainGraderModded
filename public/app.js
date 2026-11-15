@@ -1096,10 +1096,9 @@
       const box = $('[data-owner-stats]', page);
       try {
         const s = await api('/api/owner/stats');
-        const subscriptionRows = [
-          ['Подписаны', s.subscribed],
-          ['Не подписаны', s.checked - s.subscribed],
-        ].map(([label, count]) => [label, `${fmt(count)} · ${s.players ? fmt(Math.round(count / s.players * 1000) / 10) + '%' : '—'}`]);
+        const subscriptionRows = s.channelMembers == null || !s.players ? [] : [
+          ['Доля по числу участников канала', fmt(Math.min(100, Math.round(s.channelMembers / s.players * 1000) / 10)) + '%'],
+        ];
         box.innerHTML = `<div class="owner-stat-grid">${[
           ['Игроков Telegram', s.players], ['Онлайн', s.online], ['За 24 часа', s.active24h],
           ['Средний онлайн за 24 ч', s.averageOnline == null ? '—' : fmt(Math.round(s.averageOnline * 10) / 10)],
@@ -1107,9 +1106,7 @@
           [`Участников ${s.channel}`, s.channelMembers ?? '—'],
           ...subscriptionRows,
           ['Открыто кейсов', s.cases], ['Апгрейдов', s.upgrades],
-        ].map(([title, value]) => `<div><b>${esc(typeof value === 'number' ? fmt(value) : value)}</b><small>${esc(title)}</small></div>`).join('')}</div>
-        ${s.checked < s.players ? `<small class="muted">Статус неизвестен у ${fmt(s.players - s.checked)} игроков${s.scanIssue?.until > Date.now() / 1000 ? (s.scanIssue.code === '429' ? ' · Пауза по лимиту Telegram' : ' · Ошибка Telegram: ' + esc(s.scanIssue.code)) : ''}</small>` : ''}`;
-        if (s.checked < s.players) setTimeout(loadStats, 30000);
+        ].map(([title, value]) => `<div><b>${esc(typeof value === 'number' ? fmt(value) : value)}</b><small>${esc(title)}</small></div>`).join('')}</div>`;
       } catch (error) {
         box.textContent = error.message;
       }

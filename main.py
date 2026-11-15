@@ -326,8 +326,6 @@ def init_db():
           balance REAL NOT NULL DEFAULT 10000 CHECK(balance>=0), testBalance REAL NOT NULL DEFAULT 100000,
           cases INTEGER NOT NULL DEFAULT 0, upgrades INTEGER NOT NULL DEFAULT 0);
         CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS channel_checks(
-          user_id TEXT PRIMARY KEY, subscribed INTEGER NOT NULL, checked REAL NOT NULL);
         CREATE TABLE IF NOT EXISTS site_presence(
           user_id TEXT PRIMARY KEY, username TEXT NOT NULL, seen REAL NOT NULL);
         CREATE TABLE IF NOT EXISTS online_samples(
@@ -1682,10 +1680,6 @@ def welcome_status():
         subscribed = is_channel_subscriber(os.environ['BOT_TOKEN'].strip(), int(g.uid[3:]))
     except TelegramError:
         return jsonify(show=False)
-    c = db()
-    with c:
-        c.execute('INSERT OR REPLACE INTO channel_checks VALUES (?,?,?)',
-                  (g.uid, int(subscribed), time.time()))
     return jsonify(show=not subscribed)
 
 
@@ -1794,7 +1788,6 @@ def owner_stats():
     now = time.time()
     players = c.execute("""SELECT COUNT(*) AS players, COALESCE(SUM(cases),0) AS cases,
         COALESCE(SUM(upgrades),0) AS upgrades FROM users WHERE id GLOB 'tg:*'""").fetchone()
-    checks, subs = c.execute('SELECT COUNT(*), COALESCE(SUM(subscribed),0) FROM channel_checks').fetchone()
     online = c.execute("SELECT COUNT(*) FROM site_presence WHERE user_id GLOB 'tg:*' AND seen>?",
                        (now - ONLINE_TTL,)).fetchone()[0]
     active = c.execute("SELECT COUNT(*) FROM site_presence WHERE user_id GLOB 'tg:*' AND seen>?",
@@ -1810,13 +1803,9 @@ def owner_stats():
             members = call(token, 'getChatMemberCount', {'chat_id': CHANNEL_USERNAME}, timeout=3)
         except TelegramError:
             pass
-    scan_row = c.execute("SELECT value FROM settings WHERE key='channel-scan-issue'").fetchone()
-    scan_issue = json.loads(scan_row[0]) if scan_row else None
-    return jsonify(**dict(players), checked=checks, subscribed=subs, online=online, active24h=active,
-                   scanIssue=scan_issue,
+    return jsonify(**dict(players), online=online, active24h=active,
                    channelMembers=members, channel=CHANNEL_USERNAME,
-                   averageOnline=average, daytimeOnline=daytime_average,
-                   percent=round(100 * subs / players['players'], 2) if players['players'] else None)
+                   averageOnline=average, daytimeOnline=daytime_average)
 
 
 DROP_SOURCES = ('case', 'upgrade', 'mystery', 'dice', 'mines', 'streak', 'pass', 'giveaway')
