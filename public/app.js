@@ -5045,7 +5045,6 @@
   }
 
   async function boot() {
-    await window.sandboxReady;
     applyStreamer();
     if (TG) {
       try {
@@ -5069,14 +5068,12 @@
         });
       } catch {}
     }
-    if (false) { // Browser guests are supported by this sandbox backend.
-      view.innerHTML = '<div class="empty">Открой Brainrot Grader через бота в Telegram</div>';
-      return;
-    }
     let welcome;
     try {
+      // Guests need the cookie from /api/me before making parallel requests.
+      const identity = TG?.initData ? api('/api/me') : await api('/api/me');
       [state.me, state.cfg, welcome] = await Promise.all([
-        api('/api/me'),
+        identity,
         api('/api/config'),
         TG?.initData ? api('/api/welcome').catch(() => ({})) : { show: true }
       ]);
