@@ -1519,7 +1519,7 @@
           <img src="${esc(c.image || '/img/chest.svg')}" alt="">
           <div class="name">${esc(c.name)}</div>
           <div class="row">${c.freeKind
-            ? '<span class="muted">раз в сутки</span><span class="free-chip">Бесплатно</span>'
+            ? `<span class="muted">${c.freeKind === 'ref' ? 'по ссылке партнёра' : 'раз в сутки'}</span><span class="free-chip">Бесплатно</span>`
             : `<span class="muted">${c.itemsCount} ${plural(c.itemsCount, 'брейнрот', 'брейнрота', 'брейнротов')}</span>${price(c.price)}`}</div>
         </a>`;
     const groups = new Map();
@@ -2162,7 +2162,7 @@
       <a class="back" href="#/">‹ Все кейсы</a>
       <div class="case-head">
         <div class="ch-art" id="caseArt"><img src="${esc(cs.image || '/img/chest.svg')}" alt=""><i class="ch-flash"></i></div>
-        <div><h1>${esc(cs.name)}</h1><div class="muted">${cs.freeKind ? 'Бесплатно, раз в сутки' : `${cs.items.length} ${plural(cs.items.length, 'брейнрот', 'брейнрота', 'брейнротов')} внутри`}</div></div>
+        <div><h1>${esc(cs.name)}</h1><div class="muted">${cs.freeKind === 'ref' ? 'Бесплатно, один раз — по ссылке партнёра' : cs.freeKind ? 'Бесплатно, раз в сутки' : `${cs.items.length} ${plural(cs.items.length, 'брейнрот', 'брейнрота', 'брейнротов')} внутри`}</div></div>
       </div>
       <div id="strips"></div>
       <div class="case-ctrl">
@@ -2178,7 +2178,7 @@
     const drawStrips = () => {
       const cnt = openCount(cs);
       $('#strips').innerHTML = Array.from({ length: cnt }, (_, k) => `<div class="roulette ${caseAnimV2() ? 'v2' : ''} ${cnt > 1 ? 'multi' : ''} n${cnt}"><div class="marker"></div><div class="strip" data-k="${k}"></div></div>`).join('');
-      $$('#strips .strip').forEach((st) => idleStrip(st, cs.items));
+      if (cs.items.length) $$('#strips .strip').forEach((st) => idleStrip(st, cs.items));
     };
     drawStrips();
     bindSpeedSound(view);
@@ -2205,6 +2205,11 @@
       if (box.dataset.sig === sig) return;
       box.dataset.sig = sig;
       if (free.broken) return void (box.innerHTML = '<p>Кейс скоро заработает — загляни чуть позже</p>');
+      if (free.kind === 'ref') {
+        box.innerHTML = free.used ? '' : '<p>Реферальный кейс доступен при входе по ссылке партнёра.</p>';
+        if (free.used) box.classList.add('hidden');
+        return;
+      }
       if (free.needDeposit) {
         box.innerHTML = `<p>Бесплатные кейсы — для тех, кто пополнил баланс от <b>${fmt(free.needDeposit.min)} BG</b>. Ты пополнил: ${fmt(free.needDeposit.have)} BG</p><button class="btn ghost" id="freeDep">Пополнить</button>`;
         $('#freeDep', box).onclick = () => openDeposit();
@@ -2239,6 +2244,11 @@
       }
       btn.classList.remove('skip');
       btn.disabled = state.busy;
+      if (!cs.items.length) {
+        btn.disabled = true;
+        btn.textContent = 'Скоро';
+        return;
+      }
       if (test) {
         $('#freeBox')?.classList.add('hidden');
         btn.disabled = state.busy || !enough;
@@ -2253,6 +2263,12 @@
         if (left > 0) { btn.disabled = true; btn.innerHTML = `Следующий через <span class="mono">${hms(left)}</span>`; return; }
         if (free.nextAt) { free.nextAt = null; loadFree(); }
         if (free.broken) { btn.disabled = true; btn.textContent = 'Скоро'; return; }
+        if (free.kind === 'ref') {
+          btn.disabled = state.busy || !free.ok;
+          btn.textContent = free.used ? 'Уже открыт' : free.ok ? 'Открыть бесплатно' : 'Только по ссылке партнёра';
+          btn.onclick = free.ok ? event => openFlow(cs, update, null, false, pressedButtonSide(event)) : null;
+          return;
+        }
         if (free.needDeposit) { btn.disabled = false; btn.textContent = 'Пополнить баланс'; btn.onclick = () => openDeposit(); return; }
         if (!free.ok) {
           btn.textContent = free.kind === 'channel' ? 'Я подписался — проверить' : 'Я добавил — проверить';
@@ -4459,6 +4475,7 @@
         <p class="hint">Бонус другу <b>+${fmt(r.bonusPercent)}%</b> · Твой процент <b>${fmt(r.percent)}%</b></p>
         ${r.link ? `<div class="reflink"><input id="refLink" readonly value="${esc(r.link)}"><button class="btn small" id="copyRef">Копировать</button></div>
         <button class="btn ghost small" id="shareRef" style="margin-top:8px">Отправить ссылку друзьям</button>` : ''}
+        ${r.caseLink ? '<button class="btn ghost small" id="copyRefCase">Скопировать ссылку на реферальный кейс</button>' : ''}
         ${!r.isPartner && r.partnerContact ? '<button class="btn ghost small" id="howPartner" style="margin-top:8px">Как стать партнёром?</button>' : ''}
         ${r.isPartner ? '<a class="btn small" href="#/partner" style="margin-top:8px">Кабинет партнёра</a>' : ''}
       </section>
@@ -4503,6 +4520,8 @@
         button.disabled = false;
       }
     };
+    const caseLink = $('#copyRefCase');
+    if (caseLink) caseLink.onclick = () => copy(r.caseLink, 'Ссылка на реферальный кейс скопирована');
     $('#refHelp').onclick = () => refHelp(r);
     if ($('#howPartner')) $('#howPartner').onclick = () => partnerHow(r.partnerContact);
     $('#copyCode').onclick = () => copy(r.code, 'Код скопирован');

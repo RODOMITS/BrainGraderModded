@@ -90,6 +90,8 @@ def apply_case_rarity_weights(catalog):
     items = {item['id']: item for item in catalog['items']}
     for case_data in catalog['cases']:
         drops = case_data['items']
+        if not drops:
+            continue
         weights = []
         for drop in drops:
             item = items[drop['itemId']]
@@ -127,7 +129,8 @@ def fetch_original_catalog(token):
             case_items.append(dict(itemId=iid, weight=1))
         cases.append(dict(id=cid, name=summary['name'], price=summary['price'], image=summary['image'],
                           category=summary.get('category', 'standard'),
-                          freeKind='daily' if summary.get('freeKind') else None, items=case_items))
+                          freeKind='ref' if detail.get('freeKind', summary.get('freeKind')) == 'ref'
+                          else 'daily' if summary.get('freeKind') else None, items=case_items))
     catalog = dict(items=list(items.values()), cases=cases)
     validate_catalog(catalog)
     return apply_case_rarity_weights(catalog)
@@ -373,6 +376,10 @@ def init_db():
           item TEXT NOT NULL, source TEXT NOT NULL, price REAL NOT NULL, created REAL NOT NULL);
         CREATE INDEX IF NOT EXISTS live_drops_created ON live_drops(created DESC, inventory_id DESC);
         CREATE TABLE IF NOT EXISTS promos(code TEXT PRIMARY KEY, reward REAL NOT NULL, uses INTEGER NOT NULL);
+        CREATE TABLE IF NOT EXISTS referral_case_access(user_id TEXT PRIMARY KEY REFERENCES users(id));
+        CREATE TABLE IF NOT EXISTS referral_case_claims(
+          user_id TEXT NOT NULL REFERENCES users(id), case_id INTEGER NOT NULL, PRIMARY KEY(user_id,case_id)
+        );
         CREATE TABLE IF NOT EXISTS claims(user_id TEXT, code TEXT, PRIMARY KEY(user_id,code));
         CREATE TABLE IF NOT EXISTS promo_options(
           code TEXT PRIMARY KEY, case_id INTEGER, partner_id TEXT, max_uses INTEGER
@@ -485,7 +492,7 @@ def catalog():
     cases = [cs for cs in data['cases'] if cs['id'] < named_cases.CASE_BASE and cs['id'] != RODOMITS_CASE_ID]
     if not custom_content_enabled():
         cases = [dict(cs, items=[drop for drop in cs['items'] if drop['itemId'] != HORSEMAN_ID])
-                 for cs in cases if any(drop['itemId'] != HORSEMAN_ID for drop in cs['items'])]
+                 for cs in cases if not cs['items'] or any(drop['itemId'] != HORSEMAN_ID for drop in cs['items'])]
         return dict(items=items, cases=cases)
 
     horseman = dict(id=HORSEMAN_ID, name='Headless Horseman', price=74500, rarity='og',
@@ -527,6 +534,7 @@ def identify():
     g.photo_url = None
     g.username = ''
     g.uid, name = 'guest:' + request.cookies.get('sandbox_id', secrets.token_hex(16)), 'Игрок'
+    partner_code = None
     if auth.startswith('tma '):
         token = os.getenv('BOT_TOKEN', '')
         if not token:
@@ -552,8 +560,16 @@ def identify():
         if isinstance(photo, str) and photo.startswith('https://'):
             g.photo_url = photo
         g.username = str(info.get('username', ''))[:80]
+        start = data.get('start_param', '')
+        if re.fullmatch(r'ref_[A-Za-z0-9_]{3,20}', start):
+            partner_code = start[4:].upper()
     c = db()
     c.execute('INSERT OR IGNORE INTO users(id,name) VALUES (?,?)', (g.uid,name))
+    if partner_code:
+        c.execute('''INSERT OR IGNORE INTO referral_case_access SELECT ?
+            WHERE EXISTS (SELECT 1 FROM referral_profiles
+              WHERE code=? AND user_id<>? AND json_extract(stats,'$.isPartner')=1)''',
+                  (g.uid, partner_code, g.uid))
     cleanup_custom_sessions(c)
     c.commit()
 
@@ -998,6 +1014,8 @@ def referral_view():
     days = [dict(day=iso(day_start - offset * 86400), joined=0, deposits=0, lost=0)
             for offset in range(13, -1, -1)]
     days[-1].update(joined=profile['friendsDay'], deposits=profile['dailyDeposits'], lost=profile['dailyLosses'])
+    if profile['isPartner'] and profile['code']:
+        profile['caseLink'] = f"https://t.me/brainrotmoddedgraderbot?startapp=ref_{profile['code']}"
     history = [dict(kind='transfer', at=iso(row['created']), amount=-json.loads(row['payload'])['transferred'])
                for row in db().execute("SELECT payload,created FROM history WHERE user_id=? AND kind='referrals/transfer' ORDER BY id DESC LIMIT 50", (g.uid,))]
     return dict(profile, code=profile['code'] or 'SANDBOX', friends=profile['count'], days=days, referrals=[], history=history)
@@ -1281,7 +1299,13 @@ def dispatch(path, body):
         return cases
     if path.startswith('cases/') and len(parts)==2 and not post: return case(parts[1])
     if path.startswith('cases/') and path.endswith('/free') and not post:
-        cs=case(parts[1]); r=c.execute('SELECT until FROM cooldown WHERE user_id=? AND case_id=?',(g.uid,cs['id'])).fetchone()
+        cs = case(parts[1])
+        if cs.get('freeKind') == 'ref':
+            used = c.execute('SELECT 1 FROM referral_case_claims WHERE user_id=? AND case_id=?',
+                             (g.uid, cs['id'])).fetchone() is not None
+            eligible = c.execute('SELECT 1 FROM referral_case_access WHERE user_id=?', (g.uid,)).fetchone() is not None
+            return dict(kind='ref', ok=eligible and not used, used=used, broken=not cs['items'])
+        r = c.execute('SELECT until FROM cooldown WHERE user_id=? AND case_id=?', (g.uid, cs['id'])).fetchone()
         return dict(ok=not r or r[0]<=time.time(),nextAt=iso(r[0]) if r and r[0]>time.time() else None,hours=24)
     if post and ((path.startswith('cases/') and path.endswith('/open')) or path.startswith('test/open/')):
         test=path.startswith('test/')
@@ -1295,12 +1319,20 @@ def dispatch(path, body):
             n = 1
         elif 'expectedPrice' in body and number(body['expectedPrice']) != cs['price']:
             raise Problem('Цена кейса обновилась. Открой его заново.', 'case_price_changed', 409)
-        if cs.get('freeKind') and not test:
+        if not cs['items']:
+            raise Problem('Кейс скоро откроется')
+        if cs.get('freeKind') == 'ref' and not test:
+            n = 1
+            if not c.execute('SELECT 1 FROM referral_case_access WHERE user_id=?', (g.uid,)).fetchone():
+                raise Problem('Только по ссылке партнёра', 'partner_link_required', 403)
+            if not c.execute('INSERT OR IGNORE INTO referral_case_claims VALUES (?,?)', (g.uid, cs['id'])).rowcount:
+                raise Problem('Реферальный кейс уже открыт')
+        elif cs.get('freeKind') and not test:
             n=1
             r=c.execute('SELECT until FROM cooldown WHERE user_id=? AND case_id=?',(g.uid,cs['id'])).fetchone()
             if r and r[0]>time.time(): raise Problem('Бесплатный кейс доступен раз в сутки')
             c.execute('INSERT OR REPLACE INTO cooldown VALUES (?,?,?)',(g.uid,cs['id'],time.time()+86400))
-        field='testBalance' if test else 'balance'; cost=0 if promo else cs['price']*n
+        field='testBalance' if test else 'balance'; cost=0 if promo or cs.get('freeKind') == 'ref' and not test else cs['price']*n
         if user()[field]<cost: raise Problem('Недостаточно BG. Добавь баланс в админке.', 'insufficient_balance')
         c.execute(f'UPDATE users SET {field}={field}-?, cases=cases+? WHERE id=?',(cost,0 if test else n,g.uid))
         side = controlled_side('case', body)
@@ -1704,8 +1736,8 @@ def validate_catalog(cat):
         if not isinstance(cs.get('name'),str) or not 1<=len(cs['name'])<=100: raise Problem('Нужно название кейса')
         validate_image(cs.get('image',''))
         if cs.get('category','standard') not in ['free','start','standard','platina','allin']: raise Problem('Неизвестная категория')
-        if cs.get('freeKind') not in [None,'daily']: raise Problem('freeKind: null или daily')
-        if not isinstance(cs.get('items'),list) or not 1<=len(cs['items'])<=500: raise Problem('Нужны предметы кейса')
+        if cs.get('freeKind') not in (None, 'daily', 'ref'): raise Problem('freeKind: null, daily или ref')
+        if not isinstance(cs.get('items'),list) or len(cs['items'])>500 or (not cs['items'] and cs.get('freeKind') != 'ref'): raise Problem('Нужны предметы кейса')
         item_ids=set()
         for entry in cs['items']:
             iid=integer(entry.get('itemId'))
