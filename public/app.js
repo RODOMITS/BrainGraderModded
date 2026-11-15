@@ -43,6 +43,7 @@
     return inline ? ` <small class="muted">${label}</small>` : `<i class="mut-tag mut-${slug}" title="${label}">${label}</i>`;
   };
   const nmi = item => esc(nm(item)) + mutTag(item, true);
+  const nmt = item => item?.mutation ? `${nm(item)} (${item.mutation})` : nm(item);
   function itemPicture(item, big = false) {
     const src = (big ? itemImgBig : itemImg)(item.image);
     return `<img ${big ? '' : 'loading="lazy"'} src="${src}" alt="">`;
@@ -1414,7 +1415,7 @@
     const t = Math.max(0, Math.floor(ms / 1000));
     return `${Math.floor(t / 3600)}:${String(Math.floor((t % 3600) / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
   };
-  const dropTile = (d) => (rememberDrop(d), `<div class="drop-tile swap rar-${esc(d.rarity)}" data-drop="${esc(d.id)}" data-id="${esc(d.id)}" role="link" tabindex="0" aria-label="${esc(d.name)} — ${fmt(d.price)} BG">${itemPicture(d)}${srcLayer(d)}</div>`);
+  const dropTile = (d) => (rememberDrop(d), `<div class="drop-tile swap rar-${esc(d.rarity)}" data-drop="${esc(d.id)}" data-id="${esc(d.id)}" role="link" tabindex="0" aria-label="${esc(nmt(d))} — ${fmt(d.price)} BG">${mutTag(d)}${itemPicture(d)}${srcLayer(d)}</div>`);
 
   function drawTopDrop(home) {
     const box = $('#topDropMain');
@@ -2680,7 +2681,7 @@
     if (!box) return;
     const search = $('#upSearch');
     const qy = up.q;
-    const match = (it) => !qy || it.name.toLowerCase().includes(qy);
+    const match = (it) => !qy || `${it.name} ${nmt(it)}`.toLowerCase().includes(qy);
     const paint = (sig, html, bind) => {
       if (box.dataset.sig === sig) return false;
       box.dataset.sig = sig;
@@ -2758,7 +2759,7 @@
       toast('Недостаточно BG на балансе', 'err');
       return openDeposit();
     }
-    const ok = await confirmBox(`Купить «${it.name}» за ${fmt(it.price)} BG?\n\nКупленного брейнрота вывести нельзя — его можно поставить в апгрейд, сыграть в мистери или продать за ту же цену.`, { ok: 'Купить' });
+    const ok = await confirmBox(`Купить «${nmt(it)}» за ${fmt(it.price)} BG?\n\nКупленного брейнрота вывести нельзя — его можно поставить в апгрейд, сыграть в мистери или продать за ту же цену.`, { ok: 'Купить' });
     if (!ok) return;
     try {
       const r = await api('/api/shop/buy', { method: 'POST', body: { itemId: it.id, key: newKey() } });
@@ -3241,7 +3242,7 @@
   async function buyMinesShop(it){
     if(!it||minesUI.busy||minesUI.game?.status==='active')return;
     if(state.me.balance<it.price){toast('Недостаточно BG на балансе','err');return openDeposit();}
-    const ok=await confirmBox(`Купить «${it.name}» за ${fmt(it.price)} BG?\n\nКупленного брейнрота вывести нельзя — его можно поставить в мины, апгрейд, сыграть в мистери или продать за ту же цену.`,{ok:'Купить'});
+    const ok=await confirmBox(`Купить «${nmt(it)}» за ${fmt(it.price)} BG?\n\nКупленного брейнрота вывести нельзя — его можно поставить в мины, апгрейд, сыграть в мистери или продать за ту же цену.`,{ok:'Купить'});
     if(!ok||minesUI.busy||minesUI.game?.status==='active')return;
     const t=state.render;minesUI.busy=true;drawMinesBoard();drawMinesSummary();drawMinesInventory();drawMinesShop();
     try{
@@ -3519,7 +3520,7 @@
           <div class="gw-prize">
             <div class="gw-glow"></div>
             ${itemPicture(g.item, true)}
-            <div class="gw-name">${esc(g.item.name)}</div>
+            <div class="gw-name">${nmi(g.item)}</div>
             <div class="gw-price">${price(g.item.price)}</div>
           </div>
           <div class="gw-info">
@@ -3542,13 +3543,44 @@
     const past = (g) => `
       <div class="gw-past rar-${esc(g.item.rarity)}">
         ${itemPicture(g.item)}
-        <div class="gw-past-n"><b>${esc(g.item.name)}</b>${price(g.item.price)}</div>
+        <div class="gw-past-n"><b>${nmi(g.item)}</b>${price(g.item.price)}</div>
         <div class="gw-past-w">${g.participants == null ? '' : 'Участников: ' + fmt(g.participants) + ' · '}${g.winner ? `${g.winner.me ? '🎉 <b>Ты победил!</b>' : `Победил <b>${esc(g.winner.name)}</b>`} · №${fmt(g.winner.num)}` : '<span class="muted">Победителя нет</span>'}</div>
+        ${g.drawCount > 0 ? `<button type="button" class="btn ghost small" data-gd-replay="${g.id}">🎲 Посмотреть розыгрыш</button>` : ''}
       </div>`;
-    $('#gwBody').innerHTML = (data.active.length
+    $('#gwBody').innerHTML = `<div class="gd-admin"><button class="btn ghost small" id="gdDemo">🎲 Тест кубика</button></div><div id="gdShowBox"></div>` + (data.active.length
       ? data.active.map(card).join('')
       : `<div class="gw-empty"><p>Сейчас розыгрышей нет.</p><span class="muted">Как только начнётся новый розыгрыш, он появится на этой странице.</span></div>`)
       + (data.finished.length ? `<h2>Прошедшие розыгрыши</h2><div class="gw-past-list">${data.finished.map(past).join('')}</div>` : '');
+    const showBox = $('#gdShowBox', view);
+    const play = (giveaway, demo = false, live = false) => {
+      const winner = demo ? { num: 1 + Math.floor(Math.random() * 38), name: 'Тестовый игрок' } : giveaway.winner;
+      const participants = demo ? 38 : giveaway.drawCount;
+      const order = Array.from({ length: participants }, (_, i) => i + 1).filter(num => num !== winner.num);
+      let drawSeed = Number(giveaway.id) >>> 0;
+      for (let i = order.length - 1; i > 0; i--) {
+        drawSeed = (Math.imul(drawSeed, 1664525) + 1013904223) >>> 0;
+        const j = demo ? Math.floor(Math.random() * (i + 1)) : drawSeed % (i + 1);
+        [order[i], order[j]] = [order[j], order[i]];
+      }
+      const plan = gdPlan(participants);
+      const show = { id: giveaway.id, demo, item: giveaway.item, participants, myNum: demo ? 7 : giveaway.myNum,
+        startAt: live ? giveaway.endsAt : new Date(Date.now() - skew).toISOString(), ...plan, order, winner };
+      showBox.innerHTML = gdCard(show);
+      gdRun(show, { t, skew });
+      showBox.scrollIntoView({ block: 'nearest' });
+    };
+    $('#gdDemo', view).onclick = () => play({
+      id: 'demo', item: data.active[0]?.item || data.finished[0]?.item || { name: 'Тестовый приз' },
+    }, true);
+    $$('[data-gd-replay]', view).forEach(button => {
+      button.onclick = () => play(data.finished.find(g => String(g.id) === button.dataset.gdReplay));
+    });
+    const latest = data.finished.find(g => g.drawCount &&
+      Date.now() - skew - Date.parse(g.endsAt) < gdPlan(g.drawCount).end);
+    if (latest && !sessionStorage.getItem('bg_giveaway_show_' + latest.id)) {
+      sessionStorage.setItem('bg_giveaway_show_' + latest.id, '1');
+      play(latest, false, true);
+    }
     $$('[data-join]', view).forEach((b) => (b.onclick = async () => {
       b.disabled = true;
       try {
@@ -3587,6 +3619,117 @@
     state.timers.push(gwTimer);
   }
   let gwTimer = null;
+
+  function gdPlan(n) {
+    const fastCount = Math.max(0, n - 10);
+    const fast = fastCount ? Math.min(2500, Math.max(700, Math.floor(90000 / fastCount))) : 2500;
+    const at = [];
+    let tm = 4000;
+    for (let k = 1; k < n; k++) { tm += n - k + 1 > 10 ? fast : 5500; at.push(tm); }
+    return { at, end: tm + 3000, fast };
+  }
+  const GD_FACES = ['f1', 'f2', 'f3', 'f4', 'f5', 'f6'];
+  function gdCard(sh) {
+    const chips = Array.from({ length: sh.participants }, (_, i) => `<span class="gd-chip${sh.myNum === i + 1 ? ' me' : ''}" data-n="${i + 1}">${i + 1}</span>`).join('');
+    return `
+      <section class="gd-card" data-show="${sh.id}">
+        <div class="gd-head">
+          ${sh.item.image ? `<img src="${itemImg(sh.item.image)}" alt="">` : ''}
+          <div><b>${sh.demo ? 'Тест кубика' : 'Итоги розыгрыша'}</b><span class="muted">${nmi(sh.item)} · ${fmt(sh.participants)} участников${sh.myNum ? ` · твой номер <b>№${fmt(sh.myNum)}</b>` : ''}</span></div>
+        </div>
+        <div class="gd-stage">
+          <div class="gd-scene"><div class="gd-cube">${GD_FACES.map((f) => `<div class="gd-f ${f}"><span>?</span></div>`).join('')}</div></div>
+          <div class="gd-status">Кубик скоро начнёт…</div>
+        </div>
+        <div class="gd-counts"><span>В игре: <b class="gd-in">${fmt(sh.participants)}</b></span><span>Выбыли: <b class="gd-outn">0</b></span></div>
+        <div class="gd-winner" hidden></div>
+        <div class="gd-grid">${chips}</div>
+      </section>`;
+  }
+  function gdRun(sh, { t, skew }) {
+    const box = $(`[data-show="${sh.id}"]`);
+    if (!box) return;
+    const cube = $('.gd-cube', box), status = $('.gd-status', box), win = $('.gd-winner', box);
+    const n = sh.participants;
+    const start = new Date(sh.startAt).getTime();
+    const out = new Set();
+    const landed = new Set(); // номера, на которые кубик уже «упал» (выбывание отметится через миг)
+    const el = () => Date.now() - skew - start;
+    let landUntil = 0, lastFace = 0, faceK = 0, winnerShown = false;
+    const remaining = () => { const r = []; for (let k = 1; k <= n; k++) if (!out.has(k)) r.push(k); return r; };
+    const slowNow = () => n - out.size <= 10;
+    const counts = () => { $('.gd-in', box).textContent = fmt(n - out.size); $('.gd-outn', box).textContent = fmt(out.size); };
+    const markOut = (k, anim) => {
+      if (out.has(k)) return;
+      out.add(k);
+      const c = $(`.gd-chip[data-n="${k}"]`, box);
+      if (c) { c.classList.add('out'); if (anim) c.classList.add('boom'); }
+      counts();
+    };
+    const front = (num, cls = '') => {
+      cube.className = 'gd-cube ' + cls;
+      $('.gd-f.f1 span', cube).textContent = num;
+    };
+    const land = (num) => {
+      const slow = slowNow();
+      front(num, 'land');
+      status.innerHTML = sh.myNum === num ? `Выпал <b>№${num}</b> — это ты, увы 😢` : `Выпал <b>№${num}</b> — выбывает`;
+      landed.add(num);
+      setTimeout(() => markOut(num, true), 450);
+      landUntil = Date.now() + (slow ? 2600 : Math.min(1100, sh.fast * 0.6));
+    };
+    const showWinner = (w) => {
+      if (winnerShown || !w) return;
+      winnerShown = true;
+      for (let k = 1; k <= n; k++) if (k !== w.num) markOut(k, false);
+      front(w.num, 'winner');
+      $(`.gd-chip[data-n="${w.num}"]`, box)?.classList.add('win');
+      status.innerHTML = w.me ? '🎉 <b>Ты победил!</b> Приз уже в твоём инвентаре' : `🏆 Остался один — <b>№${w.num}</b>`;
+      win.innerHTML = `
+        <div class="gd-w-ava">${esc((w.name || '?')[0])}</div>
+        <div class="gd-w-info">
+          <div class="gd-w-t">🏆 Победитель — №${fmt(w.num)}</div>
+          <div class="gd-w-name">${esc(w.name)}</div>
+          <div class="muted">Приз «${nmi(sh.item)}»${sh.demo ? '' : ' уже в его инвентаре'}</div>
+        </div>`;
+      win.hidden = false;
+      if (w.me) haptic('success');
+    };
+    const advance = () => {
+      const elapsed = el();
+      const count = sh.at.filter(time => time <= elapsed).length;
+      for (let i = 0; i < count - 1; i++) {
+        if (!landed.has(sh.order[i])) markOut(sh.order[i], false);
+      }
+      return count ? sh.order[count - 1] : null;
+    };
+    const timer = setInterval(() => {
+      if (stale(t) || !document.body.contains(box)) { clearInterval(timer); return; }
+      const e = el();
+      if (e < 0) { status.textContent = 'Кубик скоро начнёт…'; return; }
+      const next = advance();
+      if (next != null && !out.has(next) && !landed.has(next)) land(next);
+      if (e >= sh.end) {
+        showWinner(sh.winner);
+        clearInterval(timer);
+        return;
+      }
+      // кубик крутится, на гранях мелькают номера тех, кто ещё в игре
+      if (Date.now() < landUntil || winnerShown) return;
+      const slow = slowNow();
+      const want = 'gd-cube ' + (slow ? 'spin slow' : 'spin');
+      if (cube.className !== want) cube.className = want;
+      if (e < 4000) status.textContent = 'Кубик разгоняется…';
+      else status.innerHTML = slow ? `Осталось <b>${n - out.size}</b> — кубик замедляется…` : 'Кубик выбирает, кто выбывает…';
+      if (Date.now() - lastFace > (slow ? 320 : 140)) {
+        lastFace = Date.now();
+        const r = remaining();
+        if (r.length) $(`.gd-f.${GD_FACES[faceK++ % 6]} span`, cube).textContent = r[Math.floor(Math.random() * r.length)];
+      }
+    }, 100);
+    state.timers.push(timer);
+  }
+
 
   const PASS_FIRE = '<i class="pf pf1"></i><i class="pf pf2"></i><i class="pf pf3"></i><i class="pf pf4"></i><i class="pf pf5"></i>';
   async function renderPass(tabArg, retried = false) {
@@ -4332,6 +4475,7 @@
       <section class="panel">
         <span class="muted">Реферальный баланс</span>
         <div class="bal-big ${neg ? 'neg' : ''}">${COIN}${neg ? signed(r.refBalance) : fmt(r.refBalance)}</div>
+        <button class="btn" id="refTransfer" ${r.refBalance > 0 ? '' : 'disabled'}>Перевести на баланс</button>
         <div class="stats two">
           <div class="stat"><b>${r.count}</b><span>${plural(r.count, 'друг', 'друга', 'друзей')}</span></div>
           <div class="stat"><b>${fmt(r.earned)}</b><span>BG заработано</span></div>
@@ -4345,6 +4489,20 @@
 
       ${r.history.length ? `<h2>История</h2><div class="panel ref-list">${r.history.map((x) => `<div class="line"><div class="grow"><b>${x.kind === 'week' ? 'Доход за неделю' : x.kind === 'transfer' ? 'Перевод на баланс' : 'Корректировка'}</b><span class="muted">${new Date(x.at).toLocaleString('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}</span></div><span class="price ${x.amount < 0 ? 'neg' : ''}">${COIN}${signed(x.amount)}</span></div>`).join('')}</div>` : ''}`;
 
+    $('#refTransfer').onclick = async event => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      try {
+        const result = await api('/api/referrals/transfer', { method: 'POST', body: { key: newKey() } });
+        setBalance(result.balance);
+        haptic('success');
+        toast(`Переведено на баланс: ${fmt(result.transferred)} BG`);
+        if (!stale(t)) renderReferrals();
+      } catch (error) {
+        fail(error);
+        button.disabled = false;
+      }
+    };
     $('#refHelp').onclick = () => refHelp(r);
     if ($('#howPartner')) $('#howPartner').onclick = () => partnerHow(r.partnerContact);
     $('#copyCode').onclick = () => copy(r.code, 'Код скопирован');
@@ -4729,7 +4887,7 @@
     if (!box || !done.length) return;
     const label = { completed: 'Выведен', cancelled: 'Отменён', rejected: 'Отклонён' };
     box.innerHTML = `<div class="section-head"><h2>История выводов</h2></div>${done
-      .map((r) => `<div class="line">${itemPicture(r.item)}<div class="grow"><b>${esc(r.item.name)}</b><span class="muted">${label[r.status] || r.status}${r.note ? ': ' + esc(r.note) : ''}</span></div>${price(r.item.price)}</div>`)
+      .map((r) => `<div class="line">${itemPicture(r.item)}<div class="grow"><b>${esc(r.item.name)}</b><span class="muted">${r.status === 'queued' && r.mode === 'wait' ? 'Ожидание предмета' : label[r.status] || r.status}${r.note ? ': ' + esc(r.note) : ''}</span>${r.status === 'queued' && r.exchange ? `<span class="muted">Замена: ${r.exchange.qty} × ${nmi(r.exchange.item)}${r.exchange.change ? ' + ' + fmt(r.exchange.change) + ' BG' : ''}</span>` : ''}</div>${price(r.item.price)}</div>`)
       .join('')}`;
   }
 
@@ -4793,35 +4951,48 @@
     $('[data-a=withdraw]', body).onclick = () => withdrawSheet(it);
   }
 
-  function withdrawSheet(it) {
+  async function withdrawSheet(it) {
     if (payBlocked() || !it.withdrawable) return;
     const form = h(`<form>
-      <div class="line">${itemPicture(it.item)}<div class="grow"><b>${esc(it.item.name)}</b></div>${price(it.item.price)}</div>
+      <div class="line">${itemPicture(it.item)}<div class="grow"><b>${nmi(it.item)}</b></div>${price(it.item.price)}</div>
       <label class="field"><span>Твой ник в Roblox</span><input id="rbx" autocomplete="off" autocapitalize="off" spellcheck="false" minlength="3" maxlength="20" pattern="[A-Za-z0-9_]{3,20}" placeholder="Например, Player_123" required></label>
-      <button class="btn" type="submit">Поставить на вывод</button>
+      <button class="btn" type="submit" name="mode" value="direct">Поставить на вывод</button>
+      <div data-withdraw-options></div>
     </form>`);
     const sheet = openSheet('Вывод', form);
-    const key = newKey();
-    form.onsubmit = async (event) => {
+    const render = state.render;
+    let key = newKey();
+    form.onsubmit = async event => {
       event.preventDefault();
-      const button = form.querySelector('button[type="submit"]');
-      if (button.disabled) return;
-      const nick = $('#rbx', form).value.trim();
-      const render = state.render;
-      button.disabled = true;
+      const buttons = $$('button[type="submit"]', form);
+      if (buttons.some(button => button.disabled)) return;
+      buttons.forEach(button => button.disabled = true);
       try {
-        await api('/api/withdraw', { method: 'POST', body: { ids: [it.id], robloxUsername: nick, key } });
+        const result = await api('/api/withdraw', { method: 'POST', body: {
+          ids: [it.id], robloxUsername: $('#rbx', form).value.trim(), mode: event.submitter?.value || 'direct', key,
+        } });
         haptic('success');
-        toast('Предмет на выводе');
+        toast(result.mode === 'wait' ? 'Предмет в ожидании' : 'Предмет на выводе');
         if (!stale(render)) {
           sheet.close();
           renderProfile();
         }
       } catch (error) {
+        key = newKey();
         fail(error);
-        button.disabled = false;
+        buttons.forEach(button => button.disabled = false);
       }
     };
+    const { exchange } = await api('/api/withdraw/options?id=' + it.id).catch(() => ({}));
+    if (!form.isConnected || $('button[value="direct"]', form).disabled) return;
+    $('[data-withdraw-options]', form).innerHTML = `${exchange ? `<div class="ex-card">
+      <b>Вывести с заменой</b>
+      <div class="line">${itemPicture(exchange.item)}<div class="grow"><b>${exchange.qty} × ${nmi(exchange.item)}</b>
+      ${exchange.change ? `<span class="muted">+ ${fmt(exchange.change)} BG</span>` : ''}</div></div>
+      <p class="muted">Замена сохраняется в заявке. Предмет снова станет доступен, если отменить вывод.</p>
+      <button class="btn ghost" type="submit" name="mode" value="exchange">Вывести с заменой</button>
+    </div>` : ''}
+    <button class="btn ghost" type="submit" name="mode" value="wait">Подождать «${esc(nm(it.item))}»</button>`;
   }
 
   async function cancelWithdraw(id) {
@@ -4852,13 +5023,42 @@
   // =====================================================================
   //                             ПОПОЛНЕНИЕ
   // =====================================================================
-  const dep = { tab: 'stars', sel: new Map(), q: '', from: '', to: '', sort: 'desc', catalog: null, promo: '' };
+  const dep = { tab: 'stars', sel: new Map(), q: '', from: '', to: '', sort: 'desc', catalog: null, promo: '', request: null };
+
+  const depositCode = () => `
+    <label class="field"><span>Промокод или код друга</span><input id="dPromo" maxlength="20" autocomplete="off" autocapitalize="characters" spellcheck="false" value="${esc(dep.promo)}"></label>
+    <p class="hint" style="margin-top:6px">Промокод с главной даёт бонус к пополнению.</p>`;
+
+  function watchDepositCode(box, update) {
+    const input = $('#dPromo', box);
+    let bonus = state.home?.bonus;
+    const recalc = () => {
+      dep.promo = input.value;
+      const active = bonus?.code && Date.now() < Date.parse(bonus.endsAt);
+      input.placeholder = active ? `Например, ${bonus.code}` : '';
+      const applies = active && !bonus.used && dep.promo.trim().toUpperCase() === bonus.code;
+      update(applies ? bonus.percent : 0);
+    };
+    input.oninput = recalc;
+    recalc();
+    (async () => {
+      for (const delay of [0, 1500, 4500]) {
+        if (delay) await sleep(delay);
+        if (!input.isConnected) return;
+        bonus = (await api('/api/home')).bonus;
+        if (!input.isConnected) return;
+        recalc();
+        if (bonus?.code) return;
+      }
+    })().catch(() => {});
+    return recalc;
+  }
 
   function openDeposit(tab = dep.tab, { promo } = {}) {
     if (payBlocked()) return;
     if (promo !== undefined) dep.promo = promo;
     dep.catalog = null;
-    const body = h(`<div><div class="seg" id="depSeg" style="margin-top:0"><button data-t="stars">Звёзды</button><button data-t="items">Брейнроты</button></div><div id="dep"></div></div>`);
+    const body = h(`<div><div class="seg" id="depSeg" style="margin-top:0"><button data-t="stars">Звёзды</button><button data-t="crypto">Крипта</button><button data-t="items">Брейнроты</button></div><div id="dep"></div></div>`);
     openSheet('Пополнение', body);
     $$('#depSeg button', body).forEach(b => { b.onclick = () => showDepTab(b.dataset.t); });
     showDepTab(tab);
@@ -4868,67 +5068,83 @@
     dep.tab = tab;
     $$('#depSeg button').forEach(b => b.classList.toggle('on', b.dataset.t === tab));
     if (tab === 'stars') starsTab();
+    else if (tab === 'crypto') cryptoTab();
     else itemsTab();
   }
 
-  async function starsTab() {
+  function starsTab() {
     const cfg = state.cfg;
     const box = $('#dep');
     box.innerHTML = `
       <label class="field"><span>Сколько звёзд</span><input id="stars" type="number" inputmode="numeric" min="${cfg.starsMin}" max="${cfg.starsMax}" placeholder="Например, 100"></label>
-      <label class="field"><span>Промокод или код друга</span><input id="dPromo" maxlength="20" autocomplete="off" autocapitalize="characters" spellcheck="false" value="${esc(dep.promo)}"></label>
-      <p class="hint" style="margin-top:6px">Промокод с главной даёт бонус к пополнению.</p>
+      ${depositCode()}
       <div class="total"><span>Получишь</span><b>${COIN}<span id="get">0</span></b></div>
       <p class="hint" id="bonusHint"></p>
       <button class="btn" type="button" id="pay" disabled>Оплатить звёздами</button>
       <p class="hint center">1 ⭐ = ${fmt(cfg.starsRate)} BG, минимум ${cfg.starsMin} ⭐. Предпросмотр пополнения.</p>`;
     const input = $('#stars', box);
-    const promoInput = $('#dPromo', box);
-    let bonus = state.home?.bonus;
-    const recalc = () => {
+    input.oninput = watchDepositCode(box, percent => {
       const stars = Number(input.value);
-      dep.promo = promoInput.value;
-      const active = bonus?.code && Date.now() < Date.parse(bonus.endsAt);
-      promoInput.placeholder = active ? `Например, ${bonus.code}` : '';
-      const applies = active && !bonus.used
-        && dep.promo.trim().toUpperCase() === bonus.code;
-      const percent = applies ? bonus.percent : 0;
       $('#get', box).textContent = fmt(Math.max(0, stars || 0) * cfg.starsRate * (1 + percent / 100));
-      $('#bonusHint', box).textContent = applies ? `+${fmt(percent)}% по промокоду` : '';
+      $('#bonusHint', box).textContent = percent ? `+${fmt(percent)}% по промокоду` : '';
       $('#pay', box).disabled = !Number.isInteger(stars) || stars < cfg.starsMin || stars > cfg.starsMax;
-    };
-    input.oninput = recalc;
-    promoInput.oninput = recalc;
-    recalc();
-    // The first request can start the server's background refresh before a code is ready.
+    });
+  }
+
+  async function cryptoTab() {
+    const box = $('#dep');
+    const pending = h('<div class="skeleton"></div>');
+    box.replaceChildren(pending);
+    let config;
     try {
-      for (const delay of [0, 1500, 4500]) {
+      for (const delay of [0, 700, 1500, 3000]) {
         if (delay) await sleep(delay);
-        if (!promoInput.isConnected) return;
-        const home = await api('/api/home');
-        if (!promoInput.isConnected) return;
-        bonus = home.bonus;
-        recalc();
-        if (bonus?.code) break;
+        if (!pending.isConnected) return;
+        const result = await api('/api/deposit/crypto/preview');
+        config = result.config;
+        if (config || !result.checking) break;
       }
     } catch {}
+    if (!pending.isConnected) return;
+    if (!config) {
+      box.innerHTML = '<div class="empty">Курс криптопополнения недоступен</div><button class="btn ghost" type="button">Проверить снова</button>';
+      $('button', box).onclick = cryptoTab;
+      return;
+    }
+    box.innerHTML = `
+      <label class="field"><span>Сумма, $</span><input id="usd" type="number" inputmode="decimal" min="${config.min}" max="${config.max}" step="0.01" placeholder="Например, 5"></label>
+      ${depositCode()}
+      <div class="total"><span>Получишь</span><b>${COIN}<span id="get">0</span></b></div>
+      <p class="hint" id="bonusHint"></p>
+      <button class="btn" type="button" id="pay" disabled>Оплатить криптой</button>
+      <p class="hint center">1 $ = ${fmt(config.rate)} BG · от ${fmt(config.min)} до ${fmt(config.max)} $${config.assets.length ? ' · монеты: ' + esc(config.assets.join(', ')) : ''}</p>`;
+    const input = $('#usd', box);
+    input.oninput = watchDepositCode(box, percent => {
+      const usd = Math.round(Number(input.value) * 100) / 100;
+      $('#get', box).textContent = fmt(Math.max(0, usd) * config.rate * (1 + percent / 100));
+      $('#bonusHint', box).textContent = percent ? `+${fmt(percent)}% по промокоду` : '';
+      $('#pay', box).disabled = !input.value || !input.validity.valid;
+    });
+    $('#pay', box).onclick = () => toast('Оплата криптой недоступна в Modded');
   }
 
   async function itemsTab() {
     const box = $('#dep');
     if (!box) return;
-    box.innerHTML = '<div class="skeleton"></div>';
+    if (dep.request) return depositQueue(box);
+    const pending = h('<div class="skeleton"></div>');
+    box.replaceChildren(pending);
     try {
       const deadline = Date.now() + 6500;
       let status = await api('/api/deposit/current');
       while (status.checking && Date.now() < deadline) {
-        if (!box.isConnected || dep.tab !== 'items') return;
+        if (!pending.isConnected) return;
         await sleep(750);
         status = await api('/api/deposit/current');
       }
-      if (box.isConnected && dep.tab === 'items') await catalogView(box, status.open);
+      if (pending.isConnected) await catalogView(box, status.open);
     } catch (error) {
-      if (box.isConnected && dep.tab === 'items') fail(error);
+      if (pending.isConnected) fail(error);
     }
   }
 
@@ -4940,16 +5156,32 @@
       return;
     }
     if (!dep.catalog) {
-      box.innerHTML = '<div class="skeleton"></div>';
+      const pending = h('<div class="skeleton"></div>');
+      box.replaceChildren(pending);
       try {
-        const shop = await api('/api/shop');
-        dep.catalog = shop.items;
-      } catch (e) {
-        return fail(e);
+        for (const delay of [0, 700, 1500, 3000]) {
+          if (delay) await sleep(delay);
+          if (!pending.isConnected) return;
+          const result = await api('/api/deposit/catalog/preview');
+          if (!pending.isConnected) return;
+          if (result.catalog) {
+            dep.catalog = result.catalog;
+            break;
+          }
+          if (!result.checking) break;
+        }
+        if (!dep.catalog) {
+          const shop = await api('/api/shop');
+          if (!pending.isConnected) return;
+          dep.catalog = { items: shop.items, minTotal: 0 };
+        }
+      } catch (error) {
+        if (pending.isConnected) fail(error);
+        return;
       }
     }
     if (!box.isConnected || dep.tab !== 'items') return;
-    const items = dep.catalog;
+    const { items, minTotal } = dep.catalog;
     const byId = new Map(items.map(item => [item.id, item]));
     for (const id of dep.sel.keys()) {
       if (!byId.has(id)) dep.sel.delete(id);
@@ -4968,14 +5200,14 @@
       const q = dep.q.toLowerCase();
       const from = Number(dep.from) || 0;
       const to = Number(dep.to) || Infinity;
-      let list = items.filter((i) => i.name.toLowerCase().includes(q) && i.price >= from && i.price <= to);
+      let list = items.filter((i) => `${i.name} ${nmt(i)}`.toLowerCase().includes(q) && i.price >= from && i.price <= to);
       list = list.sort((a, b) => (dep.sort === 'desc' ? b.price - a.price : a.price - b.price));
       $('#dsort').textContent = dep.sort === 'desc' ? 'Сначала дорогие' : 'Сначала дешёвые';
       $('#dgrid').innerHTML = list.length
         ? list
             .map((i) => {
               const n = dep.sel.get(i.id) || 0;
-              return `<button class="item rar-${esc(i.rarity)} ${n ? 'sel' : ''}" data-id="${i.id}">${n ? `<span class="qty">${n}</span><span class="minus" data-minus="${i.id}">−</span>` : ''}${i.minQty && !n ? `<span class="min-qty">от ${i.minQty} шт.</span>` : ''}${ogTag(i)}${itemPicture(i)}<div class="n">${esc(i.name)}</div>${price(i.price)}</button>`;
+              return `<button class="item rar-${esc(i.rarity)} ${n ? 'sel' : ''}" data-id="${i.id}">${n ? `<span class="qty">${n}</span><span class="minus" data-minus="${i.id}">−</span>` : ''}${i.minQty && !n ? `<span class="min-qty">от ${i.minQty} шт.</span>` : ''}${i.minQty > 1 && !n ? `<span class="min-qty">от ${fmt(i.minQty)} шт.</span>` : ''}${ogTag(i)}${itemPicture(i)}<div class="n">${esc(nm(i))}</div>${price(i.price)}</button>`;
             })
             .join('')
         : '<div class="empty" style="grid-column:1/-1">Ничего не нашлось</div>';
@@ -4983,15 +5215,18 @@
       const sum = [...dep.sel.entries()].reduce((a, [id, n]) => a + byId.get(id).price * n, 0);
       const nb = $('#dnext');
       nb.innerHTML = count ? `Продолжить: ${count} шт. на ${price(sum)}` : 'Выбери брейнротов';
+      nb.disabled = !count;
+      nb.onclick = () => depositSummary(box, byId, open, minTotal);
       $$('#dgrid .item').forEach((b) => {
         b.onclick = (ev) => {
           const id = Number(b.dataset.id);
           const n = dep.sel.get(id) || 0;
+          const minQty = byId.get(id).minQty || 1;
           if (ev.target.closest('[data-minus]')) {
-            if (n <= 1) dep.sel.delete(id);
+            if (n <= minQty) dep.sel.delete(id);
             else dep.sel.set(id, n - 1);
           } else {
-            dep.sel.set(id, n + 1);
+            dep.sel.set(id, n ? n + 1 : minQty);
           }
           tick();
           draw();
@@ -5003,6 +5238,73 @@
     $('#dto').oninput = (e) => { dep.to = e.target.value.replace(',', '.'); draw(); };
     $('#dsort').onclick = () => { dep.sort = dep.sort === 'desc' ? 'asc' : 'desc'; draw(); };
     draw();
+  }
+
+  const depositItemLines = lines => lines.map(({ item, qty }) => `
+    <div class="line">${itemPicture(item)}<div class="grow"><b>${nmi(item)} ×${qty}</b></div>${price(item.price * qty)}</div>`
+  ).join('');
+
+  function depositSummary(box, byId, open, minTotal) {
+    const lines = [...dep.sel].map(([id, qty]) => ({ item: byId.get(id), qty }));
+    const sum = lines.reduce((total, { item, qty }) => total + item.price * qty, 0);
+    const form = h(`<form>
+      <button class="back" type="button" data-back>‹ Назад к выбору</button>
+      ${depositItemLines(lines)}
+      <div class="total"><span>Всего получишь</span><b>${COIN}<span id="get">${fmt(sum)}</span></b></div>
+      <p class="hint" id="bonusHint"></p>
+      <label class="field"><span>Твой ник в Roblox</span><input name="nickname" minlength="3" maxlength="20" pattern="[A-Za-z0-9_]{3,20}" placeholder="Например, Player_123" required></label>
+      ${depositCode()}
+      ${sum < minTotal ? `<p class="hint">Минимальное пополнение — ${fmt(minTotal)} BG</p>` : ''}
+      <button class="btn" type="submit" ${sum < minTotal ? 'disabled' : ''}>Создать заявку</button>
+    </form>`);
+    box.replaceChildren(form);
+    let total = sum;
+    watchDepositCode(form, percent => {
+      total = sum * (1 + percent / 100);
+      $('#get', form).textContent = fmt(total);
+      $('#bonusHint', form).textContent = percent ? `+${fmt(percent)}% по промокоду` : '';
+    });
+    $('[data-back]', form).onclick = () => catalogView(box, open);
+    form.onsubmit = event => {
+      event.preventDefault();
+      if (sum < minTotal) return;
+      dep.request = { status: 'queued', nickname: form.elements.nickname.value, lines, total, readyAt: Date.now() + 5000 };
+      dep.sel.clear();
+      depositQueue(box);
+    };
+  }
+
+  function depositQueue(box) {
+    const request = dep.request;
+    if (request.status === 'queued' && Date.now() >= request.readyAt) request.status = 'active';
+    const queued = request.status === 'queued';
+    const active = request.status === 'active';
+    const closed = !queued && !active;
+    const title = queued ? 'Ты в очереди' : active ? 'Твоя очередь!' : request.status === 'cancelled' ? 'Заявка отменена' : 'Предпросмотр завершён';
+    const panel = h(`<div>
+      <div class="center"><div class="queue-num">${title}</div>${queued ? '<p class="hint">№1 · ты следующий</p>' : ''}</div>
+      ${depositItemLines(request.lines)}
+      <div class="total"><span>Ник: ${esc(request.nickname)}</span><b>${price(request.total)}</b></div>
+      ${active ? '<button class="btn" type="button" data-in-game>Я в игре</button>' : ''}
+      <button class="btn ghost" type="button" data-queue-action>${closed ? 'Новая заявка' : 'Отменить заявку'}</button>
+    </div>`);
+    box.replaceChildren(panel);
+    if (queued) setTimeout(() => {
+      if (panel.isConnected && dep.request === request) depositQueue(box);
+    }, Math.max(0, request.readyAt - Date.now()));
+    if (active) $('[data-in-game]', panel).onclick = () => {
+      request.status = 'completed';
+      depositQueue(box);
+    };
+    $('[data-queue-action]', panel).onclick = () => {
+      if (closed) {
+        dep.request = null;
+        itemsTab();
+      } else {
+        request.status = 'cancelled';
+        depositQueue(box);
+      }
+    };
   }
 
   // =====================================================================

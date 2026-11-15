@@ -147,6 +147,22 @@ def refresh_original(entry, token, kind):
             raw = original_api('config', token).get('dragonExchange')
             value = None if not raw else dict(itemId=integer(raw['dragon']['id']), minimum=number(raw['from'], 1))
             delay = 300
+        elif kind == 'crypto':
+            raw = original_api('config', token).get('crypto')
+            value = None
+            if raw:
+                minimum = number(raw['min'], 0.01)
+                value = dict(min=minimum, max=number(raw['max'], minimum),
+                             rate=number(raw['rate'], 0.01),
+                             assets=[str(asset)[:20] for asset in raw.get('assets', [])[:30]])
+            delay = 300
+        elif kind == 'deposit_catalog':
+            raw = original_api('deposit/catalog', token)
+            catalogue = original_api('config', token).get('mutations') or {}
+            items = [dict(original_item(item, catalogue), minQty=integer(item.get('minQty') or 1, 1, 1000))
+                     for item in raw['items'][:5000]]
+            value = dict(minTotal=number(raw.get('minTotal', 0)), items=items)
+            delay = 300
         elif kind == 'giveaways':
             data = original_api('giveaways', token)
             value = {
@@ -204,7 +220,7 @@ def original_snapshot(kind):
             SHARED_ORIGINAL[kind + '_loading'] = True
             threading.Thread(target=refresh_original, args=(SHARED_ORIGINAL, token, kind), daemon=True).start()
         value = SHARED_ORIGINAL.get(kind)
-        if value and (kind in ('catalog', 'pass', 'dragon') or value['expires'] > now):
+        if value and (kind in ('catalog', 'pass', 'dragon', 'crypto', 'deposit_catalog') or value['expires'] > now):
             return value
     return None
 
@@ -397,6 +413,12 @@ def init_db():
                 JOIN inventory stake ON stake.id=ids.value AND stake.user_id=o.user_id AND stake.created<=prize.created
                 WHERE o.path IN ('upgrade','mystery')
                 GROUP BY prize.id""")
+        withdrawal_columns = {row['name'] for row in c.execute('PRAGMA table_info(fake_withdrawals)')}
+        if 'mode' not in withdrawal_columns:
+            c.execute("ALTER TABLE fake_withdrawals ADD COLUMN mode TEXT NOT NULL DEFAULT 'direct'")
+        if 'replacement' not in withdrawal_columns:
+            c.execute('ALTER TABLE fake_withdrawals ADD COLUMN replacement TEXT')
+        c.execute("CREATE INDEX IF NOT EXISTS history_ref_transfers ON history(user_id,id DESC) WHERE kind='referrals/transfer'")
         if 'captions' not in {row['name'] for row in c.execute('PRAGMA table_info(screamers)')}:
             c.execute("ALTER TABLE screamers ADD COLUMN captions TEXT NOT NULL DEFAULT '[]'")
         c.commit()
@@ -567,14 +589,27 @@ def inventory(owned=False):
 
 
 def withdrawal_history():
-    rows = db().execute("""SELECT w.id,w.status,w.created,i.item FROM fake_withdrawals w
+    rows = db().execute("""SELECT w.id,w.status,w.created,w.mode,w.replacement,i.item FROM fake_withdrawals w
         JOIN inventory i ON i.id=w.inventory_id WHERE i.user_id=? ORDER BY w.id DESC LIMIT 100""", (g.uid,))
     requests = []
     for row in rows:
         item = json.loads(row['item'])
         if visible_item(item):
-            requests.append(dict(id=row['id'], status=row['status'], createdAt=iso(row['created']), item=item))
+            requests.append(dict(id=row['id'], status=row['status'], createdAt=iso(row['created']), item=item,
+                                 mode=row['mode'], exchange=json.loads(row['replacement']) if row['replacement'] else None))
     return dict(requests=requests, enabled=True)
+
+
+def withdrawal_exchange(item):
+    limit = item['price']
+    replacement = max((candidate for candidate in catalog()['items']
+                       if not candidate.get('coins') and candidate['id'] != item['id']
+                       and limit / 5 <= candidate['price'] <= limit),
+                      key=lambda candidate: candidate['price'], default=None)
+    if replacement is None:
+        return None
+    qty = int(limit // replacement['price'])
+    return dict(item=replacement, qty=qty, change=round(limit - qty * replacement['price'], 2))
 
 
 def start_fake_withdrawal(body):
@@ -587,11 +622,18 @@ def start_fake_withdrawal(body):
     item = items[0]
     if item['source'] == 'pass':
         raise Problem('Награды Grader Pass нельзя вывести')
+    mode = body.get('mode', 'direct')
+    if mode not in ('direct', 'wait', 'exchange'):
+        raise Problem('Выбери способ вывода')
+    exchange = withdrawal_exchange(item['item']) if mode == 'exchange' else None
+    if mode == 'exchange' and not exchange:
+        raise Problem('Замена сейчас недоступна')
     c = db()
-    withdrawal = c.execute('INSERT INTO fake_withdrawals(inventory_id,roblox_username,status,created) VALUES (?,?,?,?)',
-                           (item['id'], nickname.strip(), 'queued', time.time()))
+    withdrawal = c.execute('''INSERT INTO fake_withdrawals
+        (inventory_id,roblox_username,status,created,mode,replacement) VALUES (?,?,?,?,?,?)''',
+        (item['id'], nickname.strip(), 'queued', time.time(), mode, json.dumps(exchange) if exchange else None))
     consume(items, 'withdrawing')
-    return dict(id=withdrawal.lastrowid, status='queued')
+    return dict(id=withdrawal.lastrowid, status='queued', mode=mode)
 
 
 def cancel_fake_withdrawal(withdrawal_id):
@@ -706,7 +748,8 @@ def giveaway_view(row):
     winner=None
     if row['winner_id']:
         winner_user=c.execute('SELECT name FROM users WHERE id=?',(row['winner_id'],)).fetchone()
-        winner=dict(name=winner_user[0] if winner_user else 'Игрок',num=row['winner_num'],me=row['winner_id']==g.uid)
+        winner_name = winner_user[0] if winner_user else 'Игрок'
+        winner=dict(name=winner_name,num=row['winner_num'],me=row['winner_id']==g.uid)
     override = giveaway_participant_overrides().get(str(gid), {})
     item = json.loads(row['item'])
     participants = None
@@ -722,7 +765,8 @@ def giveaway_view(row):
             matching = original[0]
         if matching is not None:
             participants = matching['count']
-    return dict(id=gid,item=item,endsAt=iso(row['ends']),needDeposit=row['minimum'],
+    draw_count = c.execute('SELECT COUNT(*) FROM giveaway_entries WHERE giveaway_id=?', (gid,)).fetchone()[0] if winner else 0
+    return dict(id=gid,item=item,endsAt=iso(row['ends']),needDeposit=row['minimum'],drawCount=draw_count,
                 deposited=amount,participants=participants,
                 myNum=entry[0] if entry else None,canJoin=not row['finished'] and amount>=row['minimum'],winner=winner)
 
@@ -954,7 +998,9 @@ def referral_view():
     days = [dict(day=iso(day_start - offset * 86400), joined=0, deposits=0, lost=0)
             for offset in range(13, -1, -1)]
     days[-1].update(joined=profile['friendsDay'], deposits=profile['dailyDeposits'], lost=profile['dailyLosses'])
-    return dict(profile, code=profile['code'] or 'SANDBOX', friends=profile['count'], days=days, referrals=[], history=[])
+    history = [dict(kind='transfer', at=iso(row['created']), amount=-json.loads(row['payload'])['transferred'])
+               for row in db().execute("SELECT payload,created FROM history WHERE user_id=? AND kind='referrals/transfer' ORDER BY id DESC LIMIT 50", (g.uid,))]
+    return dict(profile, code=profile['code'] or 'SANDBOX', friends=profile['count'], days=days, referrals=[], history=history)
 
 def promo_code(value):
     code = str(value or '').strip().upper()
@@ -1158,6 +1204,14 @@ def dispatch(path, body):
             raise Problem('Это действие доступно только для своего аккаунта', 'forbidden',403)
     if path == 'deposit/current' and not post:
         return deposit_preview()
+    if path == 'deposit/catalog/preview' and not post:
+        data = original_snapshot('deposit_catalog')
+        return dict(catalog=data, checking=original_status('deposit_catalog') == 'loading')
+    if path == 'deposit/crypto/preview' and not post:
+        return dict(config=original_snapshot('crypto'), checking=original_status('crypto') == 'loading')
+    if path == 'withdraw/options' and not post:
+        item = selected({'id': request.args.get('id')})[0]
+        return dict(exchange=withdrawal_exchange(item['item']))
     if path == 'withdraw':
         return start_fake_withdrawal(body) if post else withdrawal_history()
     if post and len(parts) == 3 and parts[0] == 'withdraw' and parts[2] == 'cancel':
@@ -1421,6 +1475,14 @@ def dispatch(path, body):
         return dict(ok=True)
     if path=='referrals' and not post:
         return referral_view()
+    if path == 'referrals/transfer' and post:
+        profile = referral_profile()
+        amount = profile['refBalance']
+        if amount <= 0:
+            raise Problem('На реферальном балансе нет BG для перевода')
+        c.execute("UPDATE referral_profiles SET stats=json_set(stats,'$.refBalance',0) WHERE user_id=?", (g.uid,))
+        c.execute('UPDATE users SET balance=balance+? WHERE id=?', (amount,g.uid))
+        return dict(transferred=amount,balance=user()['balance'])
     if path=='admin/referrals' and post:
         code = promo_code(body.get('code'))
         link = str(body.get('link', '')).strip()
