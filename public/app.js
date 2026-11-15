@@ -5238,10 +5238,8 @@
           if (!dialog.open) return;
           if (subscription.show) {
             reminded = true;
-            $('#moddedWelcomeTitle', dialog).textContent = 'Ты не подписался?';
-            const paragraph = $('p', dialog);
-            const channel = $('#mwChannel', dialog);
-            paragraph.replaceChildren('Для меня это огромная поддержка. Подпишись пожалуйста на ', channel);
+            $('#moddedWelcomeTitle', dialog).textContent = 'Ты не подписался..💔';
+            $('p', dialog).textContent = 'Можешь хотя-бы поделиться с другом? Мне это очень важно😞';
             if (!reduced) dialog.animate(
               [-8, 7, -5, 3, 0].map(x => ({ transform: `translateX(${x}px)` })),
               { duration: 280, easing: 'ease-out' },
