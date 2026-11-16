@@ -5518,14 +5518,12 @@
   }
 
   async function shareModded(finish) {
-    if (TG?.initData && TG.shareMessage && TG.isVersionAtLeast?.('8.0')) {
-      try {
-        const { id } = await api('/api/welcome/share', { method: 'POST' });
-        TG.shareMessage(id, finish);
-        return;
-      } catch {}
-    }
     finish();
+    if (!TG?.initData || !TG.shareMessage || !TG.isVersionAtLeast?.('8.0')) return;
+    try {
+      const { id } = await api('/api/welcome/share', { method: 'POST' });
+      TG.shareMessage(id);
+    } catch {}
   }
 
   function showReturningShare() {
@@ -5539,13 +5537,13 @@
       </dialog>`);
       const share = $('#returningShare', dialog);
       let finished = false;
-      const finish = async () => {
+      const finish = () => {
         if (finished) return;
         finished = true;
         dialog.close();
         dialog.remove();
-        await api('/api/welcome/seen', { method: 'POST' }).catch(() => {});
         resolve();
+        api('/api/welcome/seen', { method: 'POST' }).catch(() => {});
       };
       dialog.addEventListener('cancel', event => {
         event.preventDefault();
