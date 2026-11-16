@@ -2947,8 +2947,8 @@
     const diagonal = squareBoundary(Math.min(high - inset, Math.max(low + inset, roll)) / 100);
     const left = Math.max(0, diagonal - 1);
     const right = Math.min(1, diagonal);
-    const finalX = 1 - (left + (right - left) * (0.16 + Math.random() * 0.68));
-    const finalY = 2 - diagonal - finalX;
+    const finalX = left + (right - left) * (0.16 + Math.random() * 0.68);
+    const finalY = diagonal - finalX;
     const dx = makeAxis(finalX, (short ? 3 : 6) + Math.floor(Math.random() * 3));
     const dy = makeAxis(finalY, (short ? 3 : 5) + Math.floor(Math.random() * 4));
     const point = fraction => [reflectSquare(0.5 + dx * fraction), reflectSquare(0.5 + dy * fraction)];
@@ -2967,7 +2967,7 @@
     const marker = $('.up-square-mark', wrap);
     const impact = $('.up-square-impact', wrap);
     const path = squareTrajectory(chance, roll, prefs.fast);
-    const boundary = 2 - squareBoundary(chance / 100);
+    const boundary = squareBoundary(chance / 100);
     setSquareMark(marker, 0.5, 0.5);
     if (reduced) {
       return sleep(180).then(() => setSquareMark(marker, ...path.point(1)));
@@ -2999,7 +2999,7 @@
         setSquareMark(marker, x, y);
         const velocity = progress < brakeAt ? launchSpeed - drag * progress : brakeSpeed * (1 - brake);
         const speed = path.distance * velocity / (distance * duration);
-        wrap.classList.toggle('hot', speed < .0025 && x + y > boundary);
+        wrap.classList.toggle('hot', speed < .0025 && x + y < boundary);
         wrap.classList.toggle('tense', progress >= .72 && progress < 1);
         marker.style.setProperty('--square-trail', Math.min(1, speed * 310));
         while (path.hits[nextHit] <= fraction) {
