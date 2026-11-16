@@ -84,6 +84,17 @@ def original_api(path, token):
     return json.loads(payload)
 
 
+def original_http_status(error):
+    if error.code == 403 and error.headers and error.headers.get('CF-Ray'):
+        try:
+            payload = json.loads(error.read(4096))
+            if isinstance(payload, dict) and str(payload.get('error_code')) == '1010':
+                return 'cloudflare_1010'
+        except (OSError, ValueError):
+            pass
+    return 'auth_rejected' if error.code in (401, 403) else f'http_{error.code}'
+
+
 def original_item(item, mutations):
     result = {key: item[key] for key in ('name', 'price', 'rarity', 'image')}
     result['id'] = integer(item['id'])
@@ -223,7 +234,7 @@ def refresh_original(entry, token, kind):
         with ORIGINAL_LOCK:
             entry[kind] = value
     except HTTPError as error:
-        status = 'auth_rejected' if error.code in (401, 403) else f'http_{error.code}'
+        status = original_http_status(error)
     except OSError:
         status = 'network_error'
     except (ValueError, TypeError, KeyError, AttributeError, Problem):
@@ -751,6 +762,7 @@ def home():
         message = {
             'missing_env': 'Сессия оригинала не настроена',
             'auth_rejected': 'Оригинал отклонил серверную сессию',
+            'cloudflare_1010': 'Cloudflare отклонил запрос сервера к оригиналу (1010)',
             'network_error': 'Сервер не смог подключиться к оригиналу',
             'invalid_response': 'Оригинал вернул неожиданный формат ленты',
             'loading': 'Загружаем ленту оригинала…',
@@ -1976,9 +1988,12 @@ def owner_original_session():
             if not isinstance(original_api('config', token), dict):
                 raise ValueError
         except HTTPError as error:
+            if original_http_status(error) == 'cloudflare_1010':
+                raise Problem('Cloudflare оригинала заблокировал запрос сервера (403 / 1010). Проверка сессии не состоялась.',
+                              'original_cloudflare_block', 502) from None
             if error.code in (400, 401, 403):
-                raise Problem('Оригинал не принял сессию. Открой Mini App заново и вставь свежую строку') from None
-            raise Problem('Оригинал временно недоступен', status=502) from None
+                raise Problem(f'Оригинал вернул HTTP {error.code}. Проверь, что строка взята из свежего запуска оригинального Mini App.') from None
+            raise Problem(f'Оригинал временно недоступен (HTTP {error.code})', status=502) from None
         except (OSError, ValueError):
             raise Problem('Не удалось проверить сессию у оригинала', status=502) from None
 
