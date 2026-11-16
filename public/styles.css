@@ -2194,29 +2194,30 @@ html.autumn h2::after { content: ' 🍂'; font-size: .8em; }
 .crash-wrap > .section-head h1 { margin: 0; }
 .crash-history { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px; }
 .crash-chip { padding: 4px 8px; border-radius: 8px; font: 700 12px/1.3 var(--body); font-variant-numeric: tabular-nums; }
-.crash-chip.cashed { color: #83efb9; background: #16362b; }
-.crash-chip.lost { color: #ffa49e; background: #442729; }
+.crash-chip.cashed { color: var(--crystal-hi); background: var(--crystal-dim); }
+.crash-chip.lost { color: var(--ember); background: color-mix(in srgb, var(--ember) 15%, var(--stone)); }
 .crash-stage {
-  --signal: #6de6ff; --signal-glow: rgba(109, 230, 255, .27);
+  --signal: var(--crystal); --signal-glow: color-mix(in srgb, var(--signal) 22%, transparent);
   position: relative; isolation: isolate; overflow: hidden; margin-top: 14px;
-  min-height: clamp(240px, 42vw, 390px); border: 1px solid #354554; border-radius: 20px;
-  background: radial-gradient(ellipse at 35% 95%, #19334a, transparent 62%), #111821;
+  min-height: clamp(240px, 42vw, 390px); border: 1px solid var(--ridge-2); border-radius: 20px;
+  background: radial-gradient(ellipse at 35% 95%, var(--signal-glow), transparent 68%), var(--stone);
 }
+:where(html.autumn, html.halloween) .crash-stage { --signal: var(--amber); }
 .crash-stage::before {
   content: ''; position: absolute; z-index: -1; inset: 0;
-  background-image: linear-gradient(#91c4e413 1px, transparent 1px), linear-gradient(90deg, #91c4e413 1px, transparent 1px);
-  background-size: 32px 32px; mask-image: linear-gradient(to bottom, transparent, #000 42%);
+  background-image: linear-gradient(var(--ridge-2) 1px, transparent 1px), linear-gradient(90deg, var(--ridge-2) 1px, transparent 1px);
+  opacity: .55; background-size: 32px 32px; mask-image: linear-gradient(to bottom, transparent, #000 42%);
 }
-.crash-stage[data-mode="lost"] { --signal: #ffa09a; --signal-glow: #ff655333; border-color: #823f41; background: radial-gradient(ellipse at 55% 100%, #51292c, transparent 72%), #21191f; }
-.crash-stage[data-mode="cashed"] { --signal: #81f4b2; --signal-glow: #65f3a744; border-color: #377858; background: radial-gradient(ellipse at 55% 100%, #1a4739, transparent 72%), #141e1d; }
+.crash-stage[data-mode="lost"] { --signal: var(--ember); border-color: color-mix(in srgb, var(--signal) 45%, var(--ridge)); }
+.crash-stage[data-mode="cashed"] { --signal: var(--crystal); border-color: color-mix(in srgb, var(--signal) 45%, var(--ridge)); }
 .crash-stage canvas, .crash-flash { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .crash-readout { position: relative; width: fit-content; margin: 26px auto 0; text-align: center; pointer-events: none; }
 .crash-status { color: var(--signal); font-size: 13px; font-weight: 700; }
 .crash-readout strong {
-  display: block; margin-top: 3px; color: #f4faff; font: 800 clamp(48px, 9vw, 88px)/1.08 var(--body);
-  font-variant-numeric: tabular-nums; letter-spacing: -.07em; text-shadow: 0 0 32px var(--signal-glow), 0 2px 10px #090f17;
+  display: block; margin-top: 3px; color: var(--text); font: 800 clamp(48px, 9vw, 88px)/1.08 var(--body);
+  font-variant-numeric: tabular-nums; letter-spacing: -.07em; text-shadow: 0 0 32px var(--signal-glow), 0 2px 10px var(--cave);
 }
-.crash-clock { position: absolute; right: 14px; bottom: 8px; color: #a8becb; font: 12px/1.2 var(--body); font-variant-numeric: tabular-nums; }
+.crash-clock { position: absolute; right: 14px; bottom: 8px; color: var(--muted); font: 12px/1.2 var(--body); font-variant-numeric: tabular-nums; }
 .crash-impact[data-mode="lost"] { animation: crash-jolt .45s ease-out; }
 .crash-impact .crash-flash { background: radial-gradient(ellipse, var(--signal-glow), transparent 72%); animation: crash-burst .85s ease-out both; }
 .crash-impact[data-mode="cashed"] .crash-readout { animation: crash-pop .45s ease-out; }
@@ -2230,8 +2231,7 @@ html.autumn h2::after { content: ' 🍂'; font-size: .8em; }
 .crash-stake > div > img, .crash-result > img { flex: none; width: 32px; height: 32px; object-fit: contain; }
 .crash-stake b { min-width: 0; overflow-wrap: anywhere; }
 .crash-controls .crash-play { width: 100%; margin: 0; }
-.crash-stage[data-mode="running"] + .crash-controls .crash-play:not(:disabled) { background: #76efab; color: #10261d; box-shadow: 0 0 20px #65f3a744; }
-.crash-result { margin-top: 10px; border-color: #377858; }
+.crash-result { margin-top: 10px; border-color: color-mix(in srgb, var(--crystal) 45%, var(--ridge)); }
 .crash-inventory { margin-top: 16px; padding: 14px; border: 1px solid var(--ridge); border-radius: 16px; background: var(--stone); }
 .crash-inventory h2 { margin: 0 0 10px; }
 .crash-items .items { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; }

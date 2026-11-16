@@ -3492,10 +3492,11 @@
       const action = active() ? 'Забрать' : 'Начать';
       if (button.textContent !== action) button.textContent = action;
       button.disabled = busy || (active() ? value <= 1 : !bet());
-      const nextGraph = `${mode}:${elapsed}:${canvas.clientWidth}:${canvas.clientHeight}`;
+      const color = getComputedStyle(status).color;
+      const nextGraph = `${color}:${elapsed}:${canvas.clientWidth}:${canvas.clientHeight}`;
       if (nextGraph !== graphKey) {
         graphKey = nextGraph;
-        drawCrashGraph(canvas, Math.max(0, elapsed), value, rate, mode);
+        drawCrashGraph(canvas, Math.max(0, elapsed), value, rate, color);
       }
     }
     drawInventory();
@@ -3503,7 +3504,7 @@
     requestAnimationFrame(frame);
   }
 
-  function drawCrashGraph(canvas, elapsed, value, rate, mode) {
+  function drawCrashGraph(canvas, elapsed, value, rate, color) {
     const { clientWidth: w, clientHeight: h } = canvas;
     if (!w || !h) return;
     const dpr = Math.min(2, devicePixelRatio || 1);
@@ -3521,7 +3522,6 @@
     const yMax = Math.max(1, (value - 1) * 1.28);
     const x = t => left + t / xMax * width;
     const y = m => bottom - (m - 1) / yMax * height;
-    const color = mode === 'lost' ? '#ff706d' : mode === 'cashed' ? '#65f3a7' : '#6de6ff';
     const end = Math.min(elapsed, Math.log(50) / rate);
     const endX = x(end), endY = y(value);
     const line = new Path2D();
@@ -3535,10 +3535,12 @@
     area.lineTo(endX, bottom);
     area.closePath();
     const fade = ctx.createLinearGradient(0, endY, 0, bottom + 1);
-    fade.addColorStop(0, color + '55');
-    fade.addColorStop(1, color + '00');
+    fade.addColorStop(0, color);
+    fade.addColorStop(1, 'transparent');
     ctx.fillStyle = fade;
+    ctx.globalAlpha = .33;
     ctx.fill(area);
+    ctx.globalAlpha = 1;
     ctx.lineWidth = 2.5;
     ctx.lineJoin = 'round';
     ctx.strokeStyle = color;
