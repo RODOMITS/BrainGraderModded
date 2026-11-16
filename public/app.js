@@ -567,12 +567,30 @@
   function drawTopnav() {
     const nav = $('#topnav');
     if (!nav) return;
+    const scroll = nav.scrollLeft;
     const cur = currentSection();
     nav.innerHTML = MENU.flatMap((g) => g.items)
       .filter((it) => it.href && (!it.show || it.show()))
       .map((it) => `<a class="tn-item${it.small ? ' tn-small' : ''}" href="${it.href}" title="${esc(it.label)}" ${it.id === cur ? 'aria-current="page"' : ''}>${svgIcon(it.icon)}<span>${esc(it.label)}</span>${it.badge ? `<i class="tn-new">${esc(it.badge)}</i>` : ''}</a>`)
       .join('');
+    nav.scrollLeft = scroll;
+    const current = $('[aria-current="page"]', nav);
+    if (!current || !nav.clientWidth) return;
+    const bounds = nav.getBoundingClientRect();
+    const item = current.getBoundingClientRect();
+    if (item.left < bounds.left + 6) nav.scrollLeft += item.left - bounds.left - 6;
+    else if (item.right > bounds.right - 6) nav.scrollLeft += item.right - bounds.right + 6;
   }
+
+  $('#topnav')?.addEventListener('wheel', event => {
+    const nav = event.currentTarget;
+    if (event.ctrlKey || event.shiftKey || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+    const max = nav.scrollWidth - nav.clientWidth;
+    if (max <= 0 || (event.deltaY < 0 ? nav.scrollLeft <= 0 : nav.scrollLeft >= max - 1)) return;
+    const step = event.deltaMode === 1 ? 24 : event.deltaMode === 2 ? nav.clientWidth : 1;
+    nav.scrollLeft += event.deltaY * step;
+    event.preventDefault();
+  }, { passive: false });
 
   // ---------- Компьютер: живая лента слева (топ-дроп дня и последние дропы) ----------
   const WIDE = matchMedia('(min-width: 1200px)');

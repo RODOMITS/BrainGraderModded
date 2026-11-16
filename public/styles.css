@@ -860,9 +860,14 @@ body.locked .back, body.locked #topup, body.locked #avatar { opacity: 0.35; tran
   .topbar { gap: 14px; padding: calc(12px + var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px)) 24px 12px; }
   .topbar .logo { height: 34px; }
   .menu-btn { display: none; }
-  .topnav { display: flex; align-items: stretch; gap: 4px; margin-left: 18px; }
+  .topbar > :not(.topnav, .spacer) { flex-shrink: 0; }
+  .topnav {
+    display: flex; align-items: center; gap: 4px; flex: 0 1 auto; min-width: 0;
+    margin-left: 18px; padding: 8px 6px 6px; overflow-x: auto; overflow-y: hidden;
+    overscroll-behavior-x: contain; scrollbar-width: thin; scrollbar-color: var(--ridge-2) transparent;
+  }
   .tn-item {
-    position: relative; display: flex; align-items: center; gap: 9px; height: 44px; padding: 0 16px; border-radius: 12px;
+    position: relative; display: flex; flex: none; align-items: center; gap: 9px; height: 44px; padding: 0 16px; border-radius: 12px;
     color: var(--muted); text-decoration: none; font: 700 13px/1 var(--body); letter-spacing: 0.06em; text-transform: uppercase;
     transition: color 0.15s, background 0.15s;
   }
@@ -870,11 +875,11 @@ body.locked .back, body.locked #topup, body.locked #avatar { opacity: 0.35; tran
   /* «Вопросы» — отдельный пункт, но вдвое меньше основных разделов */
   .tn-item.tn-small { align-self: center; height: 30px; padding: 0 10px; gap: 5px; border-radius: 9px; font-size: 10.5px; letter-spacing: 0.05em; border: 1px solid var(--ridge); margin-left: 6px; }
   .tn-item.tn-small svg { width: 14px; height: 14px; }
-  .tn-item.tn-small[aria-current='page']::after { left: 10px; right: 10px; bottom: -20px; }
+  .tn-item.tn-small[aria-current='page']::after { left: 10px; right: 10px; bottom: -11px; }
   .tn-item:hover { color: var(--text); background: var(--stone); }
   .tn-item[aria-current='page'] { color: var(--crystal-hi); background: var(--crystal-dim); box-shadow: inset 0 0 0 1px rgba(52, 224, 138, 0.35); }
   .tn-item[aria-current='page'] svg { color: var(--crystal); }
-  .tn-item[aria-current='page']::after { content: ''; position: absolute; left: 16px; right: 16px; bottom: -13px; height: 3px; border-radius: 3px 3px 0 0; background: var(--crystal); box-shadow: 0 0 12px var(--crystal); }
+  .tn-item[aria-current='page']::after { content: ''; position: absolute; left: 16px; right: 16px; bottom: -4px; height: 3px; border-radius: 3px 3px 0 0; background: var(--crystal); box-shadow: 0 0 12px var(--crystal); }
   .tn-item span { white-space: nowrap; }
   .tn-new { position: absolute; top: -7px; right: -4px; padding: 3px 6px 2px; border-radius: 6px; background: var(--gold); color: #2a1d02; font: 700 10px/1 var(--pixel); font-style: normal; letter-spacing: 0.04em; transform: rotate(6deg); }
   .icon-btn.set-btn { display: grid; }
@@ -1538,8 +1543,7 @@ body.locked .back, body.locked #topup, body.locked #avatar { opacity: 0.35; tran
 .cd-h2.win b { color: var(--crystal); }
 .cd-hist { display: grid; gap: 8px; }
 
-/* Шапка на средних экранах: всё в одну строку. Сначала ужимаем пункты, потом прячем значки,
-   на узких (900–1099 px) разделы уходят в меню-«бургер», как на телефоне. */
+/* Компактная навигация в шапке на средних экранах. */
 @media (min-width: 900px) and (max-width: 1439px) {
   .topbar { gap: 10px; padding-left: 16px; padding-right: 16px; }
   .topnav { margin-left: 8px; gap: 2px; min-width: 0; }
@@ -1555,11 +1559,6 @@ body.locked .back, body.locked #topup, body.locked #avatar { opacity: 0.35; tran
   .tn-item.tn-small span { display: none; }
   .topbar .logo { height: 28px; }
 }
-@media (min-width: 900px) and (max-width: 1099px) {
-  .topnav { display: none; }
-  .menu-btn { display: grid; }
-}
-
 /* ---------- Розыгрыши ---------- */
 .gw-wrap { max-width: 980px; margin: 0 auto; }
 .gw-hero { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 4px 0 14px; }
@@ -1982,7 +1981,7 @@ html.autumn h2::after { content: ' 🍂'; font-size: .8em; }
 }
 
 @media (min-width: 900px) and (max-width: 1339px) {
-  .topnav, .topbar .admin-shortcut { display: none; }
+  .topbar .admin-shortcut { display: none; }
   .menu-btn { display: grid; }
 }
 .s-claim + .s-claim { margin-top: 12px; }
