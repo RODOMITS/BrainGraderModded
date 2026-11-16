@@ -1736,8 +1736,12 @@
       return el;
     };
     const centerY = (anchor) => {
-      const r = anchor?.getBoundingClientRect?.();
-      return r && r.height ? Math.round(r.top + r.height / 2) : Math.round(innerHeight * 0.4);
+      const rect = anchor?.getBoundingClientRect?.();
+      if (!rect?.height) return Math.round(innerHeight * 0.4);
+      const top = Math.max(0, rect.top);
+      const bottom = Math.min(innerHeight, rect.bottom);
+      if (bottom <= top) return Math.round(innerHeight * 0.4);
+      return Math.round(Math.min(innerHeight * 0.7, Math.max(innerHeight * 0.25, (top + bottom) / 2)));
     };
     const shake = (now) => {
       let a = 0;
@@ -2975,21 +2979,16 @@
     const boundary = squareBoundary(chance / 100);
     setSquareMark(marker, 0.5, 0.5);
     if (reduced) {
-      return sleep(180).then(() => setSquareMark(marker, ...path.point(1)));
+      return sleep(duration).then(() => setSquareMark(marker, ...path.point(1)));
     }
 
-    const brakeAt = 1 - (prefs.fast ? 100 : 150) / duration;
-    const launchSpeed = 1.5;
-    const drag = 0.65;
-    const glide = t => t * (launchSpeed - drag * t / 2);
-    const brakeSpeed = launchSpeed - drag * brakeAt;
-    const brakeDistance = (1 - brakeAt) * brakeSpeed / 2;
-    const distance = glide(brakeAt) + brakeDistance;
     return new Promise(resolve => {
       const start = performance.now();
       let nextHit = 0;
       let bounce;
       let lastSound = -Infinity;
+      let previousTime = start;
+      let previousPosition = 0;
       const frame = now => {
         if (!wrap.isConnected) {
           bounce?.cancel();
@@ -2997,15 +2996,14 @@
           return;
         }
         const progress = Math.max(0, Math.min(1, (now - start) / duration));
-        // Gradual drag through most of the run, then a short, sharp stop.
-        const brake = Math.max(0, (progress - brakeAt) / (1 - brakeAt));
-        const fraction = (progress < brakeAt ? glide(progress) : glide(brakeAt) + brakeDistance * (2 - brake) * brake) / distance;
+        const fraction = spinCurve(progress, 0);
         const [x, y] = path.point(fraction);
         setSquareMark(marker, x, y);
-        const velocity = progress < brakeAt ? launchSpeed - drag * progress : brakeSpeed * (1 - brake);
-        const speed = path.distance * velocity / (distance * duration);
+        const speed = path.distance * (fraction - previousPosition) / Math.max(1, now - previousTime);
+        previousTime = now;
+        previousPosition = fraction;
         wrap.classList.toggle('hot', speed < .0025 && x + y < boundary);
-        wrap.classList.toggle('tense', progress >= .72 && progress < 1);
+        wrap.classList.toggle('tense', speed < .0008 && progress > .4 && progress < 1);
         marker.style.setProperty('--square-trail', Math.min(1, speed * 310));
         while (path.hits[nextHit] <= fraction) {
           setSquareMark(impact, ...path.point(path.hits[nextHit++]));
@@ -3028,7 +3026,7 @@
   function animateUpgrade(chance, roll, duration, turns, gold = false) {
     if (!prefs.squareUpgrade) return spinPointer(spinTo(ptrAngle(chance, roll), turns), duration, { pct: chance });
     setSquareChance(chance, gold);
-    return spinSquare(chance, roll, Math.min(duration, prefs.fast ? 2500 : 6200));
+    return spinSquare(chance, roll, duration);
   }
 
   // Стрелка крутится через Web Animations (на видеокарте — не дёргается, даже если телефон занят).
@@ -3370,6 +3368,7 @@
     let recent = round.recent;
     let selected = null;
     let busy = false;
+    let revealingOg = false;
     let polling = false;
     let sampleAt = performance.now();
     let lastPaint = -Infinity;
@@ -3394,7 +3393,7 @@
 
     function markInventory() {
       $$('[data-crash-item]', inventoryBox).forEach(card => {
-        card.disabled = busy || active();
+        card.disabled = busy || revealingOg || active();
         const chosen = Number(card.dataset.crashItem) === selected;
         card.classList.toggle('sel', chosen);
         card.setAttribute('aria-pressed', String(chosen));
@@ -3435,19 +3434,33 @@
       }
     }
 
-    function finishRound(next) {
+    async function finishRound(next) {
       const ended = active() && next.status !== 'active';
       const won = next.status === 'cashed';
       game = next;
       sampleAt = performance.now();
       if (won || game.status === 'lost') recent = [game, ...recent.filter(row => row.id !== game.id)].slice(0, 8);
       if (ended) {
-        haptic(won ? 'success' : 'error');
-        if (won) sfx.upWin();
-        else sfx.upLose();
-        stage.classList.remove('crash-impact');
-        void stage.offsetWidth;
-        stage.classList.add('crash-impact');
+        const ogPayout = won && next.payout?.item?.rarity === 'og';
+        if (ogPayout) {
+          revealingOg = true;
+          lockNav(true);
+          markInventory();
+          try {
+            await ogFx.arm(reduced ? 0 : prefs.fast ? 1100 : 2200, stage);
+          } finally {
+            revealingOg = false;
+            lockNav(false);
+          }
+          if (stale(render)) return;
+        } else {
+          haptic(won ? 'success' : 'error');
+          if (won) sfx.upWin();
+          else sfx.upLose();
+          stage.classList.remove('crash-impact');
+          void stage.offsetWidth;
+          stage.classList.add('crash-impact');
+        }
       }
       drawSummary();
     }
@@ -3468,7 +3481,8 @@
           inventory = inventory.filter(row => row.id !== id);
           selected = null;
         }
-        finishRound(response.game);
+        await finishRound(response.game);
+        if (stale(render)) return;
         drawInventory();
         if (response.game.payout?.inventoryId) {
           inventory = await api('/api/inventory');
@@ -3484,7 +3498,7 @@
 
     inventoryBox.onclick = event => {
       const card = event.target.closest('[data-crash-item]');
-      if (!card || busy || active()) return;
+      if (!card || busy || revealingOg || active()) return;
       const id = Number(card.dataset.crashItem);
       selected = id === selected ? null : id;
       tick();
@@ -3499,7 +3513,7 @@
       try {
         const { game: fresh } = await api('/api/crash/current');
         if (!stale(render) && !busy && active() && game.id === id && fresh?.id === id) {
-          if (fresh.status !== 'active') finishRound(fresh);
+          if (fresh.status !== 'active') await finishRound(fresh);
           else {
             const now = performance.now();
             game.elapsed = Math.max(fresh.elapsed, game.elapsed + (now - sampleAt) / 1000);
@@ -3527,10 +3541,10 @@
       }
       multiplier.textContent = points.format(value) + '×';
       clock.textContent = Math.max(0, elapsed).toFixed(1).replace('.', ',') + ' с';
-      drawPayout(value);
+      if (!revealingOg) drawPayout(value);
       const action = active() ? 'Забрать' : 'Начать';
       if (button.textContent !== action) button.textContent = action;
-      button.disabled = busy || (active() ? value <= 1 : !bet());
+      button.disabled = busy || revealingOg || (active() ? value <= 1 : !bet());
       const color = getComputedStyle(status).color;
       const nextGraph = `${color}:${elapsed}:${canvas.clientWidth}:${canvas.clientHeight}`;
       if (nextGraph !== graphKey) {
