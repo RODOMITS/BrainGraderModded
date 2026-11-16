@@ -2616,7 +2616,9 @@
         </svg>
         <div class="up-square">
           <div class="up-square-field">
-            <div class="up-square-win"></div><div class="up-square-line"></div><div class="up-square-gold"></div>
+            <div class="up-square-zones" aria-hidden="true">
+              <div class="up-square-win"></div><div class="up-square-line"></div><div class="up-square-gold"></div>
+            </div>
             <div class="up-square-label up-square-label-win"><span>Победа</span><b data-square-win>0%</b></div>
             <div class="up-square-label up-square-label-loss"><span>Проигрыш</span><b data-square-loss>100%</b></div>
             <div class="up-square-mark" aria-hidden="true"></div>
@@ -2921,7 +2923,7 @@
     const field = $('.up-square-field', view);
     if (!field) return;
     field.style.setProperty('--square-cut', `${squareBoundary(chance / 100) * 100}%`);
-    field.style.setProperty('--win-color', gold ? '#ffc83d' : riskColor(chance));
+    field.style.setProperty('--win-color', gold ? 'var(--gold)' : 'var(--crystal)');
     $('[data-square-win]', field).textContent = `${fmt(chance)}%`;
     $('[data-square-loss]', field).textContent = `${fmt(Number((100 - chance).toFixed(2)))}%`;
   }
@@ -2945,10 +2947,10 @@
     const diagonal = squareBoundary(Math.min(high - inset, Math.max(low + inset, roll)) / 100);
     const left = Math.max(0, diagonal - 1);
     const right = Math.min(1, diagonal);
-    const finalX = left + (right - left) * (0.16 + Math.random() * 0.68);
-    const finalY = diagonal - finalX;
-    const dx = makeAxis(finalX, (short ? 2 : 4) + Math.floor(Math.random() * 3));
-    const dy = makeAxis(finalY, (short ? 2 : 3) + Math.floor(Math.random() * 4));
+    const finalX = 1 - (left + (right - left) * (0.16 + Math.random() * 0.68));
+    const finalY = 2 - diagonal - finalX;
+    const dx = makeAxis(finalX, (short ? 3 : 6) + Math.floor(Math.random() * 3));
+    const dy = makeAxis(finalY, (short ? 3 : 5) + Math.floor(Math.random() * 4));
     const point = fraction => [reflectSquare(0.5 + dx * fraction), reflectSquare(0.5 + dy * fraction)];
     const crossingTimes = delta => {
       const end = 0.5 + delta;
@@ -2965,18 +2967,18 @@
     const marker = $('.up-square-mark', wrap);
     const impact = $('.up-square-impact', wrap);
     const path = squareTrajectory(chance, roll, prefs.fast);
-    const boundary = squareBoundary(chance / 100);
+    const boundary = 2 - squareBoundary(chance / 100);
     setSquareMark(marker, 0.5, 0.5);
     if (reduced) {
       return sleep(180).then(() => setSquareMark(marker, ...path.point(1)));
     }
 
-    const brakeAt = 0.88;
-    const launchSpeed = 1.65;
-    const drag = 1.2;
+    const brakeAt = 1 - (prefs.fast ? 100 : 150) / duration;
+    const launchSpeed = 1.5;
+    const drag = 0.65;
     const glide = t => t * (launchSpeed - drag * t / 2);
     const brakeSpeed = launchSpeed - drag * brakeAt;
-    const brakeDistance = (1 - brakeAt) * brakeSpeed / 3;
+    const brakeDistance = (1 - brakeAt) * brakeSpeed / 2;
     const distance = glide(brakeAt) + brakeDistance;
     return new Promise(resolve => {
       const start = performance.now();
@@ -2992,12 +2994,12 @@
         const progress = Math.max(0, Math.min(1, (now - start) / duration));
         // Gradual drag through most of the run, then a short, sharp stop.
         const brake = Math.max(0, (progress - brakeAt) / (1 - brakeAt));
-        const fraction = (progress < brakeAt ? glide(progress) : glide(brakeAt) + brakeDistance * ease(brake)) / distance;
+        const fraction = (progress < brakeAt ? glide(progress) : glide(brakeAt) + brakeDistance * (2 - brake) * brake) / distance;
         const [x, y] = path.point(fraction);
         setSquareMark(marker, x, y);
-        const velocity = progress < brakeAt ? launchSpeed - drag * progress : brakeSpeed * (1 - brake) ** 2;
+        const velocity = progress < brakeAt ? launchSpeed - drag * progress : brakeSpeed * (1 - brake);
         const speed = path.distance * velocity / (distance * duration);
-        wrap.classList.toggle('hot', speed < .0015 && x + y < boundary);
+        wrap.classList.toggle('hot', speed < .0025 && x + y > boundary);
         wrap.classList.toggle('tense', progress >= .72 && progress < 1);
         marker.style.setProperty('--square-trail', Math.min(1, speed * 310));
         while (path.hits[nextHit] <= fraction) {
@@ -3021,7 +3023,7 @@
   function animateUpgrade(chance, roll, duration, turns, gold = false) {
     if (!prefs.squareUpgrade) return spinPointer(spinTo(ptrAngle(chance, roll), turns), duration, { pct: chance });
     setSquareChance(chance, gold);
-    return spinSquare(chance, roll, duration);
+    return spinSquare(chance, roll, Math.min(duration, prefs.fast ? 2500 : 6200));
   }
 
   // Стрелка крутится через Web Animations (на видеокарте — не дёргается, даже если телефон занят).

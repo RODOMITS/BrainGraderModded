@@ -2255,34 +2255,32 @@ html.autumn h2::after { content: ' 🍂'; font-size: .8em; }
 .ring-wrap.is-square > .up-ring-face, .ring-wrap.is-square > .pointer { visibility: hidden; }
 .ring-wrap.is-square .up-square { display: block; position: absolute; inset: 0; }
 .up-square {
-  padding: 8px; border: 1px solid var(--ridge-2); border-radius: 19px;
-  background: linear-gradient(155deg, var(--stone-2), var(--cave));
-  box-shadow: inset 0 1px 0 #fff1, 0 8px 24px #0003;
+  padding: 8px; border: 1px solid var(--ridge); border-radius: 20px;
+  background: var(--stone);
+  box-shadow: 0 8px 24px #0004;
+}
+:where(html.autumn, html.halloween) .up-square {
+  border-color: color-mix(in srgb, var(--amber) 20%, var(--ridge));
 }
 .up-square-field {
-  --square-cut: 0%; --win-color: var(--ember);
+  --square-cut: 0%; --win-color: var(--crystal);
   --cut-near: min(100%, var(--square-cut)); --cut-far: max(0%, calc(var(--square-cut) - 100%));
-  position: relative; height: 100%; overflow: hidden; border-radius: 12px;
-  background: linear-gradient(140deg, var(--stone) 12%, color-mix(in srgb, var(--ember) 12%, var(--cave)));
-  box-shadow: inset 0 0 0 1px #fff1;
+  position: relative; height: 100%; overflow: hidden; border-radius: 13px;
+  background: radial-gradient(ellipse at 0 0, var(--stone-2), var(--cave) 75%);
+  box-shadow: inset 0 0 0 1px var(--ridge-2);
   transition: --square-cut .55s cubic-bezier(.3,.8,.3,1);
 }
-.up-square-field::before {
-  content: ''; position: absolute; inset: 0; pointer-events: none;
-  background: repeating-linear-gradient(0deg, transparent 0 23px, #fff1 23px 24px),
-    repeating-linear-gradient(90deg, transparent 0 23px, #fff1 23px 24px);
-  opacity: .34;
-}
+.up-square-zones { position: absolute; inset: 0; transform: rotate(180deg); pointer-events: none; }
 .up-square-win {
   position: absolute; inset: 0;
   clip-path: polygon(0 0, var(--cut-near) 0, var(--cut-near) var(--cut-far), var(--cut-far) var(--cut-near), 0 var(--cut-near));
-  background: linear-gradient(135deg, color-mix(in srgb, var(--win-color) 31%, transparent), color-mix(in srgb, var(--win-color) 10%, transparent));
+  background: linear-gradient(135deg, color-mix(in srgb, var(--win-color) 27%, var(--stone)), var(--crystal-dim));
   transition: filter .18s;
 }
 .up-square-line {
   position: absolute; left: 0; top: var(--square-cut); width: 142%; height: 1px;
   transform: rotate(-45deg); transform-origin: 0 0; pointer-events: none;
-  background: var(--win-color); opacity: .62; box-shadow: 0 0 10px var(--win-color);
+  background: var(--win-color); opacity: .74; box-shadow: 0 0 10px var(--win-color);
   transition: opacity .18s;
 }
 .up-square-gold { display: none; position: absolute; inset: 0; pointer-events: none; }
@@ -2294,19 +2292,19 @@ html.autumn h2::after { content: ' 🍂'; font-size: .8em; }
 .ring-wrap.hot .up-square-line { opacity: 1; }
 .ring-wrap.tense .up-square { animation: upBeat .85s ease-in-out infinite; }
 .up-square-label {
-  position: absolute; left: 10px; z-index: 2; display: flex; align-items: baseline; gap: 6px;
-  padding: 5px 8px; border-radius: 7px; background: color-mix(in srgb, var(--cave) 89%, transparent);
+  position: absolute; bottom: 10px; z-index: 2; display: grid; gap: 2px;
+  padding: 7px 9px; border: 1px solid var(--ridge-2); border-radius: 10px; background: var(--stone);
   font: 600 11px/1.2 var(--body); pointer-events: none;
 }
-.up-square-label b { font-variant-numeric: tabular-nums; }
-.up-square-label-win { top: 10px; color: var(--win-color); }
-.up-square-label-loss { bottom: 10px; color: var(--ember); }
+.up-square-label b { font: 700 clamp(17px, 3vw, 24px)/1 var(--pixel); }
+.up-square-label-win { right: 10px; text-align: right; color: var(--win-color); }
+.up-square-label-loss { left: 10px; color: var(--ember); }
 .up-square-mark, .up-square-impact {
   position: absolute; left: 50%; top: 50%; translate: -50% -50%; pointer-events: none;
 }
 .up-square-mark {
   z-index: 3; width: 13px; height: 13px; transform: rotate(45deg); border-radius: 3px;
-  background: #e5fff5; border: 1px solid var(--crystal-hi);
+  background: var(--crystal-hi); border: 1px solid var(--crystal);
   box-shadow: 0 0 11px var(--crystal), 0 0 24px var(--crystal-dim);
   will-change: left, top;
 }
@@ -2319,12 +2317,12 @@ html.autumn h2::after { content: ' 🍂'; font-size: .8em; }
   border: 2px solid var(--crystal-hi); background: radial-gradient(var(--crystal-dim), transparent 70%);
   box-shadow: 0 0 14px var(--crystal);
 }
-.ring-wrap.is-square .ring-center { z-index: 4; inset: auto 13px 13px auto; padding: 9px 12px; border-radius: 11px; pointer-events: none; }
+.ring-wrap.is-square .ring-center { z-index: 4; inset: 16px auto auto 50%; translate: -50% 0; padding: 9px 12px; border-radius: 11px; pointer-events: none; }
 .ring-wrap.is-square .ring-center:not(.won):not(.lost):not(.gold) { visibility: hidden; }
 .ring-wrap.is-square .ring-center .pct { font-size: 23px; }
 .ring-wrap.is-square .ring-center .lbl { margin-top: 2px; }
 .ring-wrap.is-square.u-win .up-square-mark { animation: square-lock .45s ease-out; }
-.ring-wrap.is-square.u-lose .up-square-mark { background: #ffd1cb; border-color: var(--ember); box-shadow: 0 0 14px var(--ember); animation: square-lock .45s ease-out; }
+.ring-wrap.is-square.u-lose .up-square-mark { background: var(--ember); border-color: var(--ember); box-shadow: 0 0 14px var(--ember); animation: square-lock .45s ease-out; }
 @keyframes square-lock { 0% { scale: 1.65; } 55% { scale: .88; } 100% { scale: 1; } }
 @media (prefers-reduced-motion: reduce) {
   .up-square-field, .up-square-win, .up-square-line { transition: none; }
