@@ -115,6 +115,7 @@
       showAdmin: p.showAdmin !== false,
       showOwnerAdmin: p.showOwnerAdmin !== false,
       customContent: p.customContent === true,
+      squareUpgrade: p.squareUpgrade === true,
       minesCount: Number.isInteger(p.minesCount) && p.minesCount>=1 && p.minesCount<=24 ? p.minesCount : 3,
       sound: p.sound !== false,
       volume: Number.isFinite(v) ? Math.min(100, Math.max(0, Math.round(v))) : 60,
@@ -765,6 +766,7 @@
           <div class="set-row"><div class="grow"><b>Админка</b><p>Показывать «Админку» в меню.</p></div>${sw('showAdmin', prefs.showAdmin, 'Админка')}</div>
           ${state.me?.isOwner ? `<div class="set-row"><div class="grow"><b>Овнерская админка</b><p>Показывать панель владельца в меню</p></div>${sw('showOwnerAdmin', prefs.showOwnerAdmin, 'Овнерская админка')}</div>` : ''}
           <div class="set-row"><div class="grow"><b>Кастомный контент</b><p>Мины, Headless Horseman и кейс RODOMITS</p></div>${sw('customContent', prefs.customContent, 'Кастомный контент')}</div>
+          <div class="set-row"><div class="grow"><b>Квадратный апгрейдер</b><p>Две зоны и метка с отскоками от стенок</p></div>${sw('squareUpgrade', prefs.squareUpgrade, 'Квадратный апгрейдер')}</div>
         </section>
       </div>`);
     openSheet('Настройки', body);
@@ -779,6 +781,7 @@
       else if (k === 'fast') on = prefs.fast = !prefs.fast;
       else if (k === 'showOwnerAdmin') on = prefs.showOwnerAdmin = !prefs.showOwnerAdmin;
       else if (k === 'showAdmin') on = prefs.showAdmin = !prefs.showAdmin;
+      else if (k === 'squareUpgrade') on = prefs.squareUpgrade = !prefs.squareUpgrade;
       else if (k === 'customContent') on = prefs.customContent = !prefs.customContent;
       else if (k === 'sm') { on = sm.on = !sm.on; $('#smSub', body).classList.toggle('off', !on); }
       else if (k === 'hover') on = sm.hover = !sm.hover;
@@ -787,6 +790,9 @@
       b.setAttribute('aria-checked', on);
       tick();
       save();
+      if (k === 'squareUpgrade' && currentSection() === 'upgrade') {
+        $('.ring-wrap', view)?.classList.toggle('is-square', on);
+      }
       if (k === 'customContent') {
         adminHost?.remove();
         adminHost = null;
@@ -2582,14 +2588,23 @@
       </div>
       <div class="up-col up-mine"><div class="section-head col-head"><h2>Мои брейнроты</h2><span class="muted" id="upMineN"></span></div><div id="upMine"></div></div>
       <div class="up-left">
-      <div class="ring-wrap">
-        <svg viewBox="0 0 260 260" aria-hidden="true">
+      <div class="ring-wrap ${prefs.squareUpgrade ? 'is-square' : ''}">
+        <svg class="up-ring-face" viewBox="0 0 260 260" aria-hidden="true">
           <g class="ring-ticks">${ticks}</g>
           <circle class="ring-track" cx="130" cy="130" r="${R}"/>
           <defs><linearGradient id="goldGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff3b0"/><stop offset=".45" stop-color="#ffc83d"/><stop offset="1" stop-color="#d98a00"/></linearGradient></defs>
           <circle class="ring-arc" id="arc" cx="130" cy="130" r="${R}" transform="rotate(-90 130 130)" stroke-dasharray="0 ${C / 2} 0 ${C}"/>
           <circle class="ring-gold" id="goldArc" cx="130" cy="130" r="${R}" transform="rotate(-90 130 130)" stroke-dasharray="0 ${C / 2} 0 ${C}"/>
         </svg>
+        <div class="up-square">
+          <div class="up-square-field">
+            <div class="up-square-win"></div><div class="up-square-line"></div><div class="up-square-gold"></div>
+            <div class="up-square-label up-square-label-win"><span>Победа</span><b data-square-win>0%</b></div>
+            <div class="up-square-label up-square-label-loss"><span>Проигрыш</span><b data-square-loss>100%</b></div>
+            <div class="up-square-mark" aria-hidden="true"></div>
+            <div class="up-square-impact" aria-hidden="true"></div>
+          </div>
+        </div>
         <div class="gold-rays" aria-hidden="true"></div>
         <div class="pointer" id="pointer"><div class="ptr-tail" id="ptrTail"></div></div>
         <div class="ring-center" id="rc"><div class="pct" id="pct">0%</div><div class="lbl" id="rlbl">шанс</div></div>
@@ -2657,6 +2672,8 @@
     if (!up.spinning) {
       arc.setAttribute('stroke-dasharray', zoneDash(chance));
       arc.style.stroke = riskColor(chance);
+      setSquareChance(chance);
+      setSquareMark($('.up-square-mark', view), 0.5, 0.5);
     }
     $('#pct').textContent = `${fmt(chance)}%`;
     $('#rlbl').textContent = up.target ? 'шанс' : 'выбери брейнрота';
@@ -2880,6 +2897,115 @@
     return Math.max(0, Math.min(5, fwd * 0.45));
   }
 
+  const squareBoundary = odds => odds <= 0.5 ? Math.sqrt(2 * odds) : 2 - Math.sqrt(2 * (1 - odds));
+
+  function setSquareChance(chance, gold = false) {
+    const field = $('.up-square-field', view);
+    if (!field) return;
+    field.style.setProperty('--square-cut', `${squareBoundary(chance / 100) * 100}%`);
+    field.style.setProperty('--win-color', gold ? '#ffc83d' : riskColor(chance));
+    $('[data-square-win]', field).textContent = `${fmt(chance)}%`;
+    $('[data-square-loss]', field).textContent = `${fmt(Number((100 - chance).toFixed(2)))}%`;
+  }
+
+  function setSquareMark(node, x, y) {
+    node.style.left = `${x * 100}%`;
+    node.style.top = `${y * 100}%`;
+  }
+
+  const reflectSquare = value => 1 - Math.abs(((value % 2) + 2) % 2 - 1);
+
+  function squareTrajectory(chance, roll, short) {
+    const makeAxis = (finish, crossings) => {
+      const cell = Math.random() < 0.5 ? -crossings : crossings;
+      return cell + (cell % 2 ? 1 - finish : finish) - 0.5;
+    };
+    const won = roll < chance;
+    const low = won ? 0 : chance;
+    const high = won ? chance : 100;
+    const inset = Math.min((high - low) * 0.14, 3.5);
+    const diagonal = squareBoundary(Math.min(high - inset, Math.max(low + inset, roll)) / 100);
+    const left = Math.max(0, diagonal - 1);
+    const right = Math.min(1, diagonal);
+    const finalX = left + (right - left) * (0.16 + Math.random() * 0.68);
+    const finalY = diagonal - finalX;
+    const dx = makeAxis(finalX, (short ? 2 : 4) + Math.floor(Math.random() * 3));
+    const dy = makeAxis(finalY, (short ? 2 : 3) + Math.floor(Math.random() * 4));
+    const point = fraction => [reflectSquare(0.5 + dx * fraction), reflectSquare(0.5 + dy * fraction)];
+    const crossingTimes = delta => {
+      const end = 0.5 + delta;
+      const first = Math.floor(Math.min(end, 0.5)) + 1;
+      return Array.from({ length: Math.max(0, Math.ceil(Math.max(end, 0.5)) - first) },
+        (_, index) => (first + index - 0.5) / delta);
+    };
+    const hits = [...crossingTimes(dx), ...crossingTimes(dy)].sort((a, b) => a - b);
+    return { point, hits, distance: Math.hypot(dx, dy) };
+  }
+
+  function spinSquare(chance, roll, duration) {
+    const wrap = $('.ring-wrap', view);
+    const marker = $('.up-square-mark', wrap);
+    const impact = $('.up-square-impact', wrap);
+    const path = squareTrajectory(chance, roll, prefs.fast);
+    const boundary = squareBoundary(chance / 100);
+    setSquareMark(marker, 0.5, 0.5);
+    if (reduced) {
+      return sleep(180).then(() => setSquareMark(marker, ...path.point(1)));
+    }
+
+    const brakeAt = 0.88;
+    const launchSpeed = 1.65;
+    const drag = 1.2;
+    const glide = t => t * (launchSpeed - drag * t / 2);
+    const brakeSpeed = launchSpeed - drag * brakeAt;
+    const brakeDistance = (1 - brakeAt) * brakeSpeed / 3;
+    const distance = glide(brakeAt) + brakeDistance;
+    return new Promise(resolve => {
+      const start = performance.now();
+      let nextHit = 0;
+      let bounce;
+      let lastSound = -Infinity;
+      const frame = now => {
+        if (!wrap.isConnected) {
+          bounce?.cancel();
+          resolve();
+          return;
+        }
+        const progress = Math.max(0, Math.min(1, (now - start) / duration));
+        // Gradual drag through most of the run, then a short, sharp stop.
+        const brake = Math.max(0, (progress - brakeAt) / (1 - brakeAt));
+        const fraction = (progress < brakeAt ? glide(progress) : glide(brakeAt) + brakeDistance * ease(brake)) / distance;
+        const [x, y] = path.point(fraction);
+        setSquareMark(marker, x, y);
+        const velocity = progress < brakeAt ? launchSpeed - drag * progress : brakeSpeed * (1 - brake) ** 2;
+        const speed = path.distance * velocity / (distance * duration);
+        wrap.classList.toggle('hot', speed < .0015 && x + y < boundary);
+        wrap.classList.toggle('tense', progress >= .72 && progress < 1);
+        marker.style.setProperty('--square-trail', Math.min(1, speed * 310));
+        while (path.hits[nextHit] <= fraction) {
+          setSquareMark(impact, ...path.point(path.hits[nextHit++]));
+          bounce?.cancel();
+          bounce = impact.animate([{ opacity: 1, scale: .35 }, { opacity: 0, scale: 2.4 }], { duration: 270, easing: 'ease-out' });
+          if (now - lastSound > 30) { sfx.tick(); lastSound = now; }
+        }
+        if (progress < 1) requestAnimationFrame(frame);
+        else {
+          setSquareMark(marker, ...path.point(1));
+          wrap.classList.remove('hot', 'tense');
+          marker.style.removeProperty('--square-trail');
+          resolve();
+        }
+      };
+      requestAnimationFrame(frame);
+    });
+  }
+
+  function animateUpgrade(chance, roll, duration, turns, gold = false) {
+    if (!prefs.squareUpgrade) return spinPointer(spinTo(ptrAngle(chance, roll), turns), duration, { pct: chance });
+    setSquareChance(chance, gold);
+    return spinSquare(chance, roll, duration);
+  }
+
   // Стрелка крутится через Web Animations (на видеокарте — не дёргается, даже если телефон занят).
   // В кадре JS только читает угол: яркость хвоста, подсветка зоны, «сердцебиение» на финише.
   function spinPointer(toAngle, dur, zone) {
@@ -3061,12 +3187,14 @@
       // Золотая зона: появляется сразу при старте прокрута, в середине зелёной (внизу). Размер — настоящий шанс попасть в неё
       if (r.gold) {
         goldArc.setAttribute('stroke-dasharray', zoneDash(r.chance, (r.gold.from + r.gold.to) / 2, r.gold.to - r.gold.from));
+        wrap.style.setProperty('--square-gold-from', `${squareBoundary(r.gold.from / 100) * 50}%`);
+        wrap.style.setProperty('--square-gold-to', `${squareBoundary(r.gold.to / 100) * 50}%`);
         wrap.classList.add('gold-on');
         sfx.chime(0.7);
       }
       sfx.start();
       const dur = reduced ? 700 : fast ? 3200 : 10500;
-      await spinPointer(spinTo(ptrAngle(r.chance, r.roll), reduced ? 1 : fast ? 6 : 16), dur, { pct: r.chance });
+      await animateUpgrade(r.chance, r.roll, dur, reduced ? 1 : fast ? 6 : 16);
       if (stale(t)) return;
 
       if (r.gold?.hit) {
@@ -3090,7 +3218,7 @@
           setCenter(`×${mult}`, `${fmt(g.step)}% на ×${mult * 2}`, 'gold');
           await sleep(fast ? 350 : 900);
           sfx.start();
-          await spinPointer(spinTo(ptrAngle(g.step, st.roll), reduced ? 1 : fast ? 2 : 4), reduced ? 500 : fast ? 1700 : 4600, { pct: g.step });
+          await animateUpgrade(g.step, st.roll, reduced ? 500 : fast ? 1700 : 4600, reduced ? 1 : fast ? 2 : 4, true);
           if (stale(t)) return;
           if (st.won) {
             mult *= 2;
