@@ -85,9 +85,15 @@
     min: config.crypto.min, max: config.crypto.max, rate: config.crypto.rate,
     assets: (config.crypto.assets || []).filter(asset => typeof asset === 'string').slice(0, 30),
   } : null;
-  out.dragon = config.dragonExchange ? {
-    itemId: config.dragonExchange.dragon?.id, minimum: config.dragonExchange.from,
-  } : null;
+  const exchange = config.dragonExchange;
+  if (!exchange) out.dragon = null;
+  else {
+    const dragonName = exchange.dragon?.name || 'Dragon Cannelloni';
+    const dragon = items.get(Number(exchange.dragon?.id)) || [...items.values()].find(row =>
+      row.name.toLowerCase() === dragonName.toLowerCase());
+    if (dragon) out.dragon = { itemId: dragon.id, minimum: exchange.from ?? dragon.price };
+    else console.warn('Предмет для размена не найден в каталоге');
+  }
 
   const passGroup = group => group && {
     endsAt: group.endsAt,
