@@ -3447,7 +3447,7 @@
           lockNav(true);
           markInventory();
           try {
-            await ogFx.arm(reduced ? 0 : prefs.fast ? 1100 : 2200, stage);
+            await ogFx.boom(stage);
           } finally {
             revealingOg = false;
             lockNav(false);
