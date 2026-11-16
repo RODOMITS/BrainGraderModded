@@ -2188,6 +2188,17 @@ html.autumn h2::after { content: ' 🍂'; font-size: .8em; }
   font: 700 11px/1 var(--pixel); font-style: normal; letter-spacing: 0.05em; transform: rotate(-6deg); box-shadow: 0 2px 10px rgba(233, 180, 58, .45); }
 .soon-chip { font: 700 12px/1 var(--body); color: #e8ece9; background: rgba(255, 255, 255, .12); border: 1px solid rgba(255, 255, 255, .18); padding: 4px 8px; border-radius: 999px; }
 
+/* Игровые панели кастомного контента */
+:is(.crash-wrap, .ring-wrap.is-square) { --game-accent: var(--crystal); }
+:where(html.autumn) :is(.crash-wrap, .ring-wrap.is-square) { --game-accent: #e8732a; }
+:where(html.halloween) :is(.crash-wrap, .ring-wrap.is-square) { --game-accent: #ff8a1f; }
+.crash-stage, .up-square {
+  border: 1px solid color-mix(in srgb, var(--game-accent) 28%, var(--ridge-2));
+  border-radius: 20px;
+  background: var(--stone-2);
+  box-shadow: inset 0 1px 0 #fff1, 0 8px 24px #0003;
+}
+
 /* Краш */
 .crash-wrap { max-width: 860px; margin: 0 auto; }
 .crash-wrap > .section-head { align-items: flex-start; gap: 12px; }
@@ -2197,12 +2208,11 @@ html.autumn h2::after { content: ' 🍂'; font-size: .8em; }
 .crash-chip.cashed { color: var(--crystal-hi); background: var(--crystal-dim); }
 .crash-chip.lost { color: var(--ember); background: color-mix(in srgb, var(--ember) 15%, var(--stone)); }
 .crash-stage {
-  --signal: var(--crystal); --signal-glow: color-mix(in srgb, var(--signal) 22%, transparent);
+  --signal: var(--game-accent); --signal-glow: color-mix(in srgb, var(--signal) 22%, transparent);
   position: relative; isolation: isolate; overflow: hidden; margin-top: 14px;
-  min-height: clamp(240px, 42vw, 390px); border: 1px solid var(--ridge-2); border-radius: 20px;
-  background: radial-gradient(ellipse at 35% 95%, var(--signal-glow), transparent 68%), var(--stone);
+  min-height: clamp(240px, 42vw, 390px);
+  background: radial-gradient(ellipse at 35% 95%, var(--signal-glow), transparent 68%), var(--stone-2);
 }
-:where(html.autumn, html.halloween) .crash-stage { --signal: var(--amber); }
 .crash-stage::before {
   content: ''; position: absolute; z-index: -1; inset: 0;
   background-image: linear-gradient(var(--ridge-2) 1px, transparent 1px), linear-gradient(90deg, var(--ridge-2) 1px, transparent 1px);
@@ -2214,8 +2224,8 @@ html.autumn h2::after { content: ' 🍂'; font-size: .8em; }
 .crash-readout { position: relative; width: fit-content; margin: 26px auto 0; text-align: center; pointer-events: none; }
 .crash-status { color: var(--signal); font-size: 13px; font-weight: 700; }
 .crash-readout strong {
-  display: block; margin-top: 3px; color: var(--text); font: 800 clamp(48px, 9vw, 88px)/1.08 var(--body);
-  font-variant-numeric: tabular-nums; letter-spacing: -.07em; text-shadow: 0 0 32px var(--signal-glow), 0 2px 10px var(--cave);
+  display: block; margin-top: 3px; color: var(--text); font: 700 clamp(48px, 9vw, 88px)/1.08 var(--pixel);
+  font-variant-numeric: tabular-nums; text-shadow: 0 0 32px var(--signal-glow), 0 2px 10px var(--cave);
 }
 .crash-clock { position: absolute; right: 14px; bottom: 8px; color: var(--muted); font: 12px/1.2 var(--body); font-variant-numeric: tabular-nums; }
 .crash-impact[data-mode="lost"] { animation: crash-jolt .45s ease-out; }
@@ -2230,14 +2240,13 @@ html.autumn h2::after { content: ' 🍂'; font-size: .8em; }
 .crash-stake > div, .crash-prize:not([hidden]) { display: flex; align-items: center; gap: 8px; min-height: 28px; }
 .crash-stake > div > img, .crash-prize > img { flex: none; width: 32px; height: 32px; object-fit: contain; }
 .crash-stake b, .crash-prize b { min-width: 0; overflow-wrap: anywhere; }
-.crash-controls .crash-play { width: 100%; margin: 0; }
+.crash-controls .crash-play { width: 100%; min-height: 52px; height: 100%; margin: 0; }
 .crash-payout { min-height: 28px; }
 .crash-coins { font-size: 13px; color: var(--crystal-hi); }
 .crash-prize:not([hidden]) + .crash-coins:not([hidden]) { margin-top: 3px; }
 .crash-inventory { margin-top: 16px; padding: 14px; border: 1px solid var(--ridge); border-radius: 16px; background: var(--stone); }
 .crash-inventory h2 { margin: 0 0 10px; }
 .crash-items .items { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; }
-.crash-items .item.sel { border-color: var(--crystal); background: var(--crystal-dim); }
 @media (max-width: 560px) {
   .crash-stage { border-radius: 16px; }
   .crash-readout { margin-top: 24px; }
@@ -2255,12 +2264,7 @@ html.autumn h2::after { content: ' 🍂'; font-size: .8em; }
 .ring-wrap.is-square > .up-ring-face, .ring-wrap.is-square > .pointer { visibility: hidden; }
 .ring-wrap.is-square .up-square { display: block; position: absolute; inset: 0; }
 .up-square {
-  padding: 8px; border: 1px solid var(--ridge-2); border-radius: 20px;
-  background: var(--stone-2);
-  box-shadow: inset 0 1px 0 #fff1, 0 8px 24px #0003;
-}
-:where(html.autumn, html.halloween) .up-square {
-  border-color: color-mix(in srgb, var(--amber) 32%, var(--ridge-2));
+  padding: 8px;
 }
 .up-square-field {
   --square-cut: 0%; --win-color: var(--crystal);
@@ -2285,8 +2289,8 @@ html.autumn h2::after { content: ' 🍂'; font-size: .8em; }
 }
 .up-square-gold { display: none; position: absolute; inset: 0; pointer-events: none; }
 .ring-wrap.gold-on .up-square-gold {
-  display: block; background: linear-gradient(135deg, transparent var(--square-gold-from), #ffd37860 var(--square-gold-from),
-    #ffd37860 var(--square-gold-to), transparent var(--square-gold-to));
+  display: block; background: linear-gradient(135deg, transparent var(--square-gold-from), color-mix(in srgb, var(--gold) 38%, transparent) var(--square-gold-from),
+    color-mix(in srgb, var(--gold) 38%, transparent) var(--square-gold-to), transparent var(--square-gold-to));
 }
 .ring-wrap.hot .up-square-win { filter: brightness(1.45) saturate(1.4); }
 .ring-wrap.hot .up-square-line { opacity: 1; }
@@ -2298,6 +2302,7 @@ html.autumn h2::after { content: ' 🍂'; font-size: .8em; }
 }
 .up-square-label b { font: 700 clamp(17px, 3vw, 24px)/1 var(--pixel); }
 .up-square-label-win { top: 10px; left: 10px; color: var(--crystal-hi); }
+.ring-wrap.gold-mode .up-square-label-win { color: var(--gold); }
 .up-square-label-loss { right: 10px; bottom: 10px; text-align: right; color: var(--ember); }
 .up-square-mark, .up-square-impact {
   position: absolute; left: 50%; top: 50%; translate: -50% -50%; pointer-events: none;
