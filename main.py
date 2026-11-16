@@ -14,14 +14,10 @@ import sqlite3
 import time
 import threading
 from datetime import datetime, timedelta, timezone
-from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import parse_qsl
-from urllib.error import HTTPError
-from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 import grader_pass
 import named_cases
-from cryptography.fernet import Fernet, InvalidToken
 from PIL import Image
 
 from flask import Flask, Response, g, jsonify, redirect, request, send_file, send_from_directory
@@ -43,72 +39,8 @@ DB_PATH = Path(os.getenv('DATABASE_PATH', str(ROOT / 'data' / 'brainrot.db')))
 RNG = secrets.SystemRandom()
 CUSTOM_SESSIONS = {}
 CUSTOM_LOCK = threading.RLock()
-ORIGINAL_LOCK = threading.Lock()
-SHARED_ORIGINAL = {}
-ORIGINAL_TOKEN = os.getenv('ORIGINAL_INIT_DATA', '').strip()
-
-
-def original_session_cipher():
-    bot_token = os.getenv('BOT_TOKEN', '').strip()
-    if not bot_token:
-        raise Problem('Для сохранения сессии нужен BOT_TOKEN', status=503)
-    key = hmac.digest(bot_token.encode(), b'BrainGraderModded/original-init-data/v1', 'sha256')
-    return Fernet(base64.urlsafe_b64encode(key))
-
-
-def load_original_session():
-    global ORIGINAL_TOKEN
-    with app.app_context():
-        row = db().execute("SELECT value FROM settings WHERE key='original-session-v1'").fetchone()
-    if row:
-        try:
-            ORIGINAL_TOKEN = original_session_cipher().decrypt(row[0].encode()).decode()
-        except (Problem, InvalidToken, UnicodeError):
-            app.logger.warning('Saved original session could not be decrypted. Re-enter it in owner settings.')
-
-
-
-class OriginalNoRedirect(HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        return None
-
-
-def original_api(path, token):
-    request = Request('https://brainrotgrader.com/api/' + path, headers={
-        'Authorization': 'tma ' + token, 'Accept': 'application/json',
-    })
-    with build_opener(OriginalNoRedirect()).open(request, timeout=5) as response:
-        payload = response.read(2_000_001)
-    if len(payload) > 2_000_000:
-        raise ValueError('Original response too large')
-    return json.loads(payload)
-
-
-def original_http_status(error):
-    if error.code == 403 and error.headers and error.headers.get('CF-Ray'):
-        try:
-            payload = json.loads(error.read(4096))
-            if isinstance(payload, dict) and str(payload.get('error_code')) == '1010':
-                return 'cloudflare_1010'
-        except (OSError, ValueError):
-            pass
-    return 'auth_rejected' if error.code in (401, 403) else f'http_{error.code}'
-
-
-def original_item(item, mutations):
-    result = {key: item[key] for key in ('name', 'price', 'rarity', 'image')}
-    result['id'] = integer(item['id'])
-    for key in ('kind', 'type', 'category'):
-        if isinstance(item.get(key), str):
-            result[key] = item[key]
-    if result['rarity'] == 'coins' or item.get('coins'):
-        result['coins'] = True
-        result['rarity'] = 'common'
-    variant = mutations.get(result['name'])
-    if isinstance(variant, dict) and all(isinstance(variant.get(key), str) and variant[key]
-                                         for key in ('base', 'mut')):
-        result.update(baseName=variant['base'], mutation=variant['mut'])
-    return result
+IMPORT_LOCK = threading.Lock()
+IMPORTED_ORIGINAL = {}
 
 
 CASE_RARITY_WEIGHTS = {'common': 60, 'rare': 25, 'epic': 10, 'legendary': 4, 'og': 1}
@@ -135,140 +67,23 @@ def apply_case_rarity_weights(catalog):
     return catalog
 
 
-def fetch_original_catalog(token):
-    summaries = original_api('cases', token)
-    if not isinstance(summaries, list) or not 1 <= len(summaries) <= 100:
-        raise ValueError('Invalid case list')
-    shop = original_api('shop', token)
-    mutations = original_api('config', token).get('mutations')
-    if not isinstance(mutations, dict):
-        mutations = {}
-    items = {}
-    for raw in shop['items']:
-        item = original_item(raw, mutations)
-        items[item['id']] = item
-    with ThreadPoolExecutor(max_workers=4) as pool:
-        details = list(pool.map(lambda cs: original_api(f"cases/{integer(cs['id'])}", token), summaries))
-    cases = []
-    for summary, detail in zip(summaries, details):
-        cid = integer(summary['id'])
-        if detail['id'] != cid:
-            raise ValueError('Mismatched case')
-        case_items = []
-        for raw in detail['items']:
-            item = original_item(raw, mutations)
-            iid = item['id']
-            items[iid] = item
-            case_items.append(dict(itemId=iid, weight=1))
-        cases.append(dict(id=cid, name=summary['name'], price=summary['price'], image=summary['image'],
-                          category=summary.get('category', 'standard'),
-                          isNew=bool(summary.get('isNew') or detail.get('isNew')),
-                          freeKind='ref' if detail.get('freeKind', summary.get('freeKind')) == 'ref'
-                          else 'daily' if summary.get('freeKind') else None, items=case_items))
-    catalog = dict(items=list(items.values()), cases=cases)
-    validate_catalog(catalog)
-    return apply_case_rarity_weights(catalog)
+def imported_data(kind):
+    value = IMPORTED_ORIGINAL.get(kind)
+    if kind == 'bonus' and value and value['expires'] <= time.time():
+        return None
+    return value
 
 
-def refresh_original(entry, token, kind):
-    delay = 60
-    status = 'ready'
-    try:
-        if kind == 'catalog':
-            value = fetch_original_catalog(token)
-            delay = 300
-        elif kind == 'pass':
-            value = grader_pass.original_definition(original_api('pass', token))
-            delay = 30
-        elif kind == 'dragon':
-            raw = original_api('config', token).get('dragonExchange')
-            value = None if not raw else dict(itemId=integer(raw['dragon']['id']), minimum=number(raw['from'], 1))
-            delay = 300
-        elif kind == 'crypto':
-            raw = original_api('config', token).get('crypto')
-            value = None
-            if raw:
-                minimum = number(raw['min'], 0.01)
-                value = dict(min=minimum, max=number(raw['max'], minimum),
-                             rate=number(raw['rate'], 0.01),
-                             assets=[str(asset)[:20] for asset in raw.get('assets', [])[:30]])
-            delay = 300
-        elif kind == 'deposit_catalog':
-            raw = original_api('deposit/catalog', token)
-            catalogue = original_api('config', token).get('mutations') or {}
-            items = [dict(original_item(item, catalogue), minQty=integer(item.get('minQty') or 1, 1, 1000))
-                     for item in raw['items'][:5000]]
-            value = dict(minTotal=number(raw.get('minTotal', 0)), items=items)
-            delay = 300
-        elif kind == 'giveaways':
-            data = original_api('giveaways', token)
-            value = {
-                group: [dict(itemId=integer(row['item']['id']), count=integer(row['participants'], 0))
-                        for row in data[group]]
-                for group in ('active', 'finished')
-            }
-            value['expires'] = time.time() + 120
-        elif kind == 'deposit':
-            data = original_api('deposit/current', token)
-            if not isinstance(data.get('open'), bool):
-                raise ValueError('Invalid original deposit status')
-            value = dict(open=data['open'], expires=time.time() + 120)
-            delay = 30
-        elif kind == 'live':
-            data = original_api('home', token)
-            value = dict(drops=[original_drop(drop) for drop in data['drops'][:30]],
-                         top=original_drop(data['top']) if data.get('top') else None,
-                         expires=time.time() + 120)
-            delay = 10
-        else:
-            raw = original_api('home', token).get('bonus')
-            value = None
-            if raw:
-                expires = datetime.fromisoformat(raw['endsAt'].replace('Z', '+00:00')).timestamp()
-                if expires > time.time():
-                    value = dict(code=promo_code(raw['code']), percent=number(raw['percent'], 0, 100),
-                                 endsAt=iso(expires), expires=expires, used=False)
-                    delay = min(60, max(1, expires - time.time()))
-            if value is None:
-                delay = 15
-        with ORIGINAL_LOCK:
-            entry[kind] = value
-    except HTTPError as error:
-        status = original_http_status(error)
-    except OSError:
-        status = 'network_error'
-    except (ValueError, TypeError, KeyError, AttributeError, Problem):
-        # A failed refresh must leave the last complete catalogue available.
-        status = 'invalid_response'
-    finally:
-        with ORIGINAL_LOCK:
-            entry[kind + '_status'] = status
-            entry[kind + '_next'] = time.time() + delay
-            entry[kind + '_loading'] = False
+def import_status(kind):
+    return 'imported' if imported_data(kind) is not None else 'missing_import'
 
 
-def original_snapshot(kind):
-    now = time.time()
-    with ORIGINAL_LOCK:
-        token = ORIGINAL_TOKEN
-        if not token:
-            return None
-        if now >= SHARED_ORIGINAL.get(kind + '_next', 0) and not SHARED_ORIGINAL.get(kind + '_loading'):
-            SHARED_ORIGINAL[kind + '_loading'] = True
-            threading.Thread(target=refresh_original, args=(SHARED_ORIGINAL, token, kind), daemon=True).start()
-        value = SHARED_ORIGINAL.get(kind)
-        if value and (kind in ('catalog', 'pass', 'dragon', 'crypto', 'deposit_catalog') or value['expires'] > now):
-            return value
-    return None
-
-
-def original_status(kind):
-    with ORIGINAL_LOCK:
-        if not ORIGINAL_TOKEN:
-            return 'missing_env'
-        if SHARED_ORIGINAL.get(kind + '_loading'):
-            return 'loading'
-        return SHARED_ORIGINAL.get(kind + '_status', 'waiting')
+def load_original_import():
+    global IMPORTED_ORIGINAL
+    with app.app_context():
+        row = db().execute("SELECT value FROM settings WHERE key='original-import-v1'").fetchone()
+    if row:
+        IMPORTED_ORIGINAL = json.loads(row[0])
 
 
 def custom_session(create=False):
@@ -442,6 +257,7 @@ def init_db():
         c.executescript(grader_pass.SCHEMA)
         c.executescript(named_cases.SCHEMA)
         c.execute('BEGIN IMMEDIATE')
+        c.execute("DELETE FROM settings WHERE key='original-session-v1'")
         c.execute('CREATE TABLE IF NOT EXISTS welcome_share_rollout_users(user_id TEXT PRIMARY KEY, seen INTEGER NOT NULL DEFAULT 0)')
         rollout = c.execute("INSERT OR IGNORE INTO settings VALUES ('welcome_share_rollout', '1')")
         if rollout.rowcount:
@@ -505,7 +321,7 @@ def base_catalog():
     if personal:
         return json.loads(personal[0])
     if 'original_catalog' not in g:
-        g.original_catalog = original_snapshot('catalog')
+        g.original_catalog = imported_data('catalog')
     if g.original_catalog:
         return dict(items=list(g.original_catalog['items']), cases=g.original_catalog['cases'])
     source = ROOT / 'source_catalog.json'
@@ -744,47 +560,20 @@ def local_home():
 
 def live_settings():
     row=db().execute('SELECT value FROM user_live WHERE user_id=?',(g.uid,)).fetchone()
-    return json.loads(row[0]) if row else dict(mode='local',drops=[],topId=None)
+    config = json.loads(row[0]) if row else dict(mode='local', drops=[], topId=None)
+    if config['mode'] == 'real':
+        config['mode'] = 'local'
+    return config
 
 
 def home():
     config=live_settings()
-    bonus = original_snapshot('bonus')
+    bonus = imported_data('bonus')
     if config['mode']=='editor':
         drops=[dict(d,source=dict(kind=d['source']) if isinstance(d.get('source'),str) else d.get('source')) for d in config['drops']]
         top=next((d for d in drops if d['id']==config.get('topId')),None)
         return dict(drops=drops,top=top or max(drops,key=lambda d:d['price'],default=None),bonus=bonus,liveMode='editor')
-    if config['mode']!='real':
-        return dict(local_home(),liveMode='local',bonus=bonus)
-    live = original_snapshot('live')
-    if live is None:
-        status = original_status('live')
-        message = {
-            'missing_env': 'Сессия оригинала не настроена',
-            'auth_rejected': 'Оригинал отклонил серверную сессию',
-            'cloudflare_1010': 'Cloudflare отклонил запрос сервера к оригиналу (1010)',
-            'network_error': 'Сервер не смог подключиться к оригиналу',
-            'invalid_response': 'Оригинал вернул неожиданный формат ленты',
-            'loading': 'Загружаем ленту оригинала…',
-        }.get(status, 'Лента оригинала пока недоступна')
-        return dict(drops=[], top=None, bonus=bonus, liveMode='real',
-                    liveError=message)
-    return dict(drops=live['drops'], top=live['top'], bonus=bonus, liveMode='real')
-
-
-def original_drop(drop):
-    image = str(drop.get('image', ''))
-    rarity = drop.get('rarity')
-    source = drop.get('source')
-    return dict(
-        id='real:' + str(drop.get('id', ''))[:100],
-        name=str(drop.get('name', ''))[:120],
-        image=image if image.startswith('/img/') else '/img/coin.webp',
-        price=number(drop.get('price', 0)),
-        rarity=rarity if rarity in ('common', 'rare', 'epic', 'legendary', 'og') else 'common',
-        source=source if isinstance(source, (str, dict)) else 'case',
-        createdAt=drop.get('createdAt'),
-    )
+    return dict(local_home(), liveMode='local', bonus=bonus)
 
 
 def settle_giveaways():
@@ -822,7 +611,7 @@ def giveaway_view(row):
         participants = override['count']
     else:
         if 'original_giveaways' not in g:
-            g.original_giveaways = original_snapshot('giveaways')
+            g.original_giveaways = imported_data('giveaways')
         group = 'finished' if row['finished'] else 'active'
         original = (g.original_giveaways or {}).get(group, [])
         matching = next((entry for entry in original if entry['itemId'] == item['id']), None)
@@ -830,7 +619,10 @@ def giveaway_view(row):
             matching = original[0]
         if matching is not None:
             participants = matching['count']
-    draw_count = c.execute('SELECT COUNT(*) FROM giveaway_entries WHERE giveaway_id=?', (gid,)).fetchone()[0] if winner else 0
+    local_count = c.execute('SELECT COUNT(*) FROM giveaway_entries WHERE giveaway_id=?', (gid,)).fetchone()[0]
+    if participants is None:
+        participants = local_count
+    draw_count = local_count if winner else 0
     return dict(id=gid,item=item,endsAt=iso(row['ends']),needDeposit=row['minimum'],drawCount=draw_count,
                 deposited=amount,participants=participants,
                 myNum=entry[0] if entry else None,canJoin=not row['finished'] and amount>=row['minimum'],winner=winner)
@@ -881,8 +673,9 @@ def published_case(row_id, definition):
 
 
 def config():
-    return dict(build=FRONTEND_BUILD,theme='autumn',caseAnim='classic',sandbox=True,depositEnabled=False,withdrawEnabled=True,
-                starsRate=1,starsMin=1,starsMax=10000,refBonusPercent=0,withdrawMin=1,withdrawWindow='отключён',
+    stars = imported_data('stars') or dict(starsRate=1, starsMin=1, starsMax=10000)
+    return dict(**stars, build=FRONTEND_BUILD,theme='autumn',caseAnim='classic',sandbox=True,depositEnabled=False,withdrawEnabled=True,
+                refBonusPercent=0,withdrawMin=1,withdrawWindow='отключён',
                 upgrade=dict(maxItems=5,minChance=UPGRADE_MIN_CHANCE,maxChance=UPGRADE_MAX_CHANCE,presets=[dict(label=f'×{n}',mult=n) for n in [1.25,2,3,5,10]]),
                 mystery=dict(enabled=True,mult=3,minInput=1,maxInput=1e9,floor=1,cap=1e9),
                 dice=dict(enabled=True,min=1,max=100000,maxItems=5,colors=[dict(id=i,name=n,hex=h) for i,(n,h) in
@@ -946,7 +739,9 @@ def take_next_result(game):
 
 def streak_config():
     row=db().execute('SELECT value FROM settings WHERE key=?',('streak:'+g.uid,)).fetchone()
-    return json.loads(row[0]) if row else dict(enabled=True,resetOnMiss=True,rewards=DEFAULT_STREAK,version=STREAK_VERSION)
+    if row:
+        return json.loads(row[0])
+    return imported_data('streak') or dict(enabled=True,resetOnMiss=True,rewards=DEFAULT_STREAK,version=STREAK_VERSION)
 
 
 def configured_streak_reward(cfg,day):
@@ -1182,13 +977,14 @@ def deposit_preview():
     mode = deposit_mode()
     if mode != 'original':
         return dict(open=mode == 'on', checking=False)
-    status = original_snapshot('deposit')
-    return dict(open=status is not None and status['open'],
-                checking=status is None and original_status('deposit') == 'loading')
+    status = imported_data('deposit')
+    return dict(open=status['open'] if status else False, checking=False)
 
 
 def dragon_exchange_config():
-    original = original_snapshot('dragon')
+    original = imported_data('dragon')
+    if original is None and 'dragon' in IMPORTED_ORIGINAL:
+        return None
     dragon = find_item(original['itemId'] if original else 62)
     if not dragon or dragon.get('coins') or dragon.get('customSession') or dragon['price'] <= 0:
         return None
@@ -1244,14 +1040,14 @@ def pass_track(cfg, original):
 
 
 def pass_view():
-    result = pass_track(pass_config(), original_snapshot('pass'))
-    return dict(result, originalStatus=original_status('pass'))
+    result = pass_track(pass_config(), imported_data('pass'))
+    return dict(result, originalStatus=import_status('pass'))
 
 
 def admin_pass():
     cfg = pass_config()
-    original = original_snapshot('pass')
-    return dict(config=cfg, original=original, status=original_status('pass'),
+    original = imported_data('pass')
+    return dict(config=cfg, original=original, status=import_status('pass'),
                 cases=[dict(id=cs['id'], name=cs['name']) for cs in catalog()['cases']],
                 view=grader_pass.view(db(), g.uid, cfg, original))
 
@@ -1273,7 +1069,7 @@ def save_pass(body):
     case_ids = {cs['id'] for cs in catalog()['cases']}
     if any(row['reward']['kind'] == 'case' and row['reward']['caseId'] not in case_ids for row in cfg['levels']):
         raise Problem('Кейс награды отсутствует в каталоге')
-    original = original_snapshot('pass')
+    original = imported_data('pass')
     current = grader_pass.view(db(), g.uid, cfg, original)
     active_periods = {current[group]['period'] for group in grader_pass.QUEST_GROUPS if current[group]}
     cfg['progress'] = {period: values.copy() for period, values in cfg['progress'].items() if period in active_periods}
@@ -1312,7 +1108,7 @@ def record_pass_play(game, value, plays=1, wins=0):
     db().execute('INSERT INTO pass_events VALUES (?,?,?,?,?,?)',
                  (g.uid, game, time.time(), round(value * 100), plays, wins))
     cfg = pass_config()
-    original = original_snapshot('pass')
+    original = imported_data('pass')
     if cfg['tasksMode'] == 'custom' or original:
         grader_pass.view(db(), g.uid, cfg, original, settle=True)
 
@@ -1354,10 +1150,10 @@ def dispatch(path, body):
     if path == 'deposit/current' and not post:
         return deposit_preview()
     if path == 'deposit/catalog/preview' and not post:
-        data = original_snapshot('deposit_catalog')
-        return dict(catalog=data, checking=original_status('deposit_catalog') == 'loading')
+        data = imported_data('deposit_catalog')
+        return dict(catalog=data, checking=False)
     if path == 'deposit/crypto/preview' and not post:
-        return dict(config=original_snapshot('crypto'), checking=original_status('crypto') == 'loading')
+        return dict(config=imported_data('crypto'), checking=False)
     if path == 'withdraw/options' and not post:
         item = selected({'id': request.args.get('id')})[0]
         return dict(exchange=withdrawal_exchange(item['item']))
@@ -1734,7 +1530,7 @@ def dispatch(path, body):
         return dict(ok=True)
     if path=='admin/live' and post:
         mode=body.get('mode')
-        if mode not in ('local','editor','real'): raise Problem('Выбери источник ленты')
+        if mode not in ('local','editor'): raise Problem('Выбери источник ленты')
         rows=body.get('drops',[])
         if not isinstance(rows,list) or len(rows)>30: raise Problem('В ленте максимум 30 дропов')
         drops=[]
@@ -1883,6 +1679,115 @@ def validate_catalog(cat):
             item_ids.add(iid); entry['weight']=number(entry.get('weight'),0.01,1000000)
 
 
+def imported_item(row):
+    item = dict(id=integer(row['id']), name=grader_pass.label(row['name'], 500), price=number(row['price'], .01),
+                rarity=row['rarity'], image=row['image'])
+    if item['rarity'] == 'coins' or row.get('coins') is True:
+        item.update(coins=True, rarity='common')
+    if item['rarity'] not in CASE_RARITY_WEIGHTS:
+        raise ValueError('Неизвестная редкость')
+    validate_image(item['image'])
+    if row.get('baseName') and row.get('mutation'):
+        item.update(baseName=grader_pass.label(row['baseName'], 500),
+                    mutation=grader_pass.label(row['mutation'], 100))
+    return item
+
+
+def imported_catalog(raw):
+    items = [imported_item(item) for item in raw['items']]
+    cases = []
+    estimated_cases = []
+    for row in raw['cases']:
+        drops = [dict(itemId=integer(entry['itemId']), weight=number(entry['weight'], .01, 1_000_000)
+                      if entry.get('weight') is not None else None) for entry in row['items']]
+        case = dict(id=integer(row['id']), name=row['name'], image=row['image'], price=number(row['price']),
+                    category=row.get('category', 'standard'), freeKind=row.get('freeKind'),
+                    isNew=row.get('isNew') is True, items=drops)
+        if any(drop['weight'] is None for drop in drops):
+            estimated_cases.append(case)
+            for drop in drops:
+                drop['weight'] = 1
+        cases.append(case)
+    data = dict(items=items, cases=cases)
+    if not items or not cases:
+        raise ValueError('Каталог должен содержать предметы и кейсы')
+    validate_catalog(data)
+    apply_case_rarity_weights(dict(items=items, cases=estimated_cases))
+    return data
+
+
+def imported_streak(raw):
+    track = raw['track']
+    if not isinstance(track, list) or not 1 <= len(track) <= 100:
+        raise ValueError('В серии должно быть от 1 до 100 дней')
+    rewards = []
+    for day, row in enumerate(track, 1):
+        if row['day'] != day:
+            raise ValueError('Дни серии должны идти по порядку')
+        kind = row['kind']
+        if kind == 'coins':
+            rewards.append(dict(kind=kind, amount=number(row['amount'], .01)))
+        elif kind == 'item':
+            rewards.append(dict(kind=kind, itemId=integer(row['itemId'])))
+        elif kind == 'case':
+            rewards.append(dict(kind=kind, caseId=integer(row['caseId'])))
+        else:
+            raise ValueError('Неизвестная награда серии')
+    version = hashlib.sha256(json.dumps(rewards, sort_keys=True).encode()).hexdigest()[:12]
+    return dict(enabled=raw.get('enabled') is not False, resetOnMiss=True, rewards=rewards, version=version)
+
+
+def normalize_original_import(data):
+    if not isinstance(data, dict) or data.get('version') != 1:
+        raise Problem('Нужен JSON из актуального export-original.js')
+    result = {}
+    section = 'catalog'
+    try:
+        result['catalog'] = imported_catalog(data['catalog'])
+        for section in ('pass', 'streak', 'deposit', 'deposit_catalog', 'crypto', 'stars', 'dragon', 'giveaways', 'bonus'):
+            if section not in data:
+                continue
+            raw = data[section]
+            if raw is None and section in ('pass', 'streak', 'crypto', 'dragon', 'bonus', 'deposit_catalog'):
+                result[section] = None
+            elif section == 'pass':
+                result[section] = grader_pass.original_definition(raw)
+            elif section == 'streak':
+                result[section] = imported_streak(raw)
+            elif section == 'deposit':
+                if type(raw['open']) is not bool:
+                    raise ValueError('Неверный статус пополнений')
+                result[section] = dict(open=raw['open'])
+            elif section == 'deposit_catalog':
+                if not isinstance(raw['items'], list) or len(raw['items']) > 5000:
+                    raise ValueError('Неверный список предметов пополнения')
+                result[section] = dict(minTotal=number(raw['minTotal']),
+                                       items=[dict(imported_item(item), minQty=integer(item.get('minQty') or 1, 1, 1000))
+                                              for item in raw['items']])
+            elif section == 'crypto':
+                minimum = number(raw['min'], .01)
+                result[section] = dict(min=minimum, max=number(raw['max'], minimum), rate=number(raw['rate'], .01),
+                                       assets=[grader_pass.label(asset, 20) for asset in raw['assets'][:30]])
+            elif section == 'stars':
+                minimum = integer(raw['starsMin'])
+                result[section] = dict(starsMin=minimum, starsMax=integer(raw['starsMax'], minimum),
+                                       starsRate=number(raw['starsRate'], .01))
+            elif section == 'dragon':
+                result[section] = dict(itemId=integer(raw['itemId']), minimum=number(raw['minimum'], 1))
+            elif section == 'giveaways':
+                result[section] = {group: [dict(itemId=integer(row['itemId']), count=integer(row['count'], 0))
+                                           for row in raw[group][:500]] for group in ('active', 'finished')}
+            elif section == 'bonus':
+                expires = grader_pass.parse_date(raw['endsAt'])
+                if expires is None:
+                    raise ValueError('У промокода должна быть дата окончания')
+                result[section] = dict(code=promo_code(raw['code']), percent=number(raw['percent'], 0, 100),
+                                       endsAt=iso(expires), expires=expires, used=False)
+    except (KeyError, TypeError, ValueError, AttributeError, OverflowError, Problem):
+        raise Problem(f'Не удалось импортировать раздел «{section}». Проверь файл экспорта.') from None
+    return result
+
+
 def validate_image(value):
     if not isinstance(value,str) or not (value.startswith('/img/') or value.startswith('https://brainrotgrader.com/img/')):
         raise Problem('Картинка: /img/... или https://brainrotgrader.com/img/...')
@@ -1964,51 +1869,23 @@ def require_owner():
         raise Problem('Доступ только владельцу', 'forbidden', 403)
 
 
-@app.route('/api/owner/original-session', methods=['GET', 'POST'])
-def owner_original_session():
-    global ORIGINAL_TOKEN, SHARED_ORIGINAL
+@app.route('/api/owner/original-import', methods=['GET', 'POST'])
+def owner_original_import():
+    global IMPORTED_ORIGINAL
     require_owner()
     if request.method == 'POST':
-        body = request.get_json(silent=True)
-        token = body.get('initData') if isinstance(body, dict) else None
-        token = token.strip() if isinstance(token, str) else ''
-        try:
-            if not 1 <= len(token) <= 8192 or not token.isascii() or not token.isprintable():
-                raise ValueError
-            fields = parse_qsl(token, strict_parsing=True, max_num_fields=24)
-            data = dict(fields)
-            if (len(data) != len(fields) or not re.fullmatch(r'[0-9a-f]{64}', data.get('hash', ''))
-                    or not re.fullmatch(r'[0-9]{1,12}', data.get('auth_date', '')) or not data.get('user')):
-                raise ValueError
-        except ValueError:
-            raise Problem('Вставь полную строку initData из оригинального Mini App') from None
-
-        cipher = original_session_cipher()
-        try:
-            if not isinstance(original_api('config', token), dict):
-                raise ValueError
-        except HTTPError as error:
-            if original_http_status(error) == 'cloudflare_1010':
-                raise Problem('Cloudflare оригинала заблокировал запрос сервера (403 / 1010). Проверка сессии не состоялась.',
-                              'original_cloudflare_block', 502) from None
-            if error.code in (400, 401, 403):
-                raise Problem(f'Оригинал вернул HTTP {error.code}. Проверь, что строка взята из свежего запуска оригинального Mini App.') from None
-            raise Problem(f'Оригинал временно недоступен (HTTP {error.code})', status=502) from None
-        except (OSError, ValueError):
-            raise Problem('Не удалось проверить сессию у оригинала', status=502) from None
-
-        encrypted = cipher.encrypt(token.encode()).decode()
-        with ORIGINAL_LOCK:
+        snapshot = normalize_original_import(request.get_json(silent=True))
+        with IMPORT_LOCK:
+            merged = dict(IMPORTED_ORIGINAL, **snapshot, importedAt=iso())
             c = db()
             with c:
-                c.execute("INSERT OR REPLACE INTO settings VALUES ('original-session-v1',?)", (encrypted,))
-            ORIGINAL_TOKEN = token
-            # In-flight refreshes retain the old dictionary and cannot populate the new cache.
-            SHARED_ORIGINAL = {}
-    with ORIGINAL_LOCK:
-        response = jsonify(configured=bool(ORIGINAL_TOKEN))
-    response.headers['Cache-Control'] = 'no-store'
-    return response
+                c.execute("INSERT OR REPLACE INTO settings VALUES ('original-import-v1',?)",
+                          (json.dumps(merged, ensure_ascii=False),))
+            IMPORTED_ORIGINAL = merged
+    catalog = imported_data('catalog') or {'items': [], 'cases': []}
+    return jsonify(importedAt=IMPORTED_ORIGINAL.get('importedAt'), items=len(catalog['items']),
+                   cases=len(catalog['cases']), mutations=sum(bool(item.get('mutation')) for item in catalog['items']),
+                   sections=[key for key in IMPORTED_ORIGINAL if key != 'importedAt' and imported_data(key) is not None])
 
 
 @app.route('/api/owner/reminders', methods=['GET', 'POST'])
@@ -2457,10 +2334,8 @@ def custom_image(token,item_id):
 def health():
     db().execute('SELECT 1').fetchone()
     if request.args.get('original') == '1':
-        kinds = ('live', 'giveaways', 'pass')
-        for kind in kinds:
-            original_snapshot(kind)
-        return jsonify(ok=True, build=FRONTEND_BUILD, original={kind: original_status(kind) for kind in kinds})
+        kinds = ('catalog', 'giveaways', 'pass', 'deposit', 'deposit_catalog', 'crypto', 'dragon', 'bonus', 'streak', 'stars')
+        return jsonify(ok=True, build=FRONTEND_BUILD, original={kind: import_status(kind) for kind in kinds})
     return jsonify(ok=True,payments=False,publicAdmin=True)
 
 
@@ -2547,7 +2422,7 @@ def create_named_case():
 
 
 def named_case_items():
-    source = original_snapshot('catalog') or json.loads((ROOT / 'source_catalog.json').read_text(encoding='utf-8-sig'))
+    source = imported_data('catalog') or json.loads((ROOT / 'source_catalog.json').read_text(encoding='utf-8-sig'))
     items = [item for item in source['items'] if not item.get('coins') and item['id'] != HORSEMAN_ID]
     items.append(dict(id=HORSEMAN_ID, name='Headless Horseman', price=74500, rarity='og',
                       image='/img/custom/horseman.webp'))
@@ -2586,7 +2461,7 @@ def static(name): return send_from_directory(ROOT/'public',name)
 
 
 init_db()
-load_original_session()
+load_original_import()
 if __name__=='__main__':
     required = ['index.html', 'admin.html', 'admin.js', 'admin-pass.js', 'admin-visual.js', 'admin.css', 'ui-audio.js', 'app.js', 'styles.css', 'sandbox.js', 'og-sound.js', 'telegram-web-app.js']
     missing = [name for name in required if not (ROOT / 'public' / name).is_file()]

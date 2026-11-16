@@ -603,10 +603,6 @@
     const bar = $('#livebar');
     if (!bar) return;
     if (!bar.firstChild) bar.innerHTML = '<div class="lb-head"><span class="live"><i></i>LIVE</span></div><div class="lb-top" id="lbTop"></div><div class="lb-list" id="lbList"></div>';
-    const head=$('.lb-head',bar);
-    head.title=home.liveError||'';
-    head.innerHTML='<span class="live"><i></i>LIVE</span>';
-    if(home.liveError){const error=document.createElement('small');error.textContent=home.liveError;head.append(error);}
     const signature=JSON.stringify([home.liveMode,home.drops]);
     if(live.signature!==signature && home.liveMode==='editor')animate=false;
     if(live.mode!==home.liveMode)animate=false;
@@ -1015,13 +1011,13 @@
         <button type="button" class="btn ghost" data-maintenance></button>
       </section>
       <details class="owner-card">
-        <summary>Сессия оригинала</summary>
-        <form method="post" data-original-session>
-          <p data-session-status role="status">Проверяю…</p>
-          <label>Новая initData
-            <input type="password" name="initData" maxlength="8192" autocomplete="new-password" spellcheck="false" autocapitalize="off" required>
+        <summary>Импорт данных оригинала</summary>
+        <form method="post" data-original-import>
+          <p data-import-status role="status">Проверяю…</p>
+          <label>Файл bg-modded-export.json
+            <input type="file" name="snapshot" accept=".json,application/json" required>
           </label>
-          <button class="btn" type="submit">Проверить и сохранить</button>
+          <button class="btn" type="submit">Импортировать для всех</button>
         </form>
       </details>
       <section class="owner-card">
@@ -1103,31 +1099,40 @@
         maintenance.disabled = false;
       }
     };
-    const sessionForm = $('[data-original-session]', page);
-    const sessionStatus = $('[data-session-status]', sessionForm);
-    let sessionSubmitted = false;
-    api('/api/owner/original-session').then(({ configured }) => {
-      if (sessionSubmitted) return;
-      sessionStatus.textContent = configured ? 'Сессия настроена' : 'Сессия пока не настроена';
-    }).catch(error => { if (!sessionSubmitted) sessionStatus.textContent = error.message; });
-    sessionForm.onsubmit = async event => {
+    const importForm = $('[data-original-import]', page);
+    const importStatus = $('[data-import-status]', importForm);
+    const importButton = $('button[type="submit"]', importForm);
+    const describeImport = data => {
+      if (!data.importedAt) return 'Файл ещё не импортирован';
+      const date = new Date(data.importedAt).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/Moscow' });
+      return `Импорт от ${date} МСК · кейсов ${fmt(data.cases)} · предметов ${fmt(data.items)} · с мутациями ${fmt(data.mutations)}`;
+    };
+    importButton.disabled = true;
+    api('/api/owner/original-import').then(data => {
+      importStatus.textContent = describeImport(data);
+    }).catch(error => {
+      importStatus.textContent = error.message;
+    }).finally(() => { importButton.disabled = false; });
+    importForm.onsubmit = async event => {
       event.preventDefault();
-      const input = sessionForm.elements.initData;
-      const button = $('button[type="submit"]', sessionForm);
-      button.disabled = true;
-      sessionSubmitted = true;
-      const initData = input.value;
-      input.value = '';
-      input.readOnly = true;
-      sessionStatus.textContent = 'Проверяю сессию…';
+      const file = importForm.elements.snapshot.files[0];
+      if (!file || importButton.disabled) return;
+      if (file.size > 5 * 1024 * 1024) {
+        importStatus.textContent = 'Файл превышает 5 МБ';
+        return;
+      }
+      importButton.disabled = true;
+      importStatus.textContent = 'Сохраняю…';
       try {
-        await api('/api/owner/original-session', { method: 'POST', body: { initData } });
-        sessionStatus.textContent = 'Сессия сохранена. Данные обновятся при следующем запросе.';
+        const body = JSON.parse(await file.text());
+        const data = await api('/api/owner/original-import', { method: 'POST', body });
+        importForm.reset();
+        importStatus.textContent = describeImport(data);
+        api('/api/config').then(config => { state.cfg = config; }).catch(() => {});
       } catch (error) {
-        sessionStatus.textContent = error.message;
+        importStatus.textContent = error instanceof SyntaxError ? 'Файл должен содержать корректный JSON' : error.message;
       } finally {
-        button.disabled = false;
-        input.readOnly = false;
+        importButton.disabled = false;
       }
     };
     const dropForm = $('[data-drop-form]', page);
@@ -4250,16 +4255,12 @@
 
 
   const PASS_FIRE = '<i class="pf pf1"></i><i class="pf pf2"></i><i class="pf pf3"></i><i class="pf pf4"></i><i class="pf pf5"></i>';
-  async function renderPass(tabArg, retried = false) {
+  async function renderPass(tabArg) {
     const t = state.render;
     view.innerHTML = '<div class="gp-wrap"><div class="skeleton" style="height:180px"></div><div class="skeleton" style="height:140px;margin-top:12px"></div></div>';
     let d;
     try {
       d = await api('/api/pass');
-      if (!retried && d.originalStatus === 'loading' && (d.rewardsUnavailable || d.tasksUnavailable)) {
-        setTimeout(() => !stale(t) && renderPass(tabArg, true), 1250);
-        return;
-      }
     } catch (e) {
       return fail(e);
     }
@@ -4319,11 +4320,11 @@
       </section>
       ${ready ? `<div class="gp-ready">🎁 Можно забрать наград: <b>${ready}</b></div>` : ''}
       <h2>Награды</h2>
-      ${d.rewardsUnavailable ? '<div class="empty">Оригинальные награды пока недоступны</div>' : ''}
+      ${d.rewardsUnavailable ? '<div class="empty">Награды из оригинала ещё не импортированы</div>' : ''}
       <div class="gp-track" id="gpTrack">${d.levels.map(lvl).join('')}</div>
       <div class="gp-tabs"><button class="${tab === 'daily' ? 'on' : ''}" data-tab="daily">Ежедневные</button><button class="${tab === 'weekly' ? 'on' : ''}" data-tab="weekly">Недельные</button></div>
       <section class="gp-quests">
-        ${!qs && d.tasksUnavailable ? '<div class="empty">Оригинальные задания пока недоступны</div>' : qs ? `<div class="gp-reset muted">${tab === 'weekly' ? 'Новые задания через' : 'Обновятся через'} ${left(qs.endsAt)}</div>${qs.quests.map(quest).join('') || '<div class="empty">Нет заданий</div>'}` : '<div class="empty">Задания появятся, когда начнётся сезон</div>'}
+        ${!qs && d.tasksUnavailable ? '<div class="empty">Задания из оригинала ещё не импортированы</div>' : qs ? `<div class="gp-reset muted">${tab === 'weekly' ? 'Новые задания через' : 'Обновятся через'} ${left(qs.endsAt)}</div>${qs.quests.map(quest).join('') || '<div class="empty">Нет заданий</div>'}` : '<div class="empty">Задания появятся, когда начнётся сезон</div>'}
       </section>
       <div class="note gp-note">⭐ Ещё опыт: <b>1 XP за каждые 10 BG</b> в кейсах, апгрейде, Колор Дайсе и Мистери (бесплатные кейсы не считаются).<br>Брейнротов из наград пасса нельзя вывести — их можно продать, поставить в апгрейд, мистери или дайс.</div>
     </div>`;
@@ -5562,16 +5563,11 @@
     };
     input.oninput = recalc;
     recalc();
-    (async () => {
-      for (const delay of [0, 1500, 4500]) {
-        if (delay) await sleep(delay);
-        if (!input.isConnected) return;
-        bonus = (await api('/api/home')).bonus;
-        if (!input.isConnected) return;
-        recalc();
-        if (bonus?.code) return;
-      }
-    })().catch(() => {});
+    api('/api/home').then(home => {
+      if (!input.isConnected) return;
+      bonus = home.bonus;
+      recalc();
+    }).catch(() => {});
     return recalc;
   }
 
@@ -5618,13 +5614,7 @@
     box.replaceChildren(pending);
     let config;
     try {
-      for (const delay of [0, 700, 1500, 3000]) {
-        if (delay) await sleep(delay);
-        if (!pending.isConnected) return;
-        const result = await api('/api/deposit/crypto/preview');
-        config = result.config;
-        if (config || !result.checking) break;
-      }
+      ({ config } = await api('/api/deposit/crypto/preview'));
     } catch {}
     if (!pending.isConnected) return;
     if (!config) {
@@ -5656,13 +5646,7 @@
     const pending = h('<div class="skeleton"></div>');
     box.replaceChildren(pending);
     try {
-      const deadline = Date.now() + 6500;
-      let status = await api('/api/deposit/current');
-      while (status.checking && Date.now() < deadline) {
-        if (!pending.isConnected) return;
-        await sleep(750);
-        status = await api('/api/deposit/current');
-      }
+      const status = await api('/api/deposit/current');
       if (pending.isConnected) await catalogView(box, status.open);
     } catch (error) {
       if (pending.isConnected) fail(error);
@@ -5680,17 +5664,9 @@
       const pending = h('<div class="skeleton"></div>');
       box.replaceChildren(pending);
       try {
-        for (const delay of [0, 700, 1500, 3000]) {
-          if (delay) await sleep(delay);
-          if (!pending.isConnected) return;
-          const result = await api('/api/deposit/catalog/preview');
-          if (!pending.isConnected) return;
-          if (result.catalog) {
-            dep.catalog = result.catalog;
-            break;
-          }
-          if (!result.checking) break;
-        }
+        const result = await api('/api/deposit/catalog/preview');
+        if (!pending.isConnected) return;
+        dep.catalog = result.catalog;
         if (!dep.catalog) {
           const shop = await api('/api/shop');
           if (!pending.isConnected) return;

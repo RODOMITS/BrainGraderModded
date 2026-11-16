@@ -1,52 +1,149 @@
-// Run in DevTools Console while the ORIGINAL mini app is open and logged in.
-// Only catalogue data is copied. No tokens or Telegram initData are exported.
+// Paste into DevTools Console while logged into the original Mini App.
 (async () => {
-  const initData = window.Telegram?.WebApp?.initData;
-  if (!initData) throw new Error('Открой оригинальное мини-приложение внутри Telegram');
-  const get = async path => {
-    const r = await fetch(path, {headers:{authorization:'tma '+initData}});
-    if (!r.ok) throw new Error(path+': HTTP '+r.status);
-    return r.json();
-  };
-  const list = await get('/api/cases');
-  if (!Array.isArray(list)) throw new Error('Неизвестный формат списка кейсов');
-  const { mutations = {} } = await get('/api/config');
-  const items = new Map(), cases = [];
-  let missingWeights = 0;
-  const image = value => {
-    const u = new URL(value || '/img/unknown.svg',location.origin);
-    if(u.origin !== location.origin || !u.pathname.startsWith('/img/'))
-      throw new Error('Неожиданный адрес картинки: '+u.href);
-    return u.pathname;
-  };
-  const addItem = i => {
-    if(!Number.isInteger(Number(i.id)) || !(Number(i.price)>0))
-      throw new Error('Предмет без ID или положительной цены: '+JSON.stringify(i));
-    const out={id:Number(i.id),name:i.name,price:Number(i.price),rarity:i.rarity || 'common',image:image(i.image)};
-    const variant = mutations?.[out.name];
-    if (typeof variant?.base === 'string' && typeof variant?.mut === 'string') {
-      out.baseName = variant.base;
-      out.mutation = variant.mut;
-    }
-    items.set(out.id,out); return out.id;
-  };
-  for (const entry of list) {
-    const cs = await get('/api/cases/'+entry.id);
-    const pool = cs.items.filter(i=>!i.coins).map(i=>{
-      const itemId=addItem(i);
-      const supplied = i.weight ?? i.chance ?? i.probability;
-      if(!(Number(supplied)>0)) missingWeights++;
-      return {itemId,weight:Number(supplied)>0?Number(supplied):1};
-    });
-    cases.push({isNew:Boolean(cs.isNew || entry.isNew),id:Number(cs.id),name:cs.name,price:Number(cs.price)||0,
-      category:['free','start','pixel','standard','platina','allin'].includes(cs.category)?cs.category:'standard',
-      freeKind:cs.freeKind==='ref'?'ref':cs.freeKind?'daily':null,image:image(cs.image || '/img/chest.svg'),items:pool});
+  if (location.origin !== 'https://brainrotgrader.com') {
+    throw new Error('Открой оригинальный Mini App на brainrotgrader.com');
   }
-  try {const shop=await get('/api/shop');for(const it of shop.items || [])if(!it.coins)addItem(it);}
-  catch(e){console.warn('Магазин не экспортирован:',e.message);}
-  const result=JSON.stringify({items:[...items.values()],cases},null,2);
-  if(typeof copy==='function') copy(result);
-  else console.log(result);
-  console.info('Каталог скопирован. Вставь JSON в свою админку и сохрани. Кейсов:',cases.length,'предметов:',items.size);
-  if(missingWeights)console.warn('У '+missingWeights+' позиций сервер не раскрыл шансы. Для них weight=1. Это НЕ оригинальные вероятности — задай свои в админке. Денежные призы coins исключены.');
-})();
+  const session = window.Telegram?.WebApp?.initData;
+  if (!session) throw new Error('Открой оригинальное мини-приложение внутри Telegram');
+  const get = async path => {
+    const checkin = path === '/api/streak/checkin';
+    const headers = { Authorization: 'tma ' + session };
+    if (checkin) headers['Content-Type'] = 'application/json';
+    const response = await fetch(path, {
+      headers, redirect: 'error', method: checkin ? 'POST' : 'GET', body: checkin ? '{}' : undefined,
+    });
+    if (!response.ok) throw new Error(path + ' — HTTP ' + response.status);
+    return response.json();
+  };
+
+  const [list, config, shop] = await Promise.all(['/api/cases', '/api/config', '/api/shop'].map(get));
+  if (!Array.isArray(list) || !list.length || !Array.isArray(shop.items)) throw new Error('Каталог не загрузился');
+  const image = value => {
+    const url = new URL(value || '/img/unknown.svg', location.origin);
+    if (url.origin !== location.origin || !url.pathname.startsWith('/img/')) {
+      throw new Error('Картинка должна находиться в /img/ оригинала');
+    }
+    return url.pathname + url.search;
+  };
+  const item = raw => {
+    const id = Number(raw.id), price = Number(raw.price);
+    if (!Number.isSafeInteger(id) || id < 1 || !Number.isFinite(price) || price <= 0) {
+      throw new Error('В каталоге есть предмет без ID или цены');
+    }
+    const result = { id, price, name: raw.name, rarity: raw.rarity || 'common', image: image(raw.image) };
+    if (raw.coins || raw.rarity === 'coins') result.coins = true;
+    const variant = config.mutations?.[raw.name];
+    if (typeof variant?.base === 'string' && typeof variant?.mut === 'string') {
+      result.baseName = variant.base;
+      result.mutation = variant.mut;
+    }
+    return result;
+  };
+  const items = new Map(shop.items.map(raw => {
+    const normalized = item(raw);
+    return [normalized.id, normalized];
+  }));
+  const cases = [];
+  let estimated = 0;
+  const categories = new Set(['free', 'start', 'pixel', 'standard', 'platina', 'allin']);
+  for (let offset = 0; offset < list.length; offset += 4) {
+    const batch = list.slice(offset, offset + 4);
+    const details = await Promise.all(batch.map(row => get('/api/cases/' + Number(row.id))));
+    for (const [index, detail] of details.entries()) {
+      const summary = batch[index];
+      const weights = new Map();
+      for (const row of detail.items || []) {
+        const normalized = item(row);
+        items.set(normalized.id, normalized);
+        const rawWeight = Number(row.weight ?? row.chance ?? row.probability);
+        const previous = weights.get(normalized.id);
+        const weight = Number.isFinite(rawWeight) && rawWeight > 0 ? rawWeight : null;
+        weights.set(normalized.id, weight != null && previous !== null ? (previous || 0) + weight : null);
+      }
+      const hasHiddenWeights = [...weights.values()].some(weight => weight == null);
+      if (hasHiddenWeights) estimated++;
+      const scale = hasHiddenWeights || !weights.size ? 1 : 1_000_000 / Math.max(...weights.values());
+      const category = detail.category || summary.category;
+      const free = detail.freeKind ?? summary.freeKind;
+      cases.push({
+        id: Number(summary.id), name: detail.name || summary.name, price: Number(detail.price ?? summary.price) || 0,
+        image: image(detail.image || summary.image || '/img/chest.svg'),
+        isNew: Boolean(detail.isNew || summary.isNew), category: categories.has(category) ? category : 'standard',
+        freeKind: free === 'ref' ? 'ref' : free ? 'daily' : null,
+        items: [...weights].map(([itemId, weight]) => ({
+          itemId, weight: hasHiddenWeights ? null : Math.max(.01, Math.min(1_000_000, Math.round(weight * scale * 100) / 100)),
+        })),
+      });
+    }
+  }
+
+  const out = { version: 1, catalog: { items: [...items.values()], cases } };
+  if (config.starsRate > 0 && config.starsMin > 0 && config.starsMax >= config.starsMin) {
+    out.stars = { starsRate: config.starsRate, starsMin: config.starsMin, starsMax: config.starsMax };
+  }
+  out.crypto = config.crypto ? {
+    min: config.crypto.min, max: config.crypto.max, rate: config.crypto.rate,
+    assets: (config.crypto.assets || []).filter(asset => typeof asset === 'string').slice(0, 30),
+  } : null;
+  out.dragon = config.dragonExchange ? {
+    itemId: config.dragonExchange.dragon?.id, minimum: config.dragonExchange.from,
+  } : null;
+
+  const passGroup = group => group && {
+    endsAt: group.endsAt,
+    quests: (group.quests || []).map(({ id, title, goal, xp, metric, unit }) => ({ id, title, goal, xp, metric, unit })),
+  };
+  const sources = {
+    '/api/pass': ['pass', data => ({
+      enabled: data.enabled === true,
+      season: Object.fromEntries(['name', 'started', 'over', 'start', 'end', 'claimUntil', 'startAt', 'endAt', 'claimUntilAt']
+        .filter(key => data.season?.[key] !== undefined).map(key => [key, data.season[key]])),
+      levels: (data.levels || []).map(({ level, xp, reward }) => ({ level, xp, reward: {
+        kind: reward.kind, badge: reward.badge, amount: reward.amount, caseId: reward.caseId ?? reward.id,
+        count: reward.count, name: reward.name || cases.find(row => row.id === (reward.caseId ?? reward.id))?.name || 'Кейс',
+        image: reward.image ? image(reward.image) : undefined,
+      } })),
+      daily: passGroup(data.daily), weekly: passGroup(data.weekly),
+    })],
+    '/api/streak/checkin': ['streak', data => {
+      if (!data.track?.length) return undefined;
+      const size = Number(data.days) || data.track.length;
+      return { enabled: data.enabled, track: data.track.slice(0, size).map(({ day, kind, amount, itemId, caseId }) =>
+        ({ day, kind, amount, itemId, caseId })) };
+    }],
+    '/api/deposit/current': ['deposit', data => typeof data.open === 'boolean' ? { open: data.open } : undefined],
+    '/api/deposit/catalog': ['deposit_catalog', data => ({
+      minTotal: data.minTotal || 0, items: data.items.map(row => ({ ...item(row), minQty: row.minQty || 1 })),
+    })],
+    '/api/giveaways': ['giveaways', data => Object.fromEntries(['active', 'finished'].map(group => [
+      group, (data[group] || []).filter(row => row.item?.id > 0 && Number.isInteger(row.participants))
+        .map(row => ({ itemId: row.item.id, count: row.participants })),
+    ]))],
+    '/api/home': ['bonus', data => data.bonus ? {
+      code: data.bonus.code, percent: data.bonus.percent, endsAt: data.bonus.endsAt,
+    } : null],
+  };
+  await Promise.all(Object.entries(sources).map(async ([url, [name, extract]]) => {
+    try {
+      const value = extract(await get(url));
+      if (value !== undefined) out[name] = value;
+      else console.warn('Нет данных для раздела', name);
+    } catch {
+      console.warn('Раздел временно недоступен', name);
+    }
+  }));
+
+  const json = JSON.stringify(out, null, 2);
+  window.bgModdedExport = json;
+  const file = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(file);
+  const download = document.createElement('a');
+  download.href = url;
+  download.download = 'bg-modded-export.json';
+  document.body.append(download);
+  download.click();
+  download.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+  console.info('Скачан bg-modded-export.json. Импортируй его в Modded через овнерку.', Object.keys(out).slice(1));
+  if (estimated) console.warn('У кейсов с закрытыми шансами Modded рассчитает свои веса. Таких кейсов:', estimated);
+})().catch(error => console.error('Экспорт не завершён:', error.message));

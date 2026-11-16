@@ -2,13 +2,13 @@ const passPanel = $('panel-pass');
 passPanel.innerHTML = `
   <section>
     <h2>Grader Pass</h2>
-    <p class="hint">Задания и награды можно брать из оригинала независимо друг от друга. Опыт, прогресс и полученные призы хранятся в твоём профиле Modded.</p>
+    <p class="hint">Задания и награды можно брать из импортированного файла независимо друг от друга. Опыт, прогресс и полученные призы хранятся в твоём профиле Modded.</p>
     <p id="passStatus" role="status"></p>
     <button type="button" id="passRefresh" class="secondary">Обновить данные</button>
     <form id="passForm" hidden>
       <div class="pass-admin-grid">
-        <label>Награды <select name="rewardsMode"><option value="original">Как в оригинале</option><option value="custom">Свои</option></select></label>
-        <label>Задания <select name="tasksMode"><option value="original">Как в оригинале</option><option value="custom">Свои</option></select></label>
+        <label>Награды <select name="rewardsMode"><option value="original">Из импорта</option><option value="custom">Свои</option></select></label>
+        <label>Задания <select name="tasksMode"><option value="original">Из импорта</option><option value="custom">Свои</option></select></label>
         <label>Всего XP <input name="xp" type="number" min="0" max="10000000" required></label>
       </div>
       <p id="passLevel" class="hint"></p>
@@ -123,15 +123,9 @@ function passTaskRow(group, quest) {
 
 function drawPassAdmin(data) {
   passData = data;
-  const { config, original, view, status } = data;
-  const statuses = {
-    ready: 'Данные оригинала загружены.', loading: 'Оригинал загружается. Нажми «Обновить данные» через несколько секунд.',
-    missing_env: 'На хостинге нужна переменная ORIGINAL_INIT_DATA.',
-    auth_rejected: 'Оригинал отклонил авторизацию. Обнови ORIGINAL_INIT_DATA на хостинге.',
-    invalid_response: 'Оригинал прислал данные в неожиданном формате.',
-  };
-  $('passStatus').textContent = (statuses[status] || 'Не удалось обновить данные оригинала.') +
-    (original && !['ready', 'loading'].includes(status) ? ' Используются последние доступные данные.' : '');
+  const { config, view, status } = data;
+  $('passStatus').textContent = status === 'imported' ? 'Используются данные из файла импорта.'
+    : 'Общий файл с Grader Pass ещё не импортирован. Можно настроить свои награды и задания.';
   passForm.elements.rewardsMode.value = config.rewardsMode;
   passForm.elements.tasksMode.value = config.tasksMode;
   passForm.elements.xp.value = view.xp;
@@ -184,12 +178,7 @@ async function loadPassAdmin() {
   $('passStatus').textContent = 'Загружаю Grader Pass…';
   try {
     await window.sandboxReady;
-    let data = await api('admin/pass');
-    if (data.status === 'loading' && !data.original) {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      data = await api('admin/pass');
-    }
-    drawPassAdmin(data);
+    drawPassAdmin(await api('admin/pass'));
   } catch (error) {
     $('passStatus').textContent = error.message;
   } finally {

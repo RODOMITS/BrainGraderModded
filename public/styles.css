@@ -2095,6 +2095,7 @@ html.autumn h2::after { content: ' 🍂'; font-size: .8em; }
 .owner-stat-grid > div { display: grid; gap: 4px; padding: 10px; background: var(--cave); border-radius: 10px; }
 .owner-stat-grid small { color: var(--muted); overflow-wrap: anywhere; min-width: 0; }
 .owner-card [data-drop-form] { margin-top: 12px; }
+.owner-card [data-original-import] { margin-top: 12px; }
 .owner-card [data-drop-results] > li { display: grid; gap: 4px; overflow-wrap: anywhere; }
 
 .owner-card [data-reminder] { margin-top: 12px; }

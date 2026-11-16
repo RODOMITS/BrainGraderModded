@@ -184,13 +184,17 @@ def view(db, uid, cfg, original, settle=False):
         start_date, span = period(group, now)
         if cfg['tasksMode'] == 'original':
             definition = original[group] if original else None
-            if definition and parse_date(definition['endsAt']) > now:
-                stop = datetime.fromtimestamp(parse_date(definition['endsAt']), MOSCOW)
-                start_date = stop - span
-            else:
+            if not definition:
                 result[group] = None
                 result['tasksUnavailable'] = active
                 continue
+            end_at = parse_date(definition['endsAt'])
+            if end_at > now:
+                stop = datetime.fromtimestamp(end_at, MOSCOW)
+                start_date = stop - span
+            else:
+                stop = start_date + span
+                definition = dict(definition, endsAt=stop.isoformat())
         else:
             stop = start_date + span
             definition = dict(endsAt=stop.isoformat(), quests=cfg[group])
