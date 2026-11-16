@@ -510,6 +510,7 @@
     upgrade: '<circle cx="12" cy="12" r="9"/><path d="M12 16V8"/><path d="m8.5 11.5 3.5-3.5 3.5 3.5"/>',
     gift: '<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M5 12v8h14v-8"/><path d="M12 8v12"/><path d="M12 8c-1.5-3-5-4-6-2s2 2.6 6 2c4 .6 7 0 6-2s-4.5-1-6 2z"/>',
     pass: '<path d="M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2.5a2.5 2.5 0 0 0 0 5V17a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2.5a2.5 2.5 0 0 0 0-5z"/><path d="m12 8.6.9 1.9 2.1.3-1.5 1.5.4 2.1-1.9-1-1.9 1 .4-2.1-1.5-1.5 2.1-.3z"/>',
+    crash: '<path d="M3 19h18M4 15l5-5 4 3 6-8m-4 0h4v4"/>',
     mines: '<path d="M8 3h8l5 7-9 11L3 10zM3 10h18M8 3l4 18 4-18"/>',
     dice: '<rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8" cy="8" r="1.3"/><circle cx="16" cy="8" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="8" cy="16" r="1.3"/><circle cx="16" cy="16" r="1.3"/>',
     mystery: '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9.6 9.6a2.4 2.4 0 1 1 3.4 2.2c-.6.3-1 .8-1 1.5v.6"/><path d="M12 16.8h.01"/>',
@@ -527,6 +528,7 @@
         { id: 'dice', label: 'Колор Дайс', href: '#/dice', icon: 'dice', show: () => !!state.cfg?.dice?.enabled },
         { id: 'pass', label: 'Grader Pass', href: '#/pass', icon: 'pass', badge: 'NEW' },
         { id: 'mines', label: 'Мины', href: '#/mines', icon: 'mines', badge: 'NEW', show: () => prefs.customContent },
+        { id: 'crash', label: 'Краш', href: '#/crash', icon: 'crash', badge: 'NEW', show: () => prefs.customContent },
         { id: 'giveaways', label: 'Розыгрыши', href: '#/giveaways', icon: 'gift' },
       ],
     },
@@ -552,6 +554,7 @@
     if (path.startsWith('/dice')) return 'dice';
     if (path.startsWith('/pass')) return 'pass';
     if (path.startsWith('/mines')) return 'mines';
+    if (path.startsWith('/crash')) return 'crash';
     if (path.startsWith('/giveaways')) return 'giveaways';
     if (path.startsWith('/referrals') || path.startsWith('/partner')) return 'referrals';
     if (path.startsWith('/profile')) return 'profile';
@@ -787,7 +790,7 @@
       if (k === 'customContent') {
         adminHost?.remove();
         adminHost = null;
-        if (!prefs.customContent && currentSection() === 'mines') location.hash = '#/';
+        if (!prefs.customContent && ['mines', 'crash'].includes(currentSection())) location.hash = '#/';
         else route();
       }
       if (k === 'sound' && on) sfx.tick();
@@ -965,7 +968,7 @@
           <label>Предмет<select name="item" required disabled><option value="">Загрузка списка…</option></select></label>
           <label>Способ получения<select name="source">
             <option value="">Любой</option><option value="case">Кейс</option><option value="upgrade">Апгрейдер</option>
-            <option value="mystery">Мистери</option><option value="dice">Дайсы</option><option value="mines">Мины</option>
+            <option value="mystery">Мистери</option><option value="dice">Дайсы</option><option value="mines">Мины</option><option value="crash">Краш</option>
             <option value="streak">Серия заходов</option><option value="pass">Grader Pass</option><option value="giveaway">Розыгрыш</option>
           </select></label>
           <label data-drop-stake hidden>Ставка в брейнротах<select name="stake" disabled><option value="">Любая</option></select></label>
@@ -1144,7 +1147,7 @@
       }
     };
     const updateStakeFilter = () => {
-      const available = ['upgrade', 'mystery', 'mines'].includes(dropForm.elements.source.value);
+      const available = ['upgrade', 'mystery', 'mines', 'crash'].includes(dropForm.elements.source.value);
       const stake = dropForm.elements.stake;
       stake.closest('label').hidden = !available;
       stake.disabled = !available;
@@ -1184,7 +1187,7 @@
       const status = $('[data-drop-status]', dropForm);
       const results = $('[data-drop-results]', dropForm);
       const sourceLabels = { case: 'Кейс', upgrade: 'Апгрейдер', mystery: 'Мистери', dice: 'Дайсы',
-        mines: 'Мины', streak: 'Серия заходов', pass: 'Grader Pass', giveaway: 'Розыгрыш' };
+        mines: 'Мины', crash: 'Краш', streak: 'Серия заходов', pass: 'Grader Pass', giveaway: 'Розыгрыш' };
       button.disabled = true;
       results.replaceChildren();
       status.textContent = 'Ищу…';
@@ -1385,7 +1388,7 @@
     closeMenu();
     stopTimers();
     newRender();
-    const tab = path.startsWith('/upgrade') ? 'upgrade' : path.startsWith('/mystery') ? 'mystery' : path.startsWith('/pass') ? 'pass' : path.startsWith('/dice') ? 'dice' : path.startsWith('/mines') ? 'mines' : path.startsWith('/giveaways') ? 'giveaways' : path.startsWith('/profile') ? 'profile' : path.startsWith('/referrals') ? 'referrals' : path.startsWith('/partner') ? 'partner' : path.startsWith('/faq') ? 'faq' : 'home';
+    const tab = path.startsWith('/upgrade') ? 'upgrade' : path.startsWith('/mystery') ? 'mystery' : path.startsWith('/pass') ? 'pass' : path.startsWith('/dice') ? 'dice' : path.startsWith('/mines') ? 'mines' : path.startsWith('/crash') ? 'crash' : path.startsWith('/giveaways') ? 'giveaways' : path.startsWith('/profile') ? 'profile' : path.startsWith('/referrals') ? 'referrals' : path.startsWith('/partner') ? 'partner' : path.startsWith('/faq') ? 'faq' : 'home';
     const m = /^\/case\/(\d+)$/.exec(path);
     view.dataset.page = m ? 'case' : tab; // для раскладки на компьютере
     drawTopnav();
@@ -1407,6 +1410,7 @@
     if (tab === 'pass') return renderPass();
     if (tab === 'dice') return renderDice();
     if (tab === 'mines') return renderMines();
+    if (tab === 'crash') return renderCrash();
     if (tab === 'giveaways') return renderGiveaways();
     if (tab === 'profile') return renderProfile();
     if (tab === 'referrals') return renderReferrals();
@@ -1436,7 +1440,7 @@
     drops.set(String(d.id), d);
     if (drops.size > 300) drops.delete(drops.keys().next().value);
   }
-  const dropHref = (d) => (d.source?.kind === 'case' && d.source.caseId ? `#/case/${d.source.caseId}` : d.source?.kind === 'upgrade' ? '#/upgrade' : d.source?.kind === 'mystery' ? '#/mystery' : d.source?.kind === 'mines' ? '#/mines' : null);
+  const dropHref = (d) => (d.source?.kind === 'case' && d.source.caseId ? `#/case/${d.source.caseId}` : d.source?.kind === 'upgrade' ? '#/upgrade' : d.source?.kind === 'mystery' ? '#/mystery' : d.source?.kind === 'mines' ? '#/mines' : d.source?.kind === 'crash' ? '#/crash' : null);
   // Слой «откуда выпал»: при наведении он плавно заезжает на место брейнрота (без шанса апгрейда)
   const srcLayer = (d) => {
     const src = d.source || {};
@@ -1444,6 +1448,7 @@
       return `<span class="drop-src">${src.caseImage ? `<img src="${esc(src.caseImage)}" alt="">` : `<i class="ds-ico">${svgIcon('box')}</i>`}<span class="ds-txt"><small>Кейс</small><b>${esc(src.caseName || 'Кейс')}</b></span></span>`;
     }
     if (src.kind === 'upgrade') return `<span class="drop-src"><i class="ds-ico">${svgIcon('upgrade')}</i><span class="ds-txt"><b>Апгрейд</b></span></span>`;
+    if (src.kind === 'crash') return `<span class="drop-src"><i class="ds-ico">${svgIcon('crash')}</i><span class="ds-txt"><b>Краш</b></span></span>`;
     if (src.kind === 'mines') return `<span class="drop-src"><i class="ds-ico">${svgIcon('mines')}</i><span class="ds-txt"><b>Мины</b></span></span>`;
     if (src.kind === 'mystery') return `<span class="drop-src"><i class="ds-ico">${svgIcon('mystery')}</i><span class="ds-txt"><b>Мистери</b></span></span>`;
     return '';
@@ -3151,6 +3156,255 @@
   //                         КОЛОР ДАЙС
   // 4 кубика по 6 цветов: выбираешь цвет и ставку, выплата за число кубиков твоего цвета.
   // =====================================================================
+  async function renderCrash() {
+    if (!prefs.customContent) {
+      view.innerHTML = '<div class="empty">Включи кастомный контент в настройках, чтобы открыть Краш.</div>';
+      return;
+    }
+    const render = state.render;
+    view.innerHTML = '<div class="skeleton"></div>';
+    let round, inventory;
+    try {
+      [round, inventory] = await Promise.all([api('/api/crash/current'), api('/api/inventory')]);
+    } catch (error) {
+      if (!stale(render)) view.innerHTML = `<div class="empty">${esc(error.message)}</div>`;
+      return;
+    }
+    if (stale(render)) return;
+
+    const root = h(`<section class="crash-wrap">
+      <header class="section-head"><h1>Краш</h1><div class="crash-history" aria-label="Последние раунды"></div></header>
+      <div class="crash-stage" data-mode="idle">
+        <canvas aria-hidden="true"></canvas><div class="crash-flash" aria-hidden="true"></div>
+        <div class="crash-readout"><span class="crash-status" role="status"></span><strong>1,00×</strong></div>
+        <span class="crash-clock" aria-hidden="true">0,0 с</span>
+      </div>
+      <div class="crash-controls">
+        <div class="crash-stake"><span>Ставка</span><div></div></div>
+        <div class="crash-value"><span>Выплата</span><div></div></div>
+        <button class="btn crash-play" type="button">Начать</button>
+      </div>
+      <div class="crash-result" hidden role="status"></div>
+      <section class="crash-inventory"><div class="section-head"><h2>Мои брейнроты</h2></div><div class="crash-items"></div></section>
+    </section>`);
+    view.replaceChildren(root);
+    const stage = $('.crash-stage', root);
+    const canvas = $('canvas', stage);
+    const status = $('.crash-status', root);
+    const multiplier = $('strong', stage);
+    const clock = $('.crash-clock', stage);
+    const button = $('.crash-play', root);
+    const inventoryBox = $('.crash-items', root);
+    const result = $('.crash-result', root);
+    const stakeBox = $('.crash-stake div', root);
+    const valueBox = $('.crash-value div', root);
+    const rate = round.rate;
+    const points = new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    let game = round.game;
+    let recent = round.recent;
+    let selected = null;
+    let busy = false;
+    let polling = false;
+    let sampleAt = performance.now();
+    let lastPaint = -Infinity;
+    let lastMode = '';
+    let graphKey = '';
+    const active = () => game?.status === 'active';
+    const bet = () => inventory.find(row => row.id === selected)?.item;
+    const currentStake = () => active() || !selected ? game?.stake : bet();
+    const showRound = () => active() || !selected && Boolean(game);
+
+    function drawInventory() {
+      const rows = inventory.filter(item => item.status === 'owned' && !item.test && !item.item.coins);
+      inventoryBox.innerHTML = rows.length ? `<div class="items">${rows.map(row => `
+        <button class="item rar-${esc(row.item.rarity)}" data-crash-item="${row.id}" type="button">
+          ${ogTag(row.item)}${itemPicture(row.item)}<div class="n">${esc(nm(row.item))}</div>${price(row.item.price)}
+        </button>`).join('')}</div>` : '<div class="empty">Пока нечего поставить. <a href="#/">К кейсам</a></div>';
+      markInventory();
+    }
+
+    function markInventory() {
+      $$('[data-crash-item]', inventoryBox).forEach(card => {
+        card.disabled = busy || active();
+        const chosen = Number(card.dataset.crashItem) === selected;
+        card.classList.toggle('sel', chosen);
+        card.setAttribute('aria-pressed', String(chosen));
+      });
+    }
+
+    function drawSummary() {
+      const stake = currentStake();
+      stakeBox.innerHTML = stake ? `${itemPicture(stake)}<b>${nmi(stake)}</b>` : '<b>Выбери предмет</b>';
+      const payout = showRound() ? game?.payout : null;
+      result.hidden = !payout;
+      result.innerHTML = payout ? `${payout.item ? `${itemPicture(payout.item)}<b>${nmi(payout.item)}</b>` : ''}
+        ${payout.coins ? `<span>${payout.item ? '+' : ''}${price(payout.coins)}</span>` : ''}` : '';
+      $('.crash-history', root).innerHTML = recent.slice(0, 8).map(row =>
+        `<span class="crash-chip ${row.status === 'cashed' ? 'cashed' : 'lost'}" title="${row.status === 'cashed' ? 'Выход' : 'Краш'}">${points.format(row.multiplier)}×</span>`).join('');
+      markInventory();
+    }
+
+    function finishRound(next) {
+      const ended = active() && next.status !== 'active';
+      const won = next.status === 'cashed';
+      game = next;
+      sampleAt = performance.now();
+      if (won || game.status === 'lost') recent = [game, ...recent.filter(row => row.id !== game.id)].slice(0, 8);
+      if (ended) {
+        haptic(won ? 'success' : 'error');
+        if (won) sfx.upWin();
+        else sfx.upLose();
+        stage.classList.remove('crash-impact');
+        void stage.offsetWidth;
+        stage.classList.add('crash-impact');
+      }
+      drawSummary();
+    }
+
+    async function move() {
+      if (button.disabled) return;
+      const collecting = active();
+      const id = collecting ? game.id : selected;
+      busy = true;
+      button.disabled = true;
+      markInventory();
+      try {
+        const response = await api(collecting ? '/api/crash/cashout' : '/api/crash/start',
+          { method: 'POST', body: collecting ? { gameId: id, key: newKey() } : { ids: [id], key: newKey() } });
+        if (response.balance != null) setBalance(response.balance);
+        if (stale(render)) return;
+        if (!collecting) {
+          inventory = inventory.filter(row => row.id !== id);
+          selected = null;
+        }
+        finishRound(response.game);
+        drawInventory();
+        if (response.game.payout?.inventoryId) {
+          inventory = await api('/api/inventory');
+          if (!stale(render)) drawInventory();
+        }
+      } catch (error) {
+        if (!stale(render)) fail(error);
+      } finally {
+        busy = false;
+        if (!stale(render)) markInventory();
+      }
+    }
+
+    inventoryBox.onclick = event => {
+      const card = event.target.closest('[data-crash-item]');
+      if (!card || busy || active()) return;
+      const id = Number(card.dataset.crashItem);
+      selected = id === selected ? null : id;
+      tick();
+      drawSummary();
+    };
+    button.onclick = move;
+
+    const poll = setInterval(async () => {
+      if (!active() || busy || polling || document.hidden) return;
+      polling = true;
+      const id = game.id;
+      try {
+        const { game: fresh } = await api('/api/crash/current');
+        if (!stale(render) && !busy && active() && game.id === id && fresh?.id === id) {
+          if (fresh.status !== 'active') finishRound(fresh);
+          else {
+            const now = performance.now();
+            game.elapsed = Math.max(fresh.elapsed, game.elapsed + (now - sampleAt) / 1000);
+            sampleAt = now;
+          }
+        }
+      } catch {} finally { polling = false; }
+    }, 600);
+    state.timers.push(poll);
+
+    function frame(now) {
+      if (stale(render) || !root.isConnected) return;
+      requestAnimationFrame(frame);
+      if (now - lastPaint < (reduced ? 120 : 30)) return;
+      lastPaint = now;
+      const show = showRound();
+      const elapsed = show ? game.elapsed + (active() ? (now - sampleAt) / 1000 : 0) : 0;
+      const value = active() ? Math.min(50, Math.floor(100 * Math.exp(rate * Math.max(0, elapsed))) / 100) : show ? game.multiplier : 1;
+      const mode = active() ? elapsed < 0 ? 'countdown' : 'running' : show ? game.status : 'idle';
+      if (lastMode !== mode) {
+        lastMode = mode;
+        stage.dataset.mode = mode;
+        status.textContent = { idle: 'Забери выплату до обвала', countdown: 'Стартуем…', running: 'Множитель растёт',
+          lost: 'Краш', cashed: 'Выплата забрана' }[mode];
+      }
+      multiplier.textContent = points.format(value) + '×';
+      clock.textContent = Math.max(0, elapsed).toFixed(1).replace('.', ',') + ' с';
+      const total = currentStake()?.price * value;
+      const amount = show && game.status === 'lost' ? 0 : total;
+      const label = Number.isFinite(amount) ? price(Math.round(amount * 100) / 100) : '—';
+      if (valueBox.dataset.amount !== label) {
+        valueBox.dataset.amount = label;
+        valueBox.innerHTML = label;
+      }
+      const action = active() ? 'Забрать' : 'Начать';
+      if (button.textContent !== action) button.textContent = action;
+      button.disabled = busy || (active() ? value <= 1 : !bet());
+      const nextGraph = `${mode}:${elapsed}:${canvas.clientWidth}:${canvas.clientHeight}`;
+      if (nextGraph !== graphKey) {
+        graphKey = nextGraph;
+        drawCrashGraph(canvas, Math.max(0, elapsed), value, rate, mode);
+      }
+    }
+    drawInventory();
+    drawSummary();
+    requestAnimationFrame(frame);
+  }
+
+  function drawCrashGraph(canvas, elapsed, value, rate, mode) {
+    const { clientWidth: w, clientHeight: h } = canvas;
+    if (!w || !h) return;
+    const dpr = Math.min(2, devicePixelRatio || 1);
+    if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(h * dpr);
+    }
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    const left = 20, bottom = h - 25;
+    const width = w - 40, height = h * .60;
+    const xMax = Math.max(5, elapsed * 1.14);
+    const yMax = Math.max(1, (value - 1) * 1.28);
+    const x = t => left + t / xMax * width;
+    const y = m => bottom - (m - 1) / yMax * height;
+    const color = mode === 'lost' ? '#ff706d' : mode === 'cashed' ? '#65f3a7' : '#6de6ff';
+    const end = Math.min(elapsed, Math.log(50) / rate);
+    const endX = x(end), endY = y(value);
+    const line = new Path2D();
+    line.moveTo(left, bottom);
+    for (let i = 1; i < 65; i++) {
+      const t = end * i / 65;
+      line.lineTo(x(t), y(Math.min(value, Math.exp(rate * t))));
+    }
+    line.lineTo(endX, endY);
+    const area = new Path2D(line);
+    area.lineTo(endX, bottom);
+    area.closePath();
+    const fade = ctx.createLinearGradient(0, endY, 0, bottom + 1);
+    fade.addColorStop(0, color + '55');
+    fade.addColorStop(1, color + '00');
+    ctx.fillStyle = fade;
+    ctx.fill(area);
+    ctx.lineWidth = 2.5;
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = color;
+    ctx.shadowBlur = 13;
+    ctx.shadowColor = color;
+    ctx.stroke(line);
+    ctx.beginPath();
+    ctx.arc(endX, endY, 4.5, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+  }
+
   const minesUI = { game: null, inv: [], pool: [], selected: null, busy: false, tab: 'mine', shopQuery: '' };
   const mineGlyph = (bomb) => bomb
     ? '<svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="14" cy="19" r="9" fill="currentColor"/><path d="m20 12 4-4m-2-3 4 4m-1-8 1 3m3 2 3-1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="m9 17 2-3" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>'

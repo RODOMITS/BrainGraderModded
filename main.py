@@ -372,6 +372,14 @@ def init_db():
           status TEXT NOT NULL, mine_count INTEGER NOT NULL, board TEXT NOT NULL, revealed TEXT NOT NULL,
           stake TEXT NOT NULL, stake_value REAL NOT NULL, custom_session TEXT, created REAL NOT NULL, payout TEXT);
         CREATE UNIQUE INDEX IF NOT EXISTS mines_active_user ON mines_games(user_id) WHERE status='active';
+        CREATE TABLE IF NOT EXISTS crash_games(
+          id INTEGER PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id),
+          status TEXT NOT NULL, started REAL NOT NULL, crash_at REAL NOT NULL,
+          crash_multiplier REAL NOT NULL, stake TEXT NOT NULL, custom_session TEXT,
+          cash_multiplier REAL, payout TEXT
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS crash_active_user ON crash_games(user_id) WHERE status='active';
+        CREATE INDEX IF NOT EXISTS crash_recent_user ON crash_games(user_id,id DESC);
         CREATE TABLE IF NOT EXISTS inventory(id INTEGER PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id),
           item TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'owned', test INTEGER NOT NULL DEFAULT 0,
           source TEXT NOT NULL, created REAL NOT NULL);
@@ -458,6 +466,7 @@ def init_db():
         c.execute("DELETE FROM inventory WHERE json_extract(item,'$.customSession') IS NOT NULL")
         c.execute("DELETE FROM next_results WHERE json_extract(value,'$.item.customSession') IS NOT NULL")
         c.execute("UPDATE mines_games SET status='expired' WHERE status='active' AND custom_session IS NOT NULL")
+        c.execute("UPDATE crash_games SET status='expired' WHERE status='active' AND custom_session IS NOT NULL")
         if not c.execute('SELECT 1 FROM giveaways WHERE id=1').fetchone():
             source_path=ROOT/'source_catalog.json'
             source_items=json.loads(source_path.read_text(encoding='utf-8-sig'))['items'] if source_path.exists() else []
@@ -470,7 +479,7 @@ def init_db():
             c.execute('INSERT INTO settings VALUES (?,?)', ('catalog', json.dumps(dict(items=[],cases=[]))))
         # Preserve previous wins in the feed when upgrading an existing deployment.
         previous = c.execute('''SELECT i.* FROM inventory i
-          WHERE i.test=0 AND i.source IN ('case','upgrade','mystery','dice','mines')
+          WHERE i.test=0 AND i.source IN ('case','upgrade','mystery','dice','mines','crash')
           AND json_extract(i.item,'$.customSession') IS NULL
           AND NOT EXISTS(SELECT 1 FROM live_drops d WHERE d.inventory_id=i.id)''').fetchall()
         for row in previous:
@@ -699,7 +708,7 @@ def add_item(item, source, test=False, uid=None, *, stakes=()):
     created = time.time()
     iid = db().execute('INSERT INTO inventory(user_id,item,test,source,created) VALUES (?,?,?,?,?)',
                        (uid or g.uid,json.dumps(item),int(test),kind,created)).lastrowid
-    if not test and not item.get('customSession') and kind in ('case','upgrade','mystery','dice','mines'):
+    if not test and not item.get('customSession') and kind in ('case','upgrade','mystery','dice','mines','crash'):
         db().execute('INSERT INTO live_drops VALUES (?,?,?,?,?)',
                      (iid,json.dumps(item),json.dumps(details),item['price'],created))
     if stakes:
@@ -982,7 +991,7 @@ def mines_multiplier(count, opened):
     return math.floor(0.99*math.comb(25,opened)/math.comb(25-count,opened)*100)/100
 
 
-def mines_reward(value):
+def game_item_reward(value):
     pool = (item for item in catalog()['items'] if not item.get('coins') and item['price'] <= value)
     item = max(pool, key=lambda i: (i['price'], -i['id']), default=None)
     return dict(item=item,coins=round(value-(item['price'] if item else 0),2),total=value)
@@ -996,7 +1005,7 @@ def mines_view(row):
     return dict(id=row['id'],status=row['status'],mines=count,revealed=opened,
                 bombs=json.loads(row['board']) if row['status']!='active' else [],
                 stake=json.loads(row['stake']),stakeValue=row['stake_value'],multiplier=mult,
-                reward=result if result else mines_reward(value),payout=result)
+                reward=result if result else game_item_reward(value),payout=result)
 
 
 def mines_current():
@@ -1009,12 +1018,94 @@ def mines_current():
 
 def mines_cashout(row):
     mult=mines_multiplier(row['mine_count'],len(json.loads(row['revealed'])))
-    payout=mines_reward(round(row['stake_value']*mult,2))
+    payout=game_item_reward(round(row['stake_value']*mult,2))
     if payout['item']:
         payout['inventoryId']=add_item(payout['item'], 'mines', stakes=[json.loads(row['stake'])])
     db().execute('UPDATE users SET balance=balance+? WHERE id=?',(payout['coins'],g.uid))
     db().execute("UPDATE mines_games SET status='cashed',payout=? WHERE id=?",(json.dumps(payout),row['id']))
     return db().execute('SELECT * FROM mines_games WHERE id=?',(row['id'],)).fetchone()
+
+
+CRASH_RATE = 0.16
+CRASH_LIMIT = 50
+
+
+def crash_multiplier(elapsed):
+    return math.floor(100 * math.exp(CRASH_RATE * max(0, elapsed))) / 100
+
+
+def crash_view(row, now):
+    status = row['status']
+    if status == 'active' and now >= row['crash_at']:
+        status = 'lost'
+    if status == 'lost':
+        multiplier = row['crash_multiplier']
+        elapsed = row['crash_at'] - row['started']
+    elif status == 'cashed':
+        multiplier = row['cash_multiplier']
+        elapsed = math.log(multiplier) / CRASH_RATE
+    else:
+        elapsed = now - row['started']
+        multiplier = crash_multiplier(elapsed)
+    return dict(id=row['id'], status=status, elapsed=elapsed, multiplier=multiplier,
+                stake=json.loads(row['stake']), payout=json.loads(row['payout']) if row['payout'] else None)
+
+
+def crash_round(path, body):
+    if not custom_content_enabled():
+        raise Problem('Включи кастомный контент в настройках', 'custom_content_disabled', 403)
+
+    c = db()
+    now = time.time()
+    if path == 'crash/current':
+        rows = c.execute("""SELECT * FROM crash_games WHERE user_id=? AND status<>'expired'
+            AND (custom_session IS NULL OR custom_session=?) ORDER BY id DESC LIMIT 10""",
+                         (g.uid, g.play_session)).fetchall()
+        games = [crash_view(row, now) for row in rows]
+        return dict(game=games[0] if games else None, recent=[dict(id=game['id'],
+                    multiplier=game['multiplier'],status=game['status']) for game in games if game['status'] != 'active'],
+                    rate=CRASH_RATE)
+
+    if path == 'crash/start':
+        c.execute("""UPDATE crash_games SET status='lost'
+            WHERE user_id=? AND status='active' AND crash_at<=?""", (g.uid,now))
+        if c.execute("SELECT 1 FROM crash_games WHERE user_id=? AND status='active'", (g.uid,)).fetchone():
+            raise Problem('Раунд уже запущен')
+        bets = selected(body)
+        if len(bets) != 1 or bets[0]['item'].get('coins'):
+            raise Problem('Выбери одного брейнрота для ставки')
+        stake = bets[0]['item']
+        started = now + 1.2
+        # P(crash point >= x) = 0.97 / x for x > 1, capped at CRASH_LIMIT.
+        crash = min(CRASH_LIMIT, max(1, 0.97 / max(1e-9, 1 - RNG.random())))
+        crash_at = started + math.log(crash) / CRASH_RATE
+        consume(bets, 'crash')
+        game_id = c.execute("""INSERT INTO crash_games
+            (user_id,status,started,crash_at,crash_multiplier,stake,custom_session)
+            VALUES (?,'active',?,?,?,?,?)""",
+                            (g.uid,started,crash_at,math.floor(crash*100)/100,json.dumps(stake),stake.get('customSession'))).lastrowid
+        row = c.execute('SELECT * FROM crash_games WHERE id=?', (game_id,)).fetchone()
+        return dict(game=crash_view(row, time.time()), rate=CRASH_RATE)
+
+    game_id = integer(body.get('gameId'))
+    row = c.execute("SELECT * FROM crash_games WHERE id=? AND user_id=? AND status<>'expired'",
+                    (game_id,g.uid)).fetchone()
+    if not row or (row['custom_session'] and row['custom_session'] != g.play_session):
+        raise Problem('Раунд не найден', 'not_found', 404)
+    if row['status'] != 'active' or now >= row['crash_at']:
+        return dict(game=crash_view(row,now),balance=user()['balance'])
+    multiplier = crash_multiplier(now - row['started'])
+    if multiplier <= 1:
+        raise Problem('Дождись роста множителя')
+    stake = json.loads(row['stake'])
+    payout = game_item_reward(round(stake['price'] * multiplier, 2))
+    if payout['item']:
+        payout['inventoryId'] = add_item(payout['item'], 'crash', stakes=[stake])
+    c.execute('UPDATE users SET balance=balance+? WHERE id=?', (payout['coins'],g.uid))
+    c.execute("UPDATE crash_games SET status='cashed',cash_multiplier=?,payout=? WHERE id=?",
+              (multiplier,json.dumps(payout),game_id))
+    row = c.execute('SELECT * FROM crash_games WHERE id=?', (game_id,)).fetchone()
+    return dict(game=crash_view(row,now),balance=user()['balance'])
 
 
 REFERRAL_STATS = {
@@ -1277,6 +1368,8 @@ def dispatch(path, body):
         return claim_pass(body)
     if path == 'admin/pass':
         return save_pass(body) if post else admin_pass()
+    if (path == 'crash/current' and not post) or (path in ('crash/start', 'crash/cashout') and post):
+        return crash_round(path, body)
     if path=='mines/current' and not post:
         row=mines_current()
         return dict(game=mines_view(row) if row else None)
@@ -1971,7 +2064,7 @@ def owner_stats():
                    averageOnline=average, daytimeOnline=daytime_average)
 
 
-DROP_SOURCES = ('case', 'upgrade', 'mystery', 'dice', 'mines', 'streak', 'pass', 'giveaway')
+DROP_SOURCES = ('case', 'upgrade', 'mystery', 'dice', 'mines', 'crash', 'streak', 'pass', 'giveaway')
 
 
 @app.get('/api/owner/drop-options')
@@ -2016,8 +2109,8 @@ def owner_drops():
     player = request.args.get('player', '').strip().casefold().removeprefix('@')
     mutation = request.args.get('mutation', '')
     stake_filter = request.args.get('stake', '').strip().casefold()
-    if len(stake_filter) > 100 or (stake_filter and source not in ('upgrade', 'mystery', 'mines')):
-        raise Problem('Выбери ставку для мин, мистери или апгрейдера')
+    if len(stake_filter) > 100 or (stake_filter and source not in ('upgrade', 'mystery', 'mines', 'crash')):
+        raise Problem('Выбери ставку для краша, мин, мистери или апгрейдера')
     clock = request.args.get('time', '')
     streak_filter = request.args.get('streak', '').strip()
     streak_days = integer(streak_filter, 0) if streak_filter else None
