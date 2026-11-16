@@ -2225,13 +2225,15 @@ html.autumn h2::after { content: ' 🍂'; font-size: .8em; }
 @keyframes crash-burst { from { opacity: 1; transform: scale(.65); } to { opacity: 0; transform: scale(1.8); } }
 @keyframes crash-pop { 35% { transform: scale(1.08); } }
 .crash-controls { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(110px, 1fr); gap: 10px; margin-top: 12px; }
-.crash-stake, .crash-value, .crash-result { border: 1px solid var(--ridge); border-radius: 14px; background: var(--stone); padding: 10px 13px; }
+.crash-stake, .crash-value { border: 1px solid var(--ridge); border-radius: 14px; background: var(--stone); padding: 10px 13px; }
 .crash-stake > span, .crash-value > span { display: block; color: var(--muted); font-size: 12px; margin-bottom: 4px; }
-.crash-stake > div, .crash-value > div, .crash-result:not([hidden]) { display: flex; align-items: center; gap: 8px; min-height: 28px; }
-.crash-stake > div > img, .crash-result > img { flex: none; width: 32px; height: 32px; object-fit: contain; }
-.crash-stake b { min-width: 0; overflow-wrap: anywhere; }
+.crash-stake > div, .crash-prize:not([hidden]) { display: flex; align-items: center; gap: 8px; min-height: 28px; }
+.crash-stake > div > img, .crash-prize > img { flex: none; width: 32px; height: 32px; object-fit: contain; }
+.crash-stake b, .crash-prize b { min-width: 0; overflow-wrap: anywhere; }
 .crash-controls .crash-play { width: 100%; margin: 0; }
-.crash-result { margin-top: 10px; border-color: color-mix(in srgb, var(--crystal) 45%, var(--ridge)); }
+.crash-payout { min-height: 28px; }
+.crash-coins { font-size: 13px; color: var(--crystal-hi); }
+.crash-prize:not([hidden]) + .crash-coins:not([hidden]) { margin-top: 3px; }
 .crash-inventory { margin-top: 16px; padding: 14px; border: 1px solid var(--ridge); border-radius: 16px; background: var(--stone); }
 .crash-inventory h2 { margin: 0 0 10px; }
 .crash-items .items { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; }

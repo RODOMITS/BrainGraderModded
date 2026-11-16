@@ -3302,6 +3302,16 @@
   //                         КОЛОР ДАЙС
   // 4 кубика по 6 цветов: выбираешь цвет и ставку, выплата за число кубиков твоего цвета.
   // =====================================================================
+  function previewItemReward(pool, total) {
+    let best = null;
+    for (const item of pool) {
+      if (item.price <= total && (!best || item.price > best.price || item.price === best.price && item.id < best.id)) {
+        best = item;
+      }
+    }
+    return { item: best, coins: Math.round((total - (best?.price || 0)) * 100) / 100, total };
+  }
+
   async function renderCrash() {
     if (!prefs.customContent) {
       view.innerHTML = '<div class="empty">Включи кастомный контент в настройках, чтобы открыть Краш.</div>';
@@ -3309,9 +3319,11 @@
     }
     const render = state.render;
     view.innerHTML = '<div class="skeleton"></div>';
-    let round, inventory;
+    let round, inventory, shop;
     try {
-      [round, inventory] = await Promise.all([api('/api/crash/current'), api('/api/inventory')]);
+      [round, inventory, shop] = await Promise.all([
+        api('/api/crash/current'), api('/api/inventory'), api('/api/shop'),
+      ]);
     } catch (error) {
       if (!stale(render)) view.innerHTML = `<div class="empty">${esc(error.message)}</div>`;
       return;
@@ -3327,10 +3339,11 @@
       </div>
       <div class="crash-controls">
         <div class="crash-stake"><span>Ставка</span><div></div></div>
-        <div class="crash-value"><span>Выплата</span><div></div></div>
+        <div class="crash-value"><span>Выплата</span>
+          <div class="crash-payout"><div class="crash-prize" hidden></div><div class="crash-coins">—</div></div>
+        </div>
         <button class="btn crash-play" type="button">Начать</button>
       </div>
-      <div class="crash-result" hidden role="status"></div>
       <section class="crash-inventory"><div class="section-head"><h2>Мои брейнроты</h2></div><div class="crash-items"></div></section>
     </section>`);
     view.replaceChildren(root);
@@ -3341,9 +3354,9 @@
     const clock = $('.crash-clock', stage);
     const button = $('.crash-play', root);
     const inventoryBox = $('.crash-items', root);
-    const result = $('.crash-result', root);
     const stakeBox = $('.crash-stake div', root);
-    const valueBox = $('.crash-value div', root);
+    const prizeBox = $('.crash-prize', root);
+    const coinsBox = $('.crash-coins', root);
     const rate = round.rate;
     const points = new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     let game = round.game;
@@ -3355,6 +3368,9 @@
     let lastPaint = -Infinity;
     let lastMode = '';
     let graphKey = '';
+    let quoteKey;
+    let displayedPrize;
+    let displayedCoins;
     const active = () => game?.status === 'active';
     const bet = () => inventory.find(row => row.id === selected)?.item;
     const currentStake = () => active() || !selected ? game?.stake : bet();
@@ -3381,13 +3397,35 @@
     function drawSummary() {
       const stake = currentStake();
       stakeBox.innerHTML = stake ? `${itemPicture(stake)}<b>${nmi(stake)}</b>` : '<b>Выбери предмет</b>';
-      const payout = showRound() ? game?.payout : null;
-      result.hidden = !payout;
-      result.innerHTML = payout ? `${payout.item ? `${itemPicture(payout.item)}<b>${nmi(payout.item)}</b>` : ''}
-        ${payout.coins ? `<span>${payout.item ? '+' : ''}${price(payout.coins)}</span>` : ''}` : '';
       $('.crash-history', root).innerHTML = recent.slice(0, 8).map(row =>
         `<span class="crash-chip ${row.status === 'cashed' ? 'cashed' : 'lost'}" title="${row.status === 'cashed' ? 'Выход' : 'Краш'}">${points.format(row.multiplier)}×</span>`).join('');
       markInventory();
+    }
+
+    function drawPayout(multiplier) {
+      const mode = showRound() ? game.status : 'idle';
+      const stake = currentStake();
+      const total = stake ? Math.round(stake.price * multiplier * 100) / 100 : null;
+      const key = `${mode}:${game?.id || ''}:${total}`;
+      if (key === quoteKey) return;
+      quoteKey = key;
+
+      const payout = mode === 'cashed' ? game.payout : mode === 'lost' ? { coins: 0 }
+        : total != null ? previewItemReward(shop.items, total) : null;
+      const item = payout?.item;
+      const prize = item?.id ?? null;
+      if (prize !== displayedPrize) {
+        displayedPrize = prize;
+        prizeBox.hidden = !item;
+        prizeBox.innerHTML = item ? `${itemPicture(item)}<b>${nmi(item)}</b>` : '';
+      }
+
+      const coins = payout ? item ? (payout.coins > 0 ? `+ ${fmt(payout.coins)} BG доплатой` : '') : price(payout.coins) : '—';
+      if (coins !== displayedCoins) {
+        displayedCoins = coins;
+        coinsBox.hidden = !coins;
+        coinsBox.innerHTML = coins;
+      }
     }
 
     function finishRound(next) {
@@ -3482,13 +3520,7 @@
       }
       multiplier.textContent = points.format(value) + '×';
       clock.textContent = Math.max(0, elapsed).toFixed(1).replace('.', ',') + ' с';
-      const total = currentStake()?.price * value;
-      const amount = show && game.status === 'lost' ? 0 : total;
-      const label = Number.isFinite(amount) ? price(Math.round(amount * 100) / 100) : '—';
-      if (valueBox.dataset.amount !== label) {
-        valueBox.dataset.amount = label;
-        valueBox.innerHTML = label;
-      }
+      drawPayout(value);
       const action = active() ? 'Забрать' : 'Начать';
       if (button.textContent !== action) button.textContent = action;
       button.disabled = busy || (active() ? value <= 1 : !bet());
@@ -3753,7 +3785,7 @@
     const game=minesUI.game;const active=game?.status==='active';
     const item=active?game.stake:minesUI.inv.find(i=>i.id===minesUI.selected)?.item;
     let reward=game&&!minesUI.selected?game.reward:null;
-    if(!reward&&item){const nearest=[...minesUI.pool].filter(i=>i.price<=item.price).sort((a,b)=>b.price-a.price||a.id-b.id)[0];reward={item:nearest||null,coins:Math.round((item.price-(nearest?.price||0))*100)/100,total:item.price};}
+    if (!reward && item) reward = previewItemReward(minesUI.pool, item.price);
     $('#minesCount').disabled=active||minesUI.busy;
     $('#minesMult').textContent='×'+fmt(game&&!minesUI.selected?game.multiplier:1);
     $('#minesReward').innerHTML=reward?`${reward.item?`<div class="mines-prize">${itemPicture(reward.item)}<span>${esc(reward.item.name)}</span></div>`:''}<b>${price(reward.total)}</b>${reward.coins>0?`<small>+ ${fmt(reward.coins)} BG доплатой</small>`:''}`:'<span class="muted">Выбери ставку</span>';
