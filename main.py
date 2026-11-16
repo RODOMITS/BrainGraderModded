@@ -21,6 +21,7 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 import grader_pass
 import named_cases
+from cryptography.fernet import Fernet, InvalidToken
 from PIL import Image
 
 from flask import Flask, Response, g, jsonify, redirect, request, send_file, send_from_directory
@@ -44,6 +45,27 @@ CUSTOM_SESSIONS = {}
 CUSTOM_LOCK = threading.RLock()
 ORIGINAL_LOCK = threading.Lock()
 SHARED_ORIGINAL = {}
+ORIGINAL_TOKEN = os.getenv('ORIGINAL_INIT_DATA', '').strip()
+
+
+def original_session_cipher():
+    bot_token = os.getenv('BOT_TOKEN', '').strip()
+    if not bot_token:
+        raise Problem('Для сохранения сессии нужен BOT_TOKEN', status=503)
+    key = hmac.digest(bot_token.encode(), b'BrainGraderModded/original-init-data/v1', 'sha256')
+    return Fernet(base64.urlsafe_b64encode(key))
+
+
+def load_original_session():
+    global ORIGINAL_TOKEN
+    with app.app_context():
+        row = db().execute("SELECT value FROM settings WHERE key='original-session-v1'").fetchone()
+    if row:
+        try:
+            ORIGINAL_TOKEN = original_session_cipher().decrypt(row[0].encode()).decode()
+        except (Problem, InvalidToken, UnicodeError):
+            app.logger.warning('Saved original session could not be decrypted. Re-enter it in owner settings.')
+
 
 
 class OriginalNoRedirect(HTTPRedirectHandler):
@@ -215,11 +237,11 @@ def refresh_original(entry, token, kind):
 
 
 def original_snapshot(kind):
-    token = os.getenv('ORIGINAL_INIT_DATA', '').strip()
-    if not token:
-        return None
     now = time.time()
     with ORIGINAL_LOCK:
+        token = ORIGINAL_TOKEN
+        if not token:
+            return None
         if now >= SHARED_ORIGINAL.get(kind + '_next', 0) and not SHARED_ORIGINAL.get(kind + '_loading'):
             SHARED_ORIGINAL[kind + '_loading'] = True
             threading.Thread(target=refresh_original, args=(SHARED_ORIGINAL, token, kind), daemon=True).start()
@@ -230,9 +252,9 @@ def original_snapshot(kind):
 
 
 def original_status(kind):
-    if not os.getenv('ORIGINAL_INIT_DATA', '').strip():
-        return 'missing_env'
     with ORIGINAL_LOCK:
+        if not ORIGINAL_TOKEN:
+            return 'missing_env'
         if SHARED_ORIGINAL.get(kind + '_loading'):
             return 'loading'
         return SHARED_ORIGINAL.get(kind + '_status', 'waiting')
@@ -718,7 +740,7 @@ def home():
     if live is None:
         status = original_status('live')
         message = {
-            'missing_env': 'Сервер не получил ORIGINAL_INIT_DATA',
+            'missing_env': 'Сессия оригинала не настроена',
             'auth_rejected': 'Оригинал отклонил серверную сессию',
             'network_error': 'Сервер не смог подключиться к оригиналу',
             'invalid_response': 'Оригинал вернул неожиданный формат ленты',
@@ -1837,6 +1859,50 @@ def require_owner():
         raise Problem('Доступ только владельцу', 'forbidden', 403)
 
 
+@app.route('/api/owner/original-session', methods=['GET', 'POST'])
+def owner_original_session():
+    global ORIGINAL_TOKEN, SHARED_ORIGINAL
+    require_owner()
+    if request.method == 'POST':
+        body = request.get_json(silent=True)
+        token = body.get('initData') if isinstance(body, dict) else None
+        token = token.strip() if isinstance(token, str) else ''
+        try:
+            if not 1 <= len(token) <= 8192 or not token.isascii() or not token.isprintable():
+                raise ValueError
+            fields = parse_qsl(token, strict_parsing=True, max_num_fields=24)
+            data = dict(fields)
+            if (len(data) != len(fields) or not re.fullmatch(r'[0-9a-f]{64}', data.get('hash', ''))
+                    or not re.fullmatch(r'[0-9]{1,12}', data.get('auth_date', '')) or not data.get('user')):
+                raise ValueError
+        except ValueError:
+            raise Problem('Вставь полную строку initData из оригинального Mini App') from None
+
+        cipher = original_session_cipher()
+        try:
+            if not isinstance(original_api('config', token), dict):
+                raise ValueError
+        except HTTPError as error:
+            if error.code in (400, 401, 403):
+                raise Problem('Оригинал не принял сессию. Открой Mini App заново и вставь свежую строку') from None
+            raise Problem('Оригинал временно недоступен', status=502) from None
+        except (OSError, ValueError):
+            raise Problem('Не удалось проверить сессию у оригинала', status=502) from None
+
+        encrypted = cipher.encrypt(token.encode()).decode()
+        with ORIGINAL_LOCK:
+            c = db()
+            with c:
+                c.execute("INSERT OR REPLACE INTO settings VALUES ('original-session-v1',?)", (encrypted,))
+            ORIGINAL_TOKEN = token
+            # In-flight refreshes retain the old dictionary and cannot populate the new cache.
+            SHARED_ORIGINAL = {}
+    with ORIGINAL_LOCK:
+        response = jsonify(configured=bool(ORIGINAL_TOKEN))
+    response.headers['Cache-Control'] = 'no-store'
+    return response
+
+
 @app.route('/api/owner/reminders', methods=['GET', 'POST'])
 def owner_reminders():
     require_owner()
@@ -2412,6 +2478,7 @@ def static(name): return send_from_directory(ROOT/'public',name)
 
 
 init_db()
+load_original_session()
 if __name__=='__main__':
     required = ['index.html', 'admin.html', 'admin.js', 'admin-pass.js', 'admin-visual.js', 'admin.css', 'ui-audio.js', 'app.js', 'styles.css', 'sandbox.js', 'og-sound.js', 'telegram-web-app.js']
     missing = [name for name in required if not (ROOT / 'public' / name).is_file()]

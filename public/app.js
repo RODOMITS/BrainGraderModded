@@ -987,6 +987,16 @@
         <p data-maintenance-status role="status"></p>
         <button type="button" class="btn ghost" data-maintenance></button>
       </section>
+      <details class="owner-card">
+        <summary>Сессия оригинала</summary>
+        <form method="post" data-original-session>
+          <p data-session-status role="status">Проверяю…</p>
+          <label>Новая initData
+            <input type="password" name="initData" maxlength="8192" autocomplete="new-password" spellcheck="false" autocapitalize="off" required>
+          </label>
+          <button class="btn" type="submit">Проверить и сохранить</button>
+        </form>
+      </details>
       <section class="owner-card">
         <h2>Сейчас на сайте <span data-online role="status">…</span></h2>
         <ul data-players></ul>
@@ -1064,6 +1074,33 @@
         maintenanceStatus.textContent = error.message;
       } finally {
         maintenance.disabled = false;
+      }
+    };
+    const sessionForm = $('[data-original-session]', page);
+    const sessionStatus = $('[data-session-status]', sessionForm);
+    let sessionSubmitted = false;
+    api('/api/owner/original-session').then(({ configured }) => {
+      if (sessionSubmitted) return;
+      sessionStatus.textContent = configured ? 'Сессия настроена' : 'Сессия пока не настроена';
+    }).catch(error => { if (!sessionSubmitted) sessionStatus.textContent = error.message; });
+    sessionForm.onsubmit = async event => {
+      event.preventDefault();
+      const input = sessionForm.elements.initData;
+      const button = $('button[type="submit"]', sessionForm);
+      button.disabled = true;
+      sessionSubmitted = true;
+      const initData = input.value;
+      input.value = '';
+      input.readOnly = true;
+      sessionStatus.textContent = 'Проверяю сессию…';
+      try {
+        await api('/api/owner/original-session', { method: 'POST', body: { initData } });
+        sessionStatus.textContent = 'Сессия сохранена. Данные обновятся при следующем запросе.';
+      } catch (error) {
+        sessionStatus.textContent = error.message;
+      } finally {
+        button.disabled = false;
+        input.readOnly = false;
       }
     };
     const dropForm = $('[data-drop-form]', page);
